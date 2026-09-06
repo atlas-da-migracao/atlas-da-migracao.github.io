@@ -1,0 +1,82 @@
+cd_rm,nm_rm,cd_nucleo,nm_nucleo,uf_nucleo,n_municipios,pop_rm
+4901,Região Metropolitana de São Paulo,3550308,São Paulo,SP,39,20731919
+4801,Região Metropolitana do Rio de Janeiro,3304557,Rio de Janeiro,RJ,22,12021871
+4501,Região Metropolitana de Belo Horizonte,3106200,Belo Horizonte,MG,34,5128282
+7801,Região Integrada de Desenvolvimento do Distrito Federal e Entorno,5300108,Brasília,DF,34,4484116
+7401,Região Metropolitana de Porto Alegre,4314902,Porto Alegre,RS,34,4018915
+1401,Região Metropolitana de Fortaleza,2304400,Fortaleza,CE,19,3905891
+3001,Região Metropolitana de Recife,2611606,Recife,PE,14,3726974
+5501,Região Metropolitana de Curitiba,4106902,Curitiba,PR,29,3560258
+4201,Região Metropolitana de Salvador,2927408,Salvador,BA,13,3415021
+5101,Região Metropolitana de Campinas,3509502,Campinas,SP,20,3178600
+7701,Região Metropolitana de Goiânia,5208707,Goiânia,GO,21,2600936
+201,Região Metropolitana de Manaus,1302603,Manaus,AM,13,2532518
+5201,Região Metropolitana do Vale do Paraíba e Litoral Norte,3549904,São José dos Campos,SP,39,2505723
+601,Região Metropolitana de Belém,1501402,Belém,PA,7,2243895
+5301,Região Metropolitana de Sorocaba,3552205,Sorocaba,SP,27,2174524
+4701,Região Metropolitana da Grande Vitória,3205002,Serra,ES,7,1880827
+5001,Região Metropolitana da Baixada Santista,3548500,Santos,SP,9,1805530
+5401,Região Metropolitana de Ribeirão Preto,3543402,Ribeirão Preto,SP,34,1648110
+1101,Região Metropolitana da Grande São Luís,2111300,São Luís,MA,13,1646004
+1701,Região Metropolitana de Natal,2408102,Natal,RN,15,1527660
+8201,Região Metropolitana de Piracicaba,3538709,Piracicaba,SP,24,1519023
+6301,Região Metropolitana de Florianópolis,4205407,Florianópolis,SC,22,1356860
+1801,Região Metropolitana de João Pessoa,2507507,João Pessoa,PB,12,1304280
+3201,Região Metropolitana de Maceió,2704302,Maceió,AL,13,1300608
+5601,Região Metropolitana de Londrina,4113700,Londrina,PR,25,1088734
+1301,Região Integrada de Desenvolvimento da Grande Teresina,2211001,Teresina,PI,13,1072143
+7601,Região Metropolitana do Vale do Rio Cuiabá,5103403,Cuiabá,MT,6,1003144
+8002,Região Metropolitana de São José do Rio Preto,3549805,São José do Rio Preto,SP,37,971097
+4101,Região Metropolitana de Aracaju,2800308,Aracaju,SE,4,932210
+8601,Região Metropolitana de Joinville ,4209102,Joinville,SC,9,913519
+5701,Região Metropolitana de Maringá,4115200,Maringá,PR,26,851828
+8101,Região Metropolitana de Jundiaí,3525904,Jundiaí,SP,7,843633
+6401,Região Metropolitana do Vale do Itajaí,4202404,Blumenau,SC,16,841698
+3101,Região Administrativa Integrada de Desenvolvimento do Polo Petrolina/PE e Juazeiro/BA,2611101,Petrolina,PE,8,834632
+7501,Região Metropolitana da Serra Gaúcha,4305108,Caxias do Sul,RS,14,804707
+6701,Região Metropolitana da Foz do Rio Itajaí,4208203,Itajaí,SC,9,782159
+4401,Região Metropolitana de Feira de Santana,2910800,Feira de Santana,BA,6,743747
+1201,Região Metropolitana do Sudoeste Maranhense,2105302,Imperatriz,MA,22,715149
+1901,Região Metropolitana de Campina Grande,2504009,Campina Grande,PB,19,651619
+6801,Região Metropolitana Carbonífera,4204608,Criciúma,SC,26,645359
+1501,Região Metropolitana do Cariri,2307304,Juazeiro do Norte,CE,9,633326
+3301,Região Metropolitana do Agreste,2700300,Arapiraca,AL,20,616733
+4502,Colar Metropolitano de Belo Horizonte,3167202,Sete Lagoas,MG,16,605501
+801,Região Metropolitana de Macapá,1600303,Macapá,AP,3,572475
+6101,Região Metropolitana de Cascavel,4104808,Cascavel,PR,24,559732
+8301,Região Metropolitana da Zona Leste do Estado do Maranhão,2112209,Timon,MA,7,549312
+7301,Região Metropolitana do Contestado,4204301,Concórdia,SC,45,539288
+7101,Região Metropolitana de Chapecó,4204202,Chapecó,SC,32,535245
+901,Região Metropolitana de Palmas,1721000,Palmas,TO,16,495195
+301,Região Metropolitana da Capital,1400100,Boa Vista,RR,5,485282
+1601,Região Metropolitana de Sobral,2312908,Sobral,CE,18,483674
+101,Região Metropolitana de Porto Velho,1100205,Porto Velho,RO,2,482743
+4601,Região Metropolitana do Vale do Aço,3131307,Ipatinga,MG,4,458845
+6201,Região Metropolitana de Toledo,4127700,Toledo,PR,18,418589
+6901,Região Metropolitana de Tubarão,4218707,Tubarão,SC,19,405190
+701,Região Metropolitana de Santarém,1506807,Santarém,PA,3,373542
+6601,Região Metropolitana de Lages,4209300,Lages,SC,23,362505
+7201,Região Metropolitana do Extremo Oeste,4217204,São Miguel do Oeste,SC,49,351494
+6001,Região Metropolitana de Campo Mourão,4104303,Campo Mourão,PR,25,341931
+8501,Região Metropolitana de Jaraguá do Sul,4208906,Jaraguá do Sul,SC,7,331693
+5801,Região Metropolitana de Umuarama,4128104,Umuarama,PR,24,325386
+7001,Região Metropolitana do Alto Vale do Itajaí,4214805,Rio do Sul,SC,28,309808
+5901,Região Metropolitana de Apucarana,4101408,Apucarana,PR,23,296131
+4602,Colar Metropolitano,3113404,Caratinga,MG,24,259437
+2001,Região Metropolitana de Guarabira,2506301,Guarabira,PB,20,243172
+8401,Região Metropolitana do Planalto Norte,4210100,Mafra,SC,10,235537
+2101,Região Metropolitana de Patos,2510808,Patos,PB,23,222862
+8701,Região Metropolitana de Parnaíba,2207702,Parnaíba,PI,4,210030
+1001,Região Metropolitana de Gurupi,1709500,Gurupi,TO,18,190501
+4402,Área de Expansão Metropolitana,2926301,Riachão do Jacuípe,BA,10,179442
+2301,Região Metropolitana de Cajazeiras,2503704,Cajazeiras,PB,15,173174
+2201,Região Metropolitana de Esperança,2506004,Esperança,PB,9,137163
+2401,Região Metropolitana do Vale do Piancó,2507002,Itaporanga,PB,17,136464
+2801,Região Metropolitana de Itabaiana,2506905,Itabaiana,PB,12,133563
+2601,Região Metropolitana do Vale do Mamanguape,2508901,Mamanguape,PB,9,121195
+2701,Região Metropolitana de Sousa,2516201,Sousa,PB,9,113363
+7602,Entorno Metropolitano da RM Vale do Rio Cuiabá,5106505,Poconé,MT,7,83939
+2501,Região Metropolitana de Barra de Santa Rosa,2505105,Cuité,PB,8,75892
+2901,Região Metropolitana de Araruna,2501005,Araruna,PB,6,59551
+501,Região Metropolitana do Sul do Estado,1400472,Rorainópolis,RR,4,59475
+401,Região Metropolitana de Central,1400209,Caracaraí,RR,2,30980
