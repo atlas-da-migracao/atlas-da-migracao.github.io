@@ -28,6 +28,9 @@ source .venv/bin/activate          # Python 3.14 + duckdb, pyarrow, pandas, open
 python pipeline/run.py             # orquestra as etapas do pipeline (a implementar por fase)
 python pipeline/validate.py        # testes de consistência (ver plano, seção Verificação)
 python pipeline/disclosure_check.py  # gate de revelação R1–R9 antes de publicar
+./geo/build.sh                     # malha 2022 -> TopoJSON (municípios + UF), dado público
+python pipeline/build_centroids.py # centroides via extensão espacial do DuckDB
+python pipeline/build_meta.py      # data/processed/meta.json (rótulos, cortes, limiares)
 ```
 
 ## Orquestração de modelos
