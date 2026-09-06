@@ -54,7 +54,10 @@ REPO_URL = "https://github.com/atlas-da-migracao/atlas-da-migracao.github.io"
 LICENCA_DADOS_NOME = "CC BY 4.0"
 LICENCA_DADOS_URL = "https://creativecommons.org/licenses/by/4.0/deed.pt-br"
 LICENCA_CODIGO_NOME = "MIT"
-DOI_PLACEHOLDER = "DOI a ser atribuído no Zenodo"
+DOI_CONCEITO = "10.5281/zenodo.22469791"  # resolve sempre para a versão mais recente
+DOI_VERSAO = "10.5281/zenodo.22469792"      # esta versão (v1.0.0)
+DOI_PLACEHOLDER = f"https://doi.org/{DOI_CONCEITO}"  # usado no texto de "como citar"
+AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
 ATRIBUICAO_PADRAO = (
     "Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso "
     "controlado). Estimativas: Daniel Pessini, Atlas da migração interna no Brasil."
@@ -433,7 +436,8 @@ _MUNICIPIO = """{% extends "_base.html" %}
 <section class="secao">
 <h2>Como citar esta página</h2>
 <p class="citacao">{{ autor_placeholder }}. <em>{{ nome_site }}</em>: {{ m.nome }}/{{ m.uf_sigla }}.
-Dados do Censo Demográfico 2022 (IBGE). Versão dos dados: {{ versao_dados }}. Disponível em: {{ canonical }}.</p>
+Dados do Censo Demográfico 2022 (IBGE). Versão dos dados: {{ versao_dados }}. Disponível em: {{ canonical }}.
+DOI do conjunto de dados: <a href="{{ doi_url }}">{{ doi_url }}</a>.</p>
 </section>
 </article>
 {% endblock %}
@@ -636,6 +640,7 @@ class Gerador:
         ctx = dict(
             nome_site=NOME_SITE, site_url=self.site_url, aviso=AVISO, fonte=FONTE,
             versao_dados=VERSAO_DADOS, autor_placeholder=AUTOR_NOME,
+            doi_url=f"https://doi.org/{DOI_CONCEITO}",
         )
         ctx.update(extra)
         return ctx
@@ -1189,7 +1194,8 @@ estatístico de revelação e não permitem reidentificação individual.</p></s
         dataset = {
             "@context": "https://schema.org", "@type": "Dataset",
             "name": f"{NOME_SITE} -- dados publicados", "description": descricao,
-            "creator": {"@type": "Person", "name": AUTOR_NOME, "url": AUTOR_GITHUB_URL},
+            "creator": {"@type": "Person", "name": AUTOR_NOME, "url": AUTOR_GITHUB_URL, "sameAs": AUTOR_ORCID},
+            "identifier": f"https://doi.org/{DOI_CONCEITO}",
             "license": LICENCA_DADOS_URL,
             "temporalCoverage": "2017-07-31/2022-07-31",
             "spatialCoverage": {"@type": "Place", "name": "Brasil"},
