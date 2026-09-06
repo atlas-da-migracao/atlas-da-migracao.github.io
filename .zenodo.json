@@ -1,0 +1,21 @@
+{
+  "title": "Atlas da migração interna no Brasil — Censo Demográfico 2022 (migração de data fixa 2017–2022)",
+  "upload_type": "software",
+  "description": "<p>Atlas interativo e conjunto de dados agregados sobre a migração intermunicipal no Brasil entre 2017 e 2022, a partir do quesito de data fixa dos microdados da amostra do Censo Demográfico 2022 (IBGE, acesso controlado). Inclui saldos, taxas e índice de eficácia migratória para os 5.570 municípios, a matriz de fluxos origem→destino com perfil dos migrantes (status migratório, escolaridade, renda domiciliar per capita, idade e sexo), um módulo metropolitano com fluxos intrametropolitanos, deslocamento pendular para trabalho e estudo e o cruzamento entre migração e local de trabalho, além de páginas estáticas por unidade territorial.</p><p>Os microdados originais <strong>não</strong> estão incluídos e permanecem sob os termos de acesso controlado do IBGE. Todos os agregados passaram por controle estatístico de revelação (limiar mínimo de observações, supressão complementar, arredondamento e faixas de contagem amostral), documentado no repositório. As estimativas são de responsabilidade do autor, sujeitas a erro amostral, e podem divergir das tabulações oficiais do IBGE.</p><p>Código sob licença MIT; dados agregados e conteúdo textual sob CC BY 4.0, com atribuição ao IBGE como fonte primária. Site: <a href=\"https://atlas-da-migracao.github.io\">https://atlas-da-migracao.github.io</a>.</p>",
+  "creators": [
+    { "name": "Pessini, Daniel" }
+  ],
+  "license": "CC-BY-4.0",
+  "access_right": "open",
+  "language": "por",
+  "keywords": [
+    "migração interna", "migração intermunicipal", "Censo Demográfico 2022", "IBGE", "data fixa",
+    "saldo migratório", "fluxos migratórios", "deslocamento pendular", "regiões metropolitanas",
+    "demografia", "Brasil", "internal migration", "census", "commuting", "Brazil"
+  ],
+  "related_identifiers": [
+    { "identifier": "https://atlas-da-migracao.github.io", "relation": "isSupplementedBy", "resource_type": "other", "scheme": "url" },
+    { "identifier": "https://www.ibge.gov.br/estatisticas/sociais/populacao/22827-censo-demografico-2022.html", "relation": "isDerivedFrom", "resource_type": "dataset", "scheme": "url" }
+  ],
+  "notes": "Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado). O arquivo depositado contém o código do pipeline e do front-end, os agregados publicados (data/processed) e a documentação metodológica; não contém microdados."
+}
