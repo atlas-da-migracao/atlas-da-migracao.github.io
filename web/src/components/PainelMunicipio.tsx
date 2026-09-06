@@ -1,12 +1,75 @@
+import { useEffect, useState } from "react";
 import type { Fluxo, Municipio } from "../lib/types";
 import { ic95, num, num1, num2, rotuloPrecisao, sinal } from "../lib/format";
+import { perfilDoMunicipio } from "../db/queries";
+import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
+import { DIMENSOES, type NomeDimensao } from "../lib/paletas";
+import { exportarFluxos } from "../lib/exportar";
+
+/** Nome legível de um recorte, a partir da chave "dimensao__categoria". */
+function rotuloRecorte(chave: string): string {
+  const [dim, cat] = chave.split("__") as [NomeDimensao, string];
+  return DIMENSOES[dim]?.categorias.find((c) => c.chave === cat)?.rotulo ?? chave;
+}
 
 interface Props {
   municipio: Municipio | null;
   fluxos: (Fluxo & { direcao?: string })[];
   carregando: boolean;
+  escuro: boolean;
+  /** chave do recorte ativo (ex.: "edu__superior_completo"), ou null */
+  recorte: string | null;
+  /** true enquanto os números do recorte ainda não chegaram */
+  recorteCarregando: boolean;
   aoSelecionarFluxo: (o: string, d: string) => void;
   aoFechar: () => void;
+}
+
+/** Perfil dos migrantes do município: quem chega, quem sai e quem já morava.
+ *  Deixa visível a seletividade da migração -- o traço mais característico do fenômeno. */
+function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
+  cd: string; nome: string; escuro: boolean; recorte: string | null;
+}) {
+  const [dados, setDados] = useState<Record<string, Record<string, Record<string, number>>>>({});
+
+  useEffect(() => {
+    let vivo = true;
+    Promise.all((["status", "edu", "renda"] as NomeDimensao[]).map(async (dim) => {
+      const linhas = await perfilDoMunicipio(cd, dim);
+      const porDirecao: Record<string, Record<string, number>> = {};
+      for (const l of linhas) (porDirecao[l.direcao] ??= {})[l.categoria] = l.valor;
+      return [dim, porDirecao] as const;
+    })).then((pares) => { if (vivo) setDados(Object.fromEntries(pares)); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [cd]);
+
+  if (Object.keys(dados).length === 0) return null;
+
+  return (
+    <>
+      <h3 className="secao-titulo">Perfil dos migrantes</h3>
+      {recorte && (
+        <p className="muted-pequeno explicacao">
+          Composição de <strong>todos</strong> os migrantes do município: as barras não
+          seguem o recorte ativo, que se aplica aos indicadores e aos fluxos acima.
+        </p>
+      )}
+      {(["status", "edu", "renda"] as NomeDimensao[]).map((dim) => {
+        const d = dados[dim];
+        if (!d) return null;
+        const series: SeriePerfil[] = [
+          { rotulo: `Chegaram a ${nome}`, valores: d.imig ?? {}, destaque: true },
+          { rotulo: `Saíram de ${nome}`, valores: d.emig ?? {} },
+        ];
+        // status migratório não se aplica a quem não migrou
+        if (dim !== "status") series.push({ rotulo: `Residentes de ${nome}`, valores: d.residente ?? {} });
+        return (
+          <BarraPerfil key={dim} titulo={DIMENSOES[dim].titulo} nota={DIMENSOES[dim].nota}
+                       categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
+        );
+      })}
+    </>
+  );
 }
 
 function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
@@ -19,7 +82,8 @@ function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalh
   );
 }
 
-export function PainelMunicipio({ municipio: m, fluxos, carregando, aoSelecionarFluxo, aoFechar }: Props) {
+export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, recorte,
+                                 recorteCarregando, aoSelecionarFluxo, aoFechar }: Props) {
   if (!m) {
     return (
       <aside className="painel">
@@ -54,6 +118,9 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, aoSelecionar
         <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
       </header>
 
+      {recorteCarregando ? (
+        <p className="muted carregando-recorte">Aplicando o recorte…</p>
+      ) : (
       <div className="kpis">
         <Kpi rotulo="Saldo migratório" valor={sinal(m.saldo)}
              detalhe={`IC 95%: ${ic95(m.saldo, m.se_saldo)}`} />
@@ -63,14 +130,21 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, aoSelecionar
              detalhe={`IC 95%: ${ic95(m.imig, m.se_imig)}`} />
         <Kpi rotulo="Emigrantes" valor={num(m.emig)}
              detalhe={`IC 95%: ${ic95(m.emig, m.se_emig)}`} />
-      </div>
+      </div>)}
 
-      <div className="nota-precisao">
+      {recorte && !recorteCarregando && (
+        <div className="aviso-recorte">
+          Todos os números acima se referem apenas ao recorte ativo
+          <strong> {rotuloRecorte(recorte)}</strong>. Sem o recorte, o painel mostra o total de migrantes.
+        </div>
+      )}
+
+      {!recorte && <div className="nota-precisao">
         Precisão da estimativa de imigração: <strong>{rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig}</strong>
         {m.cv_imig != null && <> (coeficiente de variação {num1(m.cv_imig)}%)</>}
         {m.imig_ni > 0 && <> · {num(m.imig_ni)} imigrantes com origem não informada</>}
         {m.imig_int > 0 && <> · {num(m.imig_int)} vindos do exterior</>}
-      </div>
+      </div>}
 
       {m.iem != null && (
         <div className="nota-precisao">
@@ -89,6 +163,12 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, aoSelecionar
                         campo="nm_origem" campoUf="uf_origem" aoClicar={aoSelecionarFluxo} />
           <TabelaFluxos titulo="Principais destinos" cor="var(--arc-out)" fluxos={saidas}
                         campo="nm_destino" campoUf="uf_destino" aoClicar={aoSelecionarFluxo} />
+          <PerfilDoMunicipio cd={m.cd_mun} nome={m.nm_mun} escuro={escuro} recorte={recorte} />
+          {fluxos.length > 0 && (
+            <button className="exportar" onClick={() => exportarFluxos(m, fluxos, recorte)}>
+              Baixar estes fluxos em CSV
+            </button>
+          )}
         </>
       )}
     </aside>

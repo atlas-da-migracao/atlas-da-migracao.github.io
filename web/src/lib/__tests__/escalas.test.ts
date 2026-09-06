@@ -59,3 +59,57 @@ describe("formatação", () => {
     expect(ic95(1000, 100)).toBe("804 a 1.196");   // 1000 ± 1,96 × 100
   });
 });
+
+describe("paletas de perfil", () => {
+  it("escolaridade e renda usam rampas ordinais de matiz distinto", async () => {
+    const { DIMENSOES } = await import("../paletas");
+    const edu = DIMENSOES.edu.categorias.slice(0, 4).map((c) => c.cor.claro);
+    const renda = DIMENSOES.renda.categorias.slice(0, 5).map((c) => c.cor.claro);
+    // sem cor repetida dentro de cada rampa
+    expect(new Set(edu).size).toBe(edu.length);
+    expect(new Set(renda).size).toBe(renda.length);
+    // as duas rampas não se confundem
+    expect(edu.some((c) => renda.includes(c))).toBe(false);
+  });
+
+  it("status migratório usa slots categóricos distintos", async () => {
+    const { DIMENSOES } = await import("../paletas");
+    const cores = DIMENSOES.status.categorias.slice(0, 4).map((c) => c.cor.claro);
+    expect(new Set(cores).size).toBe(4);
+  });
+
+  it("toda categoria tem cor para os dois modos", async () => {
+    const { DIMENSOES } = await import("../paletas");
+    for (const dim of Object.values(DIMENSOES)) {
+      for (const c of dim.categorias) {
+        expect(c.cor.claro).toMatch(/^#[0-9a-f]{6}$/i);
+        expect(c.cor.escuro).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+    }
+  });
+});
+
+describe("exportação em CSV", () => {
+  it("escapa separador, aspas e quebra de linha", async () => {
+    const { montarCsv } = await import("../exportar");
+    const csv = montarCsv(["a", "b", "c"], [["x;y", 'd"e', "f\ng"]]);
+    const linhaDados = csv.split("\n").slice(-2).join("\n");
+    expect(linhaDados).toContain('"x;y"');      // separador vira campo entre aspas
+    expect(linhaDados).toContain('"d""e"');     // aspas duplicadas
+    expect(linhaDados).toContain('"f');         // quebra de linha protegida
+  });
+
+  it("sempre inclui a atribuição de fonte exigida pela política de uso", async () => {
+    const { montarCsv } = await import("../exportar");
+    const csv = montarCsv(["a"], [[1]]);
+    expect(csv).toContain("IBGE, Censo Demográfico 2022");
+    expect(csv).toContain("acesso controlado");
+    expect(csv).toContain("erro amostral");
+  });
+
+  it("registra o recorte aplicado nas notas", async () => {
+    const { montarCsv } = await import("../exportar");
+    const csv = montarCsv(["a"], [[1]], ["Recorte aplicado: superior completo."]);
+    expect(csv).toContain("# Recorte aplicado: superior completo.");
+  });
+});

@@ -4,9 +4,12 @@ import type { FeatureCollection } from "geojson";
 import type { Topology } from "topojson-specification";
 import { MapaAtlas } from "./map/MapaAtlas";
 import { PainelMunicipio } from "./components/PainelMunicipio";
+import { PainelFluxo } from "./components/PainelFluxo";
 import { Legenda } from "./components/Legenda";
 import { Busca } from "./components/Busca";
-import { carregarMunicipios, fluxosDoMunicipio, maioresFluxos } from "./db/queries";
+import { Filtro } from "./components/Filtro";
+import { carregarMunicipios, fluxosDoMunicipio, fluxosPorCategoria, maioresFluxos,
+         saldoPorCategoria } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
 import { useStore, usarModoEscuro } from "./state/store";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
@@ -36,7 +39,9 @@ export default function App() {
   const [carregandoFluxos, setCarregandoFluxos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const { municipio, metrica, tema, selecionarMunicipio, selecionarFluxo, setMetrica, setTema } = useStore();
+  const { municipio, origem, destino, metrica, filtro, tema,
+          selecionarMunicipio, selecionarFluxo, setMetrica, setFiltro, setTema } = useStore();
+  const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
 
   // aplica o tema salvo antes da primeira pintura
@@ -73,9 +78,9 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const linhas = await carregarMunicipios();
-        setMunicipios(linhas);
-        setArcos(await maioresFluxos(150));
+        // só os indicadores: quem decide os arcos é o efeito dedicado abaixo, senão
+        // esta resposta sobrescreveria os fluxos do município já selecionado
+        setMunicipios(await carregarMunicipios());
       } catch (e) {
         console.error(e);
         setErro(`Falha ao consultar os dados: ${(e as Error).message}`);
@@ -91,22 +96,57 @@ export default function App() {
       return;
     }
     setCarregandoFluxos(true);
-    fluxosDoMunicipio(municipio, topN)
+    const consulta = filtro
+      ? fluxosPorCategoria(municipio, filtro, topN)
+      : fluxosDoMunicipio(municipio, topN);
+    consulta
       .then(setArcos)
       .catch((e) => setErro(`Falha ao consultar fluxos: ${(e as Error).message}`))
       .finally(() => setCarregandoFluxos(false));
-  }, [municipio, topN, municipios.length]);
+  }, [municipio, topN, filtro, municipios.length]);
 
-  const porCodigo = useMemo(() => new Map(municipios.map((m) => [m.cd_mun, m])), [municipios]);
+  // sob recorte, o coroplético passa a mostrar o saldo daquele subgrupo
+  useEffect(() => {
+    if (!filtro || !municipios.length) { setRecorte(null); return; }
+    saldoPorCategoria(filtro)
+      .then((linhas) => setRecorte(new Map(
+        linhas.map((l) => [l.cd_mun, { imig: l.imig, emig: l.emig, saldo: l.saldo }]))))
+      .catch(() => setRecorte(null));
+  }, [filtro, municipios.length]);
+
+  // sob recorte, o mapa mostra o saldo do subgrupo em vez da métrica escolhida
+  const municipiosVisiveis = useMemo(() => {
+    if (!recorte) return municipios;
+    // sob recorte, TODOS os indicadores passam a se referir ao subgrupo -- misturar
+    // saldo do subgrupo com imigração total daria um painel internamente incoerente
+    return municipios.map((m) => {
+      const r = recorte.get(m.cd_mun) ?? { imig: 0, emig: 0, saldo: 0 };
+      const soma = r.imig + r.emig;
+      return {
+        ...m, imig: r.imig, emig: r.emig, saldo: r.saldo,
+        imig_ni: 0, imig_int: 0,
+        tlm: m.pop5 > 0 ? (r.saldo / m.pop5) * 1000 : 0,
+        tbi: m.pop5 > 0 ? (r.imig / m.pop5) * 1000 : 0,
+        tbe: m.pop5 > 0 ? (r.emig / m.pop5) * 1000 : 0,
+        iem: soma > 0 ? r.saldo / soma : null,
+        // o erro-padrão publicado é do total, não do subgrupo: não seria correto reusá-lo
+        se_imig: 0, se_emig: 0, se_saldo: 0, cv_imig: null, cv_emig: null,
+        precisao_imig: "sem_estimativa",
+      };
+    });
+  }, [municipios, recorte]);
+  const porCodigo = useMemo(
+    () => new Map(municipiosVisiveis.map((m) => [m.cd_mun, m])), [municipiosVisiveis]);
+
 
   const quebras = useMemo(() => {
-    if (!municipios.length) return [1, 2, 3];
-    const valores = municipios.map((m) =>
+    if (!municipiosVisiveis.length) return [1, 2, 3];
+    const valores = municipiosVisiveis.map((m) =>
       metrica === "saldo" ? m.saldo : metrica === "tlm" ? (m.tlm ?? 0)
       : metrica === "imig" ? m.imig : metrica === "emig" ? -m.emig
       : (m.iem ?? 0) * 100);
     return quebrasSimetricas(valores);
-  }, [municipios, metrica]);
+  }, [municipiosVisiveis, metrica]);
 
   const selecionado = municipio ? porCodigo.get(municipio) ?? null : null;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
@@ -120,6 +160,7 @@ export default function App() {
         </div>
         <div className="controles">
           <Busca municipios={municipios} aoEscolher={selecionarMunicipio} />
+          <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />
           <div className="segmentado" role="group" aria-label="Métrica do mapa">
             {METRICAS.map((m) => (
               <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
@@ -146,8 +187,17 @@ export default function App() {
           />
           {municipios.length > 0 && <Legenda metrica={metrica} quebras={quebras} escuro={escuro} />}
         </div>
-        <PainelMunicipio municipio={selecionado} fluxos={arcos} carregando={carregandoFluxos}
-                         aoSelecionarFluxo={aoSelecionarFluxo} aoFechar={() => selecionarMunicipio(null)} />
+        {origem && destino ? (
+          <PainelFluxo origem={origem} destino={destino} escuro={escuro}
+                       aoFechar={() => selecionarFluxo(null, null)}
+                       aoAbrirMunicipio={selecionarMunicipio} />
+        ) : (
+          <PainelMunicipio municipio={selecionado} fluxos={arcos} carregando={carregandoFluxos}
+                           escuro={escuro} recorte={filtro}
+                           recorteCarregando={Boolean(filtro) && !recorte}
+                           aoSelecionarFluxo={aoSelecionarFluxo}
+                           aoFechar={() => selecionarMunicipio(null)} />
+        )}
       </main>
 
       {meta && (
