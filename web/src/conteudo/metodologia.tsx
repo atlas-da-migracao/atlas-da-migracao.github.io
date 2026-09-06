@@ -23,13 +23,14 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
       <section>
         <h3>Migrante de data fixa</h3>
         <p>
-          Compara-se o município de residência em 31/07/2017 com o de 31/07/2022 -- um único par de
+          Compara-se o município de residência em 31/07/2017 com o de 31/07/2022 — um único par de
           pontos no tempo, e não o histórico de mudanças no quinquênio. É <strong>migrante interno</strong>{" "}
           quem morava em outro município do Brasil em 2017; <strong>migrante internacional</strong>, quem
           morava em outro país; <strong>não migrante</strong>, quem já morava no mesmo município (ou mora
-          ali há 6 anos ou mais). Cerca de 1,8% dos migrantes internos têm origem não informada: contam
+          ali há 6 anos ou mais). Cerca de 1,2% (150,4 mil de 13,0 milhões) dos migrantes internos têm
+          origem não informada: contam
           na imigração total do destino, mas ficam fora da matriz origem→destino e do cômputo de emigração
-          -- por isso a soma das linhas de uma coluna de destino pode superar ligeiramente o total de
+          — por isso a soma das linhas de uma coluna de destino pode superar ligeiramente o total de
           migrantes com origem conhecida daquele município.
         </p>
       </section>
@@ -45,7 +46,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
           <dt>Saldo migratório</dt>
           <dd><code>Saldo = I − E</code></dd>
           <dt>Taxa líquida de migração (TLM)</dt>
-          <dd><code>TLM = (Saldo / P) × 1000</code> -- por mil habitantes.</dd>
+          <dd><code>TLM = (Saldo / P) × 1000</code> — por mil habitantes.</dd>
           <dt>Índice de eficácia migratória (IEM)</dt>
           <dd><code>IEM = Saldo / (I + E)</code>, entre −1 e 1: perto de 0 indica trocas equilibradas
             (alto volume nos dois sentidos); perto de ±1, um fluxo predominantemente unidirecional.</dd>
@@ -68,7 +69,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
         <p>
           A escolaridade é resumida em quatro faixas (sem instrução/fundamental incompleto,
           fundamental completo/médio incompleto, médio completo/superior incompleto, superior
-          completo), sempre restrita à população de 25 anos ou mais -- idade em que a maior parte
+          completo), sempre restrita à população de 25 anos ou mais — idade em que a maior parte
           já concluiu (ou não) sua trajetória escolar. A renda domiciliar per capita é expressa em
           múltiplos do salário mínimo vigente na referência do Censo
           {sm ? ` (R$ ${sm.toLocaleString("pt-BR")})` : ""}, para não perder o sentido com a inflação.
@@ -78,7 +79,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
       <section>
         <h3>Precisão das estimativas</h3>
         <p>
-          Os microdados vêm de uma amostra, não do universo -- toda contagem é uma estimativa sujeita
+          Os microdados vêm de uma amostra, não do universo — toda contagem é uma estimativa sujeita
           a erro amostral. O erro-padrão é calculado por um estimador conservador de conglomerados
           (o domicílio como unidade primária de amostragem, a área de ponderação como estrato), na
           ausência de estratos/UPAs formais nos microdados de acesso controlado; foi comparado à
@@ -104,12 +105,12 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
           <li>o detalhamento por característica (escolaridade, renda, idade/sexo, dimensões pendulares)
             só aparece para fluxos com pelo menos {r?.min_pessoas_detalhe ?? 20} observações amostrais;</li>
           <li>toda contagem ponderada é arredondada a múltiplos de {r?.arredondamento ?? 5};</li>
-          <li>nenhuma contagem amostral exata é publicada -- apenas faixas;</li>
+          <li>nenhuma contagem amostral exata é publicada — apenas faixas;</li>
           <li>colunas de domicílio e de área de ponderação nunca saem dos microdados de acesso controlado.</li>
         </ul>
         <p>
           Em caso de dúvida sobre se uma célula individualiza alguém, o critério do projeto é tratá-la
-          como individualizante e não publicá-la -- por isso vários pares de município aparecem "abaixo
+          como individualizante e não publicá-la — por isso vários pares de município aparecem "abaixo
           do limiar de divulgação" em vez de mostrarem um número pequeno.
         </p>
       </section>
@@ -122,7 +123,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
           migração <strong>intra-RM</strong> (fluxos entre municípios da mesma RM, incluindo a matriz
           núcleo×periferia), deslocamento <strong>pendular</strong> de trabalho e de estudo (quem mora
           num município da RM e trabalha/estuda em outro), e o <strong>cruzamento</strong> entre os dois:
-          para cada migrante intrametropolitano ocupado, onde trabalha -- na origem de onde saiu, no
+          para cada migrante intrametropolitano ocupado, onde trabalha — na origem de onde saiu, no
           núcleo, no próprio destino, ou em outro lugar.
         </p>
       </section>
@@ -131,10 +132,10 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
         <h3>Níveis de agregação</h3>
         <p>
           Além do município, o atlas agrega em região imediata (RGI), região intermediária (RGInt) e
-          UF -- a mesma hierarquia territorial do IBGE. Nesses níveis, migração entre municípios da
+          UF — a mesma hierarquia territorial do IBGE. Nesses níveis, migração entre municípios da
           mesma unidade não é contada (só atravessa a fronteira da unidade), pares de municípios
           suprimidos pelo gate de revelação ficam de fora da soma agregada, e não há erro-padrão
-          publicado -- os indicadores agregados são somas diretas dos fluxos municipais publicados,
+          publicado — os indicadores agregados são somas diretas dos fluxos municipais publicados,
           não uma nova estimativa com sua própria variância.
         </p>
       </section>

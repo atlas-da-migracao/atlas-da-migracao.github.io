@@ -4,6 +4,7 @@ import { ic95, num, num1, num2, rotuloPrecisao, sinal } from "../lib/format";
 import { perfilDoMunicipio } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
+import { PiramideIdadeSexo } from "./PiramideIdadeSexo";
 import { DIMENSOES, type NomeDimensao } from "../lib/paletas";
 import { exportarFluxos } from "../lib/exportar";
 
@@ -35,7 +36,7 @@ function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
 
   useEffect(() => {
     let vivo = true;
-    Promise.all((["status", "edu", "renda"] as NomeDimensao[]).map(async (dim) => {
+    Promise.all((["status", "edu", "renda", "idade_sexo"] as const).map(async (dim) => {
       const linhas = await perfilDoMunicipio(cd, dim);
       const porDirecao: Record<string, Record<string, number>> = {};
       for (const l of linhas) (porDirecao[l.direcao] ??= {})[l.categoria] = l.valor;
@@ -69,6 +70,15 @@ function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
                        categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
         );
       })}
+      {dados.idade_sexo && (
+        <PiramideIdadeSexo
+          titulo="Idade e sexo" rotuloGrupo={`Chegaram a ${nome}`}
+          valoresGrupo={dados.idade_sexo.imig ?? {}}
+          rotuloReferencia={`Residentes de ${nome}`}
+          valoresReferencia={dados.idade_sexo.residente ?? {}}
+          escuro={escuro}
+        />
+      )}
     </>
   );
 }
@@ -87,7 +97,7 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
                                  recorteCarregando, aoSelecionarFluxo, aoFechar }: Props) {
   if (!m) {
     return (
-      <aside className="painel">
+      <aside className="painel" aria-label="Painel de detalhes">
         <div className="vazio">
           <h2>Atlas da migração interna</h2>
           <p>
@@ -108,7 +118,7 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
   const duckdbPronto = usarDuckDBPronto();
 
   return (
-    <aside className="painel">
+    <aside className="painel" aria-label="Painel de detalhes">
       <header className="painel-topo">
         <div>
           <h2>{m.nm_mun}<span className="uf">/{m.uf_sigla}</span></h2>

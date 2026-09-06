@@ -32,7 +32,7 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar }: Props) 
   }, [nivel, origem, destino]);
 
   if (carregando) {
-    return <aside className="painel"><p className="muted">{pronto ? "Carregando o fluxo…" : "preparando os dados…"}</p></aside>;
+    return <aside className="painel" aria-label="Painel de detalhes"><p className="muted">{pronto ? "Carregando o fluxo…" : "preparando os dados…"}</p></aside>;
   }
 
   const ida = dados?.ida ?? null;
@@ -40,7 +40,7 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar }: Props) 
 
   if (!ida) {
     return (
-      <aside className="painel">
+      <aside className="painel" aria-label="Painel de detalhes">
         <header className="painel-topo">
           <h2>Fluxo não publicado</h2>
           <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
@@ -54,7 +54,7 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar }: Props) 
   const rotuloNivel = ROTULO_NIVEL[nivel];
 
   return (
-    <aside className="painel">
+    <aside className="painel" aria-label="Painel de detalhes">
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">{rotuloNivel}</div>

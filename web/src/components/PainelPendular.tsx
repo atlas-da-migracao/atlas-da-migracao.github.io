@@ -60,14 +60,14 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
   }, [origem, destino, tabela, tabelaDim]);
 
   const pronto = usarDuckDBPronto();
-  if (carregando) return <aside className="painel"><p className="muted">{pronto ? "Carregando o fluxo pendular…" : "preparando os dados…"}</p></aside>;
+  if (carregando) return <aside className="painel" aria-label="Painel de detalhes"><p className="muted">{pronto ? "Carregando o fluxo pendular…" : "preparando os dados…"}</p></aside>;
 
   const ida = dados?.ida ?? null;
   const volta = dados?.volta ?? null;
 
   if (!ida) {
     return (
-      <aside className="painel">
+      <aside className="painel" aria-label="Painel de detalhes">
         <header className="painel-topo">
           <h2>Fluxo pendular não publicado</h2>
           <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
@@ -80,7 +80,7 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
   const saldo = ida.total - (volta?.total ?? 0);
 
   return (
-    <aside className="painel">
+    <aside className="painel" aria-label="Painel de detalhes">
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">

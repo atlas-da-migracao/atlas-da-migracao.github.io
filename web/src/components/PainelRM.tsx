@@ -172,7 +172,7 @@ export function PainelRM({
       .sort((a, b) => (b.indice_atracao ?? 0) - (a.indice_atracao ?? 0)).slice(0, 8),
   [rankingPendular]);
 
-  if (!resumo) return <aside className="painel"><p className="muted">Carregando a região metropolitana…</p></aside>;
+  if (!resumo) return <aside className="painel" aria-label="Painel de detalhes"><p className="muted">Carregando a região metropolitana…</p></aside>;
 
   const totalIntra = resumo.mig_intra || 1;
 

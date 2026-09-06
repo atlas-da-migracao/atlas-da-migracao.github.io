@@ -5,6 +5,7 @@
  *  Aparece sozinho na primeira visita (localStorage `tour_visto`); o botão "Como usar"
  *  no cabeçalho reabre a qualquer momento. */
 import { useEffect, useRef, useState } from "react";
+import { marcarTourVisto } from "../lib/tour";
 
 interface Passo { alvo: string; titulo: string; texto: string }
 
@@ -43,16 +44,6 @@ const PASSOS: Passo[] = [
   },
 ];
 
-const CHAVE_VISTO = "tour_visto";
-
-export function tourJaVisto(): boolean {
-  try { return localStorage.getItem(CHAVE_VISTO) === "1"; } catch { return true; }
-}
-
-function marcarVisto() {
-  try { localStorage.setItem(CHAVE_VISTO, "1"); } catch { /* localStorage indisponível: tudo bem */ }
-}
-
 interface Props { aoFechar: () => void }
 
 export function Tour({ aoFechar }: Props) {
@@ -83,7 +74,7 @@ export function Tour({ aoFechar }: Props) {
   }, [passo]);
 
   const encerrar = () => {
-    marcarVisto();
+    marcarTourVisto();
     aoFechar();
     (gatilho.current as HTMLElement | null)?.focus?.();
   };

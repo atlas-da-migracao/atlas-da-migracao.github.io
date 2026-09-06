@@ -1,30 +1,41 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { feature } from "topojson-client";
 import type { FeatureCollection } from "geojson";
 import type { Topology } from "topojson-specification";
 import { MapaAtlas, type ValorMapa } from "./map/MapaAtlas";
 import { PainelMunicipio } from "./components/PainelMunicipio";
 import { PainelFluxo } from "./components/PainelFluxo";
-import { PainelFluxoUnidade } from "./components/PainelFluxoUnidade";
-import { PainelUnidade } from "./components/PainelUnidade";
-import { PainelRM } from "./components/PainelRM";
-import { PainelPendular } from "./components/PainelPendular";
+import { CapaNacional } from "./components/CapaNacional";
 import { Legenda } from "./components/Legenda";
 import { EstadoDados } from "./components/EstadoDados";
-import { Tour, tourJaVisto } from "./components/Tour";
-import { PaginaMetodologia } from "./components/PaginaMetodologia";
+import { tourJaVisto } from "./lib/tour";
 import { Busca, type ItemBusca } from "./components/Busca";
 import { Filtro } from "./components/Filtro";
 import { SeletorRM } from "./components/SeletorRM";
 import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunicipios,
-         centroidesDeUnidades, fluxosDaUnidade, fluxosDoMunicipio, fluxosIntraDaRM, fluxosPorCategoria,
-         listarRMs, maioresFluxos, maioresFluxosNivel, municipiosDaRM, pendularDaRM, saldoPorCategoria,
+         centroidesDeUnidades, fluxosDaUnidade, fluxosDoMunicipio, fluxosEntreUFs, fluxosIntraDaRM,
+         fluxosPorCategoria, listarRMs, maioresFluxos, maioresFluxosNivel, municipiosDaRM,
+         pendularDaRM, saldoPorCategoria,
          type NivelAgregado, type ResumoRM, type UnidadeAgregada } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
 import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, type Bbox } from "./lib/rm";
+import type { FluxoUF } from "./lib/acordes";
 import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
+
+// F6 leva 2: módulos fora do caminho crítico da primeira pintura viram chunks separados --
+// o tour, a página de metodologia e o módulo metropolitano (que arrasta d3-sankey) só são
+// baixados quando o usuário realmente os abre. Ver docs/qa/F6_leva2_relatorio.md para o
+// tamanho do bundle antes/depois.
+const Tour = lazy(() => import("./components/Tour").then((m) => ({ default: m.Tour })));
+const PaginaMetodologia = lazy(() => import("./components/PaginaMetodologia").then((m) => ({ default: m.PaginaMetodologia })));
+const PainelRM = lazy(() => import("./components/PainelRM").then((m) => ({ default: m.PainelRM })));
+const PainelPendular = lazy(() => import("./components/PainelPendular").then((m) => ({ default: m.PainelPendular })));
+// PainelUnidade carrega d3-chord/d3-shape (matriz de acordes UF x UF) -- só usado fora do
+// nível "município" (não é o padrão), então também sai do caminho crítico da 1a pintura.
+const PainelUnidade = lazy(() => import("./components/PainelUnidade").then((m) => ({ default: m.PainelUnidade })));
+const PainelFluxoUnidade = lazy(() => import("./components/PainelFluxoUnidade").then((m) => ({ default: m.PainelFluxoUnidade })));
 
 const CAMPO_ID: Record<Nivel, string> = { mun: "CD_MUN", rgi: "cd_rgi", rgint: "cd_rgint", uf: "cd_uf" };
 const ROTULO_NIVEL: Record<Nivel, string> = {
@@ -74,6 +85,16 @@ export default function App() {
   const [malhaNivel, setMalhaNivel] = useState<Partial<Record<NivelAgregado, FeatureCollection>>>({});
   const [unidadesNivel, setUnidadesNivel] = useState<Partial<Record<NivelAgregado, UnidadeAgregada[]>>>({});
   const [avisoNivel, setAvisoNivel] = useState<string | null>(null);
+
+  // F6 leva 2 (10a): fluxos UF x UF para a matriz de acordes, carregados uma vez ao entrar no nível UF
+  const [fluxosUF, setFluxosUF] = useState<FluxoUF[] | null>(null);
+  useEffect(() => {
+    if (nivelEfetivo !== "uf" || fluxosUF) return;
+    fluxosEntreUFs().then(setFluxosUF).catch(() => {});
+  }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // F6 leva 2: folha de filtros (busca/recorte/métrica) no mobile -- abre como bottom sheet
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   useEffect(() => {
     if (nivelEfetivo === "mun" || malhaNivel[nivelEfetivo]) return;
@@ -134,6 +155,14 @@ export default function App() {
 
   // aplica o tema salvo antes da primeira pintura
   useEffect(() => { setTema(tema); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // F6 leva 2: Esc fecha a folha de filtros do mobile
+  useEffect(() => {
+    if (!filtrosAbertos) return;
+    const aoTeclar = (e: KeyboardEvent) => { if (e.key === "Escape") setFiltrosAbertos(false); };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [filtrosAbertos]);
 
   // malha e metadados: caminho crítico da primeira pintura
   useEffect(() => {
@@ -352,36 +381,66 @@ export default function App() {
     : selecaoFoco ? `Ver ${nivelEfetivo === "mun" ? "o município" : nivelEfetivo === "uf" ? "a UF" : "a região"}`
     : rm ? "Ver a RM" : "Ver o Brasil";
 
+  // F6 leva 2: título da aba reflete a seleção atual, para o histórico e leitores de tela
+  useEffect(() => {
+    const base = "Atlas da migração interna";
+    if (origem && destino) {
+      const o = porCodigo.get(origem)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === origem)?.nome;
+      const d = porCodigo.get(destino)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === destino)?.nome;
+      document.title = o && d ? `${o} → ${d} — ${base}` : base;
+    } else if (selecionado) {
+      document.title = `${selecionado.nm_mun}/${selecionado.uf_sigla} — ${base}`;
+    } else if (unidadeSelecionada) {
+      document.title = `${unidadeSelecionada.nome} — ${base}`;
+    } else if (rm) {
+      const nomeRM = rmsCabecalho.find((r) => r.cd_rm === rm)?.nm_rm;
+      document.title = nomeRM ? `${nomeRM} — ${base}` : base;
+    } else {
+      document.title = base;
+    }
+  }, [origem, destino, selecionado, unidadeSelecionada, rm, rmsCabecalho, porCodigo, unidadesAtivas]);
+
+  const fallbackPainel = <aside className="painel"><p className="muted">Carregando…</p></aside>;
+
   const painelDireita = rm ? (
     origem && destino ? (
       aba === "mig"
         ? <PainelFluxo origem={origem} destino={destino} escuro={escuro}
                        aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
-        : <PainelPendular origem={origem} destino={destino} tipo={aba} escuro={escuro}
-                          aoFechar={() => selecionarFluxo(null, null)} />
+        : <Suspense fallback={fallbackPainel}>
+            <PainelPendular origem={origem} destino={destino} tipo={aba} escuro={escuro}
+                            aoFechar={() => selecionarFluxo(null, null)} />
+          </Suspense>
     ) : (
-      <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro}
-                aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
-                aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo} />
+      <Suspense fallback={fallbackPainel}>
+        <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro}
+                  aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
+                  aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo} />
+      </Suspense>
     )
   ) : nivelEfetivo !== "mun" ? (
-    origem && destino ? (
-      <PainelFluxoUnidade nivel={nivelEfetivo} origem={origem} destino={destino}
-                          aoFechar={() => selecionarFluxo(null, null)} />
-    ) : (
-      <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} fluxos={arcos}
-                    carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
-                    aoFechar={() => selecionarUnidade(null)} />
-    )
+    <Suspense fallback={fallbackPainel}>
+      {origem && destino ? (
+        <PainelFluxoUnidade nivel={nivelEfetivo} origem={origem} destino={destino}
+                            aoFechar={() => selecionarFluxo(null, null)} />
+      ) : (
+        <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} fluxos={arcos}
+                      carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
+                      aoFechar={() => selecionarUnidade(null)}
+                      fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel.uf} escuro={escuro} />
+      )}
+    </Suspense>
   ) : origem && destino ? (
     <PainelFluxo origem={origem} destino={destino} escuro={escuro}
                  aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
-  ) : (
+  ) : municipio ? (
     <PainelMunicipio municipio={selecionado} fluxos={arcos} carregando={carregandoFluxos}
                      escuro={escuro} recorte={filtro}
                      recorteCarregando={Boolean(filtro) && !recorte}
                      aoSelecionarFluxo={aoSelecionarFluxo}
                      aoFechar={() => selecionarMunicipio(null)} />
+  ) : (
+    <CapaNacional aoSelecionarFluxo={aoSelecionarFluxo} />
   );
 
   // F6: itens de busca e rótulo do campo, de acordo com o nível ativo
@@ -392,67 +451,99 @@ export default function App() {
         peso: u.pop5,
       }));
 
+  // F6 leva 2: descrição textual do mapa para quem não enxerga o canvas do deck.gl --
+  // os mesmos números já estão nas tabelas do painel ao lado.
+  const descricaoMapa = rm
+    ? "Mapa da região metropolitana selecionada, com destaque para o núcleo e a periferia."
+    : `Mapa coroplético do Brasil por ${nivelEfetivo === "mun" ? "município" : ROTULO_NIVEL[nivelEfetivo].toLowerCase()}, colorido pela métrica "${METRICAS.find((m) => m.valor === metrica)?.rotulo}", com arcos indicando os principais fluxos migratórios.`;
+
   return (
     <div className="app">
+      <a className="pular-conteudo" href="#conteudo-principal">Pular para o conteúdo</a>
+
       <header className="cabecalho">
-        <div className="marca">
-          <strong>Atlas da migração interna no Brasil</strong>
-          <span className="muted"> · Censo 2022, data fixa 2017–2022</span>
-        </div>
-        <div className="controles">
-          <div className="segmentado" role="group" aria-label="Modo do atlas" data-tour="modo-rm">
-            <button className={!rm ? "ativo" : ""} aria-pressed={!rm}
-                    onClick={() => { setPedindoRM(false); sairModoRM(); }}>
-              Brasil
-            </button>
-            <button className={rm ? "ativo" : ""} aria-pressed={Boolean(rm)}
-                    onClick={() => setPedindoRM(true)}>
-              Regiões metropolitanas
+        <div className="cabecalho-linha1">
+          <div className="marca">
+            <h1>Atlas da migração interna no Brasil</h1>
+            <span className="muted"> · Censo 2022, data fixa 2017–2022</span>
+          </div>
+          <div className="utilidades">
+            <button className="link-util" onClick={abrirMetodologia}>Metodologia</button>
+            <button className="link-util" onClick={() => setMostrarTour(true)}>Como usar</button>
+            <button className="tema" onClick={() => setTema(escuro ? "claro" : "escuro")}
+                    aria-label={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}>
+              {escuro ? "☀" : "☾"}
             </button>
           </div>
-          {(pedindoRM || rm) && (
-            <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
-          )}
+        </div>
+
+        <div className="cabecalho-linha2">
+          <div className="barra-ferramentas" role="toolbar" aria-label="Modo e nível do mapa">
+            <div className="segmentado" role="group" aria-label="Modo do atlas" data-tour="modo-rm">
+              <button className={!rm ? "ativo" : ""} aria-pressed={!rm}
+                      onClick={() => { setPedindoRM(false); sairModoRM(); }}>
+                Brasil
+              </button>
+              <button className={rm ? "ativo" : ""} aria-pressed={Boolean(rm)}
+                      onClick={() => setPedindoRM(true)}>
+                Regiões metropolitanas
+              </button>
+            </div>
+            {(pedindoRM || rm) && (
+              <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
+            )}
+            {!rm && (
+              <div className="segmentado" role="group" aria-label="Nível de agregação">
+                {(["mun", "rgi", "rgint", "uf"] as Nivel[]).map((n) => (
+                  <button key={n} className={nivel === n ? "ativo" : ""} aria-pressed={nivel === n}
+                          onClick={() => aoMudarNivel(n)}>
+                    {ROTULO_NIVEL[n]}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!rm && (
+              <button type="button" className="botao-filtros" onClick={() => setFiltrosAbertos(true)}
+                      aria-haspopup="dialog" aria-expanded={filtrosAbertos} aria-controls="folha-filtros">
+                Filtros{filtro ? " •" : ""}
+              </button>
+            )}
+          </div>
+
           {!rm && (
-            <div className="segmentado" role="group" aria-label="Nível de agregação">
-              {(["mun", "rgi", "rgint", "uf"] as Nivel[]).map((n) => (
-                <button key={n} className={nivel === n ? "ativo" : ""} aria-pressed={nivel === n}
-                        onClick={() => aoMudarNivel(n)}>
-                  {ROTULO_NIVEL[n]}
+            <>
+              <div className={`filtros-backdrop${filtrosAbertos ? " aberto" : ""}`}
+                   onClick={() => setFiltrosAbertos(false)} aria-hidden="true" />
+              <div id="folha-filtros" className={`grupo-filtros${filtrosAbertos ? " aberto" : ""}`}
+                   role="dialog" aria-modal="true" aria-label="Filtros do mapa">
+                <button type="button" className="filtros-fechar" onClick={() => setFiltrosAbertos(false)}>
+                  Fechar
                 </button>
-              ))}
-            </div>
+                <div className="separador-controle" aria-hidden="true" />
+                <div data-tour="busca">
+                  <Busca itens={itensBusca} placeholder={PLACEHOLDER_BUSCA[nivelEfetivo]}
+                         aoEscolher={(cd) => { aoSelecionarNoMapa(cd); setFiltrosAbertos(false); }} />
+                </div>
+                {nivelEfetivo === "mun" && <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />}
+                <div className="separador-controle" aria-hidden="true" />
+                <div className="segmentado" role="group" aria-label="Métrica do mapa" data-tour="metrica">
+                  {METRICAS.map((m) => (
+                    <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
+                            aria-pressed={metrica === m.valor} onClick={() => setMetrica(m.valor)}>
+                      {m.rotulo}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
-          {!rm && (
-            <div data-tour="busca">
-              <Busca itens={itensBusca} placeholder={PLACEHOLDER_BUSCA[nivelEfetivo]}
-                     aoEscolher={aoSelecionarNoMapa} />
-            </div>
-          )}
-          {!rm && nivelEfetivo === "mun" && <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />}
-          {!rm && (
-            <div className="segmentado" role="group" aria-label="Métrica do mapa" data-tour="metrica">
-              {METRICAS.map((m) => (
-                <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
-                        aria-pressed={metrica === m.valor} onClick={() => setMetrica(m.valor)}>
-                  {m.rotulo}
-                </button>
-              ))}
-            </div>
-          )}
-          <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button>
-          <button className="como-usar" onClick={() => setMostrarTour(true)}>Como usar</button>
-          <button className="tema" onClick={() => setTema(escuro ? "claro" : "escuro")}
-                  aria-label={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}>
-            {escuro ? "☀" : "☾"}
-          </button>
         </div>
       </header>
 
       <EstadoDados />
       {avisoNivel && <div className="aviso-nivel" role="status">{avisoNivel}</div>}
 
-      <main className="conteudo">
+      <main className="conteudo" id="conteudo-principal">
         <div className="mapa" data-tour="mapa">
           {!malhaAtiva && !erro && <div className="carregando">Carregando o mapa…</div>}
           {erro && <div className="erro" role="alert">{erro}</div>}
@@ -462,6 +553,7 @@ export default function App() {
             aoSelecionar={aoSelecionarNoMapa} aoSelecionarFluxo={aoSelecionarFluxo}
             foco={foco} zoomMaximo={zoomMaximo} rotuloReenquadrar={rotuloReenquadrar}
             destacar={rmDestacar} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
+            descricaoAcessivel={descricaoMapa}
           />
           {porCodigoAtivo.size > 0 && !rm && (
             <Legenda metrica={metrica} quebras={quebras} escuro={escuro}
@@ -471,8 +563,10 @@ export default function App() {
         {painelDireita}
       </main>
 
-      {mostrarTour && <Tour aoFechar={() => setMostrarTour(false)} />}
-      {paginaMetodologia && <PaginaMetodologia meta={meta} aoFechar={fecharMetodologia} />}
+      <Suspense fallback={null}>
+        {mostrarTour && <Tour aoFechar={() => setMostrarTour(false)} />}
+        {paginaMetodologia && <PaginaMetodologia meta={meta} aoFechar={fecharMetodologia} />}
+      </Suspense>
 
       {meta && (
         <footer className="rodape">

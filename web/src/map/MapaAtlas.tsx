@@ -10,7 +10,7 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Fluxo, Metrica } from "../lib/types";
 import type { Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
-import { num, sinal } from "../lib/format";
+import { num, sinal, rotuloPrecisao } from "../lib/format";
 
 export const VISTA_BRASIL: MapViewState = {
   longitude: -53.5, latitude: -14.5, zoom: 3.35, pitch: 0, bearing: 0,
@@ -18,7 +18,11 @@ export const VISTA_BRASIL: MapViewState = {
 
 /** Campos mínimos usados na coloração do coroplético -- Municipio e UnidadeAgregada (F6:
  *  níveis RGI/RGInt/UF) satisfazem essa forma, então o mapa não precisa saber qual é qual. */
-export interface ValorMapa { saldo: number; tlm: number | null; imig: number; emig: number; iem: number | null }
+export interface ValorMapa {
+  saldo: number; tlm: number | null; imig: number; emig: number; iem: number | null;
+  /** só existe no nível município (níveis agregados não têm erro-padrão próprio) */
+  cv_imig?: number | null; precisao_imig?: string;
+}
 
 interface Props {
   malha: FeatureCollection | null;
@@ -47,6 +51,9 @@ interface Props {
   /** F6: rótulo textual da feição sob o cursor, para a dica flutuante (nome/UF do município
    *  ou da unidade agregada); se omitido, a dica mostra só o código. */
   rotuloDaFeicao?: (cd: string) => string | null;
+  /** F6 leva 2: descrição da vista atual, para quem usa leitor de tela (o canvas do deck.gl
+   *  não expõe conteúdo textual por si só; os mesmos dados estão nas tabelas do painel). */
+  descricaoAcessivel?: string;
 }
 
 const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | null => {
@@ -63,7 +70,7 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
 export function MapaAtlas({
   malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, nucleo = null,
-  campoId = "CD_MUN", rotuloDaFeicao,
+  campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   // vista controlada: garante que a carga da página sempre comece enquadrando o Brasil
@@ -71,24 +78,51 @@ export function MapaAtlas({
   const [moveu, setMoveu] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  /** Vista que enquadra o `foco` (fitBounds com 48px de margem) ou o Brasil, se não houver foco. */
+  /** Vista que enquadra o `foco` (fitBounds com 48px de margem) ou o Brasil, se não houver foco.
+   *  F6 leva 2: `fitBounds` derruba a árvore inteira (sem error boundary) se width/height forem
+   *  0 -- o que acontece quando o efeito roda antes do container ter layout (ex.: entrando
+   *  direto por link com ?mun=... antes da 1a pintura) ou o próprio viewport ainda mede 0.
+   *  Nesses casos, cai para a vista do Brasil em vez de quebrar a página. */
   const vistaDoFoco = (): MapViewState => {
     if (!foco) return VISTA_BRASIL;
     const el = containerRef.current;
     const width = el?.clientWidth || window.innerWidth;
     const height = el?.clientHeight || window.innerHeight;
-    const vp = new WebMercatorViewport({ width, height });
-    const ajustado = vp.fitBounds([[foco[0], foco[1]], [foco[2], foco[3]]], { padding: 48 });
-    const zoom = zoomMaximo != null ? Math.min(ajustado.zoom, zoomMaximo) : ajustado.zoom;
-    return { longitude: ajustado.longitude, latitude: ajustado.latitude, zoom, pitch: 0, bearing: 0 };
+    if (!width || !height || !Number.isFinite(width) || !Number.isFinite(height)) return VISTA_BRASIL;
+    try {
+      const vp = new WebMercatorViewport({ width, height });
+      const ajustado = vp.fitBounds([[foco[0], foco[1]], [foco[2], foco[3]]], { padding: 48 });
+      const zoom = zoomMaximo != null ? Math.min(ajustado.zoom, zoomMaximo) : ajustado.zoom;
+      return { longitude: ajustado.longitude, latitude: ajustado.latitude, zoom, pitch: 0, bearing: 0 };
+    } catch {
+      return VISTA_BRASIL;
+    }
   };
 
   // recalcula o enquadramento sempre que a seleção muda (não a cada re-render: só quando
-  // a *identidade* do foco muda -- assim um gesto do usuário depois não é sobrescrito)
+  // a *identidade* do foco muda -- assim um gesto do usuário depois não é sobrescrito).
+  // F6 leva 2: se o container ainda mede 0 (ex.: entrando direto por link, antes da 1a
+  // pintura ter layout), tenta de novo em alguns frames -- em vez de travar na vista do
+  // Brasil para sempre por causa de uma corrida de layout.
   const focoChave = foco ? foco.join(",") : null;
   useEffect(() => {
     setVista(vistaDoFoco());
     setMoveu(false);
+    if (!foco) return;
+    let tentativas = 0;
+    let vivo = true;
+    const tentar = () => {
+      const el = containerRef.current;
+      if (!vivo || tentativas >= 10) return;
+      tentativas++;
+      if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
+        requestAnimationFrame(tentar);
+        return;
+      }
+      setVista(vistaDoFoco());
+    };
+    const raf = requestAnimationFrame(tentar);
+    return () => { vivo = false; cancelAnimationFrame(raf); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focoChave]);
 
@@ -183,7 +217,19 @@ export function MapaAtlas({
     | undefined;
 
   return (
-    <div ref={containerRef} style={{ position: "absolute", inset: 0 }}>
+    // F6 leva 2: role="group" (não "img") -- o container tem descendentes interativos
+    // reais (o canvas do deck.gl e o botão "reenquadrar"), e role="img" proíbe filhos
+    // focáveis (regra "nested-interactive" do axe). O rótulo textual completo já está
+    // no <p class="somente-leitor"> logo abaixo.
+    <div ref={containerRef} style={{ position: "absolute", inset: 0 }}
+         role="group" aria-label={descricaoAcessivel ?? "Mapa coroplético do Brasil com arcos de fluxo migratório"}>
+      {descricaoAcessivel && (
+        <p className="somente-leitor">
+          {descricaoAcessivel} Os mesmos dados aparecem, em forma de tabela, no painel ao lado
+          (indicadores e principais fluxos de origem e destino). Use a busca do cabeçalho para
+          selecionar um município ou unidade pelo teclado.
+        </p>
+      )}
       <DeckGL
         viewState={vista}
         onViewStateChange={({ viewState, interactionState }) => {
@@ -224,11 +270,21 @@ export function MapaAtlas({
                     : `saldo ${sinal(m.saldo)} pessoas`;
                 })()}
               </div>
+              {(() => {
+                const m = porCodigo.get(dica.properties[campoId]);
+                const rot = m?.precisao_imig ? rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig : null;
+                return rot ? <div className="muted-pequeno">precisão da imigração: {rot}</div> : null;
+              })()}
             </>
           ) : (
             <>
               <strong>{dica.nm_origem}/{dica.uf_origem} → {dica.nm_destino}/{dica.uf_destino}</strong>
               <div>{num(dica.total)} pessoas · clique para ver o perfil</div>
+              {dica.precisao && (
+                <div className="muted-pequeno">
+                  precisão: {rotuloPrecisao[dica.precisao] ?? dica.precisao}
+                </div>
+              )}
             </>
           )}
         </div>

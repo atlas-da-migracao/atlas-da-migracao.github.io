@@ -6,6 +6,7 @@ import {
   destinosTrabalhoDoFluxo, detalheDoFluxo, referenciasDoPerfil, rmDoPar, type DetalheFluxo,
 } from "../db/queries";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
+import { PiramideIdadeSexo } from "./PiramideIdadeSexo";
 import { CLASSE_TRAB, DIMENSOES, type NomeDimensao } from "../lib/paletas";
 import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
 
@@ -30,7 +31,19 @@ function doFluxo(f: DetalheFluxo | null, dim: NomeDimensao): Record<string, numb
   return out;
 }
 
-function daReferencia(refs: Refs, cd: string, direcao: string, dim: NomeDimensao): Record<string, number> {
+/** Igual a `doFluxo`, mas para dimensões sem entrada em DIMENSOES (idade_sexo: as chaves
+ *  "<faixa>_m"/"<faixa>_f" não têm rótulo/cor próprios, são lidas direto por PiramideIdadeSexo). */
+function colunasLargasDoFluxo(f: DetalheFluxo | null, prefixo: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (!f) return out;
+  const pfx = `${prefixo}__`;
+  for (const [chave, v] of Object.entries(f)) {
+    if (chave.startsWith(pfx) && typeof v === "number") out[chave.slice(pfx.length)] = v;
+  }
+  return out;
+}
+
+function daReferencia(refs: Refs, cd: string, direcao: string, dim: string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const r of refs) {
     if (r.cd_mun === cd && r.direcao === direcao && r.dimensao === dim) out[r.categoria] = r.valor;
@@ -65,14 +78,14 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
   }, [origem, destino]);
 
   const pronto = usarDuckDBPronto();
-  if (carregando) return <aside className="painel"><p className="muted">{pronto ? "Carregando o fluxo…" : "preparando os dados…"}</p></aside>;
+  if (carregando) return <aside className="painel" aria-label="Painel de detalhes"><p className="muted">{pronto ? "Carregando o fluxo…" : "preparando os dados…"}</p></aside>;
 
   const ida = dados?.ida ?? null;
   const volta = dados?.volta ?? null;
 
   if (!ida) {
     return (
-      <aside className="painel">
+      <aside className="painel" aria-label="Painel de detalhes">
         <header className="painel-topo">
           <h2>Fluxo não publicado</h2>
           <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
@@ -88,7 +101,7 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
   const saldoPar = ida.total - (volta?.total ?? 0);
 
   return (
-    <aside className="painel">
+    <aside className="painel" aria-label="Painel de detalhes">
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">Fluxo migratório 2017–2022</div>
@@ -144,6 +157,7 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
         </p>
       ) : (
         <>
+          <h3 className="secao-titulo">Perfil dos migrantes</h3>
           <p className="muted-pequeno explicacao">
             As barras comparam quem fez este percurso com três referências: todos os que
             chegaram ao destino, todos os que saíram da origem e a população residente no destino.
@@ -167,6 +181,13 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
                            categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
             );
           })}
+          <PiramideIdadeSexo
+            titulo="Idade e sexo" rotuloGrupo="Neste fluxo"
+            valoresGrupo={colunasLargasDoFluxo(ida, "idade_sexo")}
+            rotuloReferencia={`Imigrantes de ${ida.nm_destino}`}
+            valoresReferencia={daReferencia(refs, ida.destino, "imig", "idade_sexo")}
+            escuro={escuro}
+          />
         </>
       )}
 

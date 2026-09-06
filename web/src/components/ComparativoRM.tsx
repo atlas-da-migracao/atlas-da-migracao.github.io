@@ -57,7 +57,12 @@ export function ComparativoRM({ rms, ativa, aoEscolher }: Props) {
           <tbody>
             {ordenadas.map((r) => (
               <tr key={r.cd_rm} className={r.cd_rm === ativa ? "ativa" : ""}
-                  onClick={() => aoEscolher(r.cd_rm)}>
+                  onClick={() => aoEscolher(r.cd_rm)}
+                  tabIndex={0} role="button" aria-pressed={r.cd_rm === ativa}
+                  aria-label={`Ver ${r.nm_rm}`}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); aoEscolher(r.cd_rm); }
+                  }}>
                 <td>
                   <strong>{r.nm_rm}</strong>
                   <span className="muted-pequeno"> · {r.nm_nucleo} · {r.n_municipios} mun.</span>

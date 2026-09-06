@@ -38,6 +38,11 @@ interface Estado {
   sairModoRM: () => void;
   setAba: (aba: AbaRM) => void;
   setCruzar: (v: boolean) => void;
+  /** F6 leva 2: aplica várias peças de estado de uma vez (ex.: o link de um "achado-chave"
+   *  da capa nacional, que precisa entrar em modo RM, trocar de aba E selecionar um fluxo
+   *  na mesma navegação -- as ações individuais acima limpam campos umas das outras). */
+  irPara: (patch: Partial<Pick<Estado,
+    "municipio" | "selecao" | "nivel" | "origem" | "destino" | "rm" | "aba" | "cruzar">>) => void;
 }
 
 function daUrl() {
@@ -129,6 +134,7 @@ export const useStore = create<Estado>((set, get) => ({
   setAba: (aba) => { set({ aba, origem: null, destino: null });
                      paraUrl({ ...get(), aba, origem: null, destino: null }); },
   setCruzar: (cruzar) => { set({ cruzar }); paraUrl({ ...get(), cruzar }); },
+  irPara: (patch) => { set(patch); paraUrl({ ...get(), ...patch }); },
 }));
 
 /** true quando a interface está renderizando em modo escuro. */

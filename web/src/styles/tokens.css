@@ -9,7 +9,12 @@
   --surface-raised: #ffffff;
   --ink: #0b0b0b;
   --ink-secondary: #52514e;
+  /* traços, ícones e separadores -- NUNCA texto abaixo de 18px (contraste ~3,5:1 em --surface,
+     insuficiente para WCAG 1.4.3). Para texto pequeno, usar --ink-muted-texto. */
   --ink-muted: #898781;
+  /* texto pequeno (rótulos de KPI, notas, legendas): ~4,9:1 em --surface/--plane/--surface-raised.
+     Verificado por web/src/lib/__tests__/contraste.test.ts (limiar WCAG 4.5:1). */
+  --ink-muted-texto: #6f6e68;
   --hairline: #e1e0d9;
   --border: rgba(11, 11, 11, 0.1);
   --axis: #c3c2b7;
@@ -33,6 +38,13 @@
   --precisao-baixa: #d03b3b;
 
   --focus: #2a78d6;
+  /* fundo de controle "ativo" (segmentados) com texto branco -- --arc-in tem só 4,42:1
+     com branco (falha WCAG 4.5:1) porque codifica dado no mapa/legenda, não pode escurecer;
+     este token é só de interface. 6,63:1 em claro, 5,39:1 em escuro. */
+  --acento-ativo: #1c5cab;
+  /* fundo do banner de erro (EstadoDados) com texto branco -- --arc-out só tem 3,2-3,9:1
+     com branco nos dois temas; mesma razão do --acento-ativo. 7,0:1 com branco. */
+  --acento-erro: #9c390c;
   --radius: 6px;
   --font: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -46,6 +58,7 @@
     --ink: #ffffff;
     --ink-secondary: #c3c2b7;
     --ink-muted: #898781;
+    --ink-muted-texto: #9c9a93;
     --hairline: #2c2c2a;
     --border: rgba(255, 255, 255, 0.1);
     --axis: #383835;
@@ -58,6 +71,7 @@
     --div-pos-3: #256abf;
     --arc-in: #3987e5;
     --arc-out: #d95926;
+    --acento-ativo: #256abf;
   }
 }
 
@@ -69,6 +83,7 @@
   --ink: #ffffff;
   --ink-secondary: #c3c2b7;
   --ink-muted: #898781;
+  --ink-muted-texto: #9c9a93;
   --hairline: #2c2c2a;
   --border: rgba(255, 255, 255, 0.1);
   --axis: #383835;
@@ -81,6 +96,7 @@
   --div-pos-3: #256abf;
   --arc-in: #3987e5;
   --arc-out: #d95926;
+  --acento-ativo: #256abf;
 }
 
 * { box-sizing: border-box; }

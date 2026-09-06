@@ -7,6 +7,7 @@
 import type { Categoria } from "../lib/paletas";
 import { cor } from "../lib/paletas";
 import { num1 } from "../lib/format";
+import { corTextoLegivel } from "../lib/contraste";
 
 export interface SeriePerfil {
   rotulo: string;
@@ -52,11 +53,15 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro }: Props)
               {usadas.map((c) => {
                 const pct = ((s.valores[c.chave] ?? 0) / total) * 100;
                 if (pct <= 0) return null;
+                const fundo = cor(c.cor, escuro);
                 return (
                   <span key={c.chave} className="perfil-seg"
-                        style={{ width: `${pct}%`, background: cor(c.cor, escuro) }}
+                        style={{ width: `${pct}%`, background: fundo }}
                         title={`${c.rotulo}: ${num1(pct)}%`}>
-                    {pct >= 12 && <em>{Math.round(pct)}%</em>}
+                    {/* F6 leva 2: cor do texto escolhida por contraste (WCAG >= 4,5:1), não fixa em
+                        branco -- o fundo muda por categoria/tema e alguns segmentos claros só
+                        passavam com texto escuro (ver lib/contraste.ts). */}
+                    {pct >= 12 && <em style={{ color: corTextoLegivel(fundo) }}>{Math.round(pct)}%</em>}
                   </span>
                 );
               })}

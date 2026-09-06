@@ -7,6 +7,8 @@ import type { NivelAgregado, UnidadeAgregada } from "../db/queries";
 import { num, num2, sinal } from "../lib/format";
 import { exportarFluxosUnidade } from "../lib/exportar";
 import { usarDuckDBPronto } from "../db/duckdb";
+import { DiagramaAcordes } from "./DiagramaAcordes";
+import type { FluxoUF, UnidadeUF } from "../lib/acordes";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
@@ -57,15 +59,20 @@ interface Props {
   carregando: boolean;
   aoSelecionarFluxo: (o: string, d: string) => void;
   aoFechar: () => void;
+  /** F6 leva 2 (10a): dados da matriz de acordes UF x UF, só usados/necessários no nível "uf" */
+  fluxosUF?: FluxoUF[];
+  unidadesUF?: UnidadeUF[];
+  escuro?: boolean;
 }
 
-export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionarFluxo, aoFechar }: Props) {
+export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionarFluxo, aoFechar,
+                                fluxosUF, unidadesUF, escuro = false }: Props) {
   const pronto = usarDuckDBPronto();
   const rotuloNivel = ROTULO_NIVEL[nivel];
 
   if (!unidade) {
     return (
-      <aside className="painel">
+      <aside className="painel" aria-label="Painel de detalhes">
         <div className="vazio">
           <h2>Atlas da migração interna</h2>
           <p>
@@ -78,6 +85,13 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
             (ver a página de Metodologia).
           </p>
         </div>
+        {nivel === "uf" && fluxosUF && unidadesUF && (
+          <section className="secao">
+            <h3>Fluxos migratórios entre UFs</h3>
+            <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
+                             aoSelecionarPar={aoSelecionarFluxo} />
+          </section>
+        )}
       </aside>
     );
   }
@@ -86,7 +100,7 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
   const saidas = fluxos.filter((f) => f.direcao === "saida");
 
   return (
-    <aside className="painel">
+    <aside className="painel" aria-label="Painel de detalhes">
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">{rotuloNivel}</div>
@@ -124,6 +138,14 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
             ({unidade.iem > 0.1 ? "atração consolidada" : unidade.iem < -0.1 ? "evasão consolidada" : "trocas equilibradas"})
           </span>
         </div>
+      )}
+
+      {nivel === "uf" && fluxosUF && unidadesUF && (
+        <section className="secao">
+          <h3>Fluxos migratórios entre UFs</h3>
+          <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
+                           aoSelecionarPar={aoSelecionarFluxo} />
+        </section>
       )}
 
       {carregando ? (
