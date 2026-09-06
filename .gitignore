@@ -30,3 +30,13 @@ node_modules/
 web/dist/
 web/public/data/
 web/public/duckdb/
+
+# segredos e credenciais: nunca versionar (o site é público)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
