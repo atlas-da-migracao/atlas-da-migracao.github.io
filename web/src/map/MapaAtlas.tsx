@@ -1,14 +1,14 @@
 /** Mapa do atlas: coroplético dos municípios + arcos de fluxo.
  *  Sem basemap externo -- a base é a própria malha do IBGE, o que evita dependência
  *  de terceiros e mantém a leitura cartográfica limpa. */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer, ArcLayer } from "@deck.gl/layers";
 import { WebMercatorViewport } from "@deck.gl/core";
 import type { MapViewState, PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Fluxo, Metrica } from "../lib/types";
-import type { Bbox } from "../lib/rm";
+import { validarEExpandirBbox, type Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal, rotuloPrecisao } from "../lib/format";
 
@@ -78,53 +78,54 @@ export function MapaAtlas({
   const [moveu, setMoveu] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  /** Vista que enquadra o `foco` (fitBounds com 48px de margem) ou o Brasil, se não houver foco.
-   *  F6 leva 2: `fitBounds` derruba a árvore inteira (sem error boundary) se width/height forem
-   *  0 -- o que acontece quando o efeito roda antes do container ter layout (ex.: entrando
-   *  direto por link com ?mun=... antes da 1a pintura) ou o próprio viewport ainda mede 0.
-   *  Nesses casos, cai para a vista do Brasil em vez de quebrar a página. */
-  const vistaDoFoco = (): MapViewState => {
-    if (!foco) return VISTA_BRASIL;
+  // Tamanho medido do contêiner do mapa. `fitBounds` do math.gl lança uma asserção quando
+  // chamado com largura/altura 0 (o caso normal na 1a pintura, antes do layout do flex
+  // container se resolver) -- em vez de tentar adivinhar isso com `window.innerWidth` como
+  // fallback (o bug anterior), simplesmente não enquadramos nada até termos uma medida real
+  // do próprio elemento, via ResizeObserver. useLayoutEffect (não useEffect) para medir antes
+  // da pintura do navegador, evitando um frame com a vista errada.
+  const [tamanho, setTamanho] = useState<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
     const el = containerRef.current;
-    const width = el?.clientWidth || window.innerWidth;
-    const height = el?.clientHeight || window.innerHeight;
-    if (!width || !height || !Number.isFinite(width) || !Number.isFinite(height)) return VISTA_BRASIL;
-    try {
-      const vp = new WebMercatorViewport({ width, height });
-      const ajustado = vp.fitBounds([[foco[0], foco[1]], [foco[2], foco[3]]], { padding: 48 });
-      const zoom = zoomMaximo != null ? Math.min(ajustado.zoom, zoomMaximo) : ajustado.zoom;
-      return { longitude: ajustado.longitude, latitude: ajustado.latitude, zoom, pitch: 0, bearing: 0 };
-    } catch {
-      return VISTA_BRASIL;
-    }
+    if (!el) return;
+    const medir = () => {
+      const { width, height } = el.getBoundingClientRect();
+      setTamanho((anterior) =>
+        anterior && anterior.width === width && anterior.height === height ? anterior : { width, height });
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  /** Vista que enquadra o `foco` (fitBounds com 48px de margem) ou o Brasil, se não houver
+   *  foco, o contêiner ainda não tiver sido medido, ou o bbox não puder ser validado. Função
+   *  pura (não é hook): chamada de dentro do efeito abaixo e do clique em "reenquadrar". */
+  const vistaDoFoco = (): MapViewState => {
+    if (!tamanho || tamanho.width <= 0 || tamanho.height <= 0) return VISTA_BRASIL;
+    const bbox = validarEExpandirBbox(foco);
+    if (!bbox) return VISTA_BRASIL;
+    const vp = new WebMercatorViewport({ width: tamanho.width, height: tamanho.height });
+    const ajustado = vp.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 48 });
+    const zoom = zoomMaximo != null ? Math.min(ajustado.zoom, zoomMaximo) : ajustado.zoom;
+    return { longitude: ajustado.longitude, latitude: ajustado.latitude, zoom, pitch: 0, bearing: 0 };
   };
 
   // recalcula o enquadramento sempre que a seleção muda (não a cada re-render: só quando
-  // a *identidade* do foco muda -- assim um gesto do usuário depois não é sobrescrito).
-  // F6 leva 2: se o container ainda mede 0 (ex.: entrando direto por link, antes da 1a
-  // pintura ter layout), tenta de novo em alguns frames -- em vez de travar na vista do
-  // Brasil para sempre por causa de uma corrida de layout.
+  // a *identidade* do foco muda -- assim um gesto do usuário depois não é sobrescrito) ou
+  // quando o contêiner é medido pela 1a vez / muda de tamanho. Uma transição suave via
+  // deck.gl (não um temporizador manual) acompanha a troca, exceto quando o usuário pediu
+  // menos movimento.
   const focoChave = foco ? foco.join(",") : null;
+  const reduzirMovimento = typeof window !== "undefined"
+    && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   useEffect(() => {
-    setVista(vistaDoFoco());
+    const alvo = vistaDoFoco();
+    setVista(reduzirMovimento ? alvo : { ...alvo, transitionDuration: 400 });
     setMoveu(false);
-    if (!foco) return;
-    let tentativas = 0;
-    let vivo = true;
-    const tentar = () => {
-      const el = containerRef.current;
-      if (!vivo || tentativas >= 10) return;
-      tentativas++;
-      if (!el || el.clientWidth === 0 || el.clientHeight === 0) {
-        requestAnimationFrame(tentar);
-        return;
-      }
-      setVista(vistaDoFoco());
-    };
-    const raf = requestAnimationFrame(tentar);
-    return () => { vivo = false; cancelAnimationFrame(raf); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focoChave]);
+  }, [focoChave, tamanho?.width, tamanho?.height, zoomMaximo]);
 
   // Espessura dos arcos: proporcional à raiz quadrada do volume (área ~ volume, leitura
   // perceptualmente honesta), normalizada pelo maior fluxo EM TELA. Assim o maior arco de
@@ -251,7 +252,11 @@ export function MapaAtlas({
       {moveu && (
         <button
           className="reenquadrar"
-          onClick={() => { setVista(vistaDoFoco()); setMoveu(false); }}
+          onClick={() => {
+            const alvo = vistaDoFoco();
+            setVista(reduzirMovimento ? alvo : { ...alvo, transitionDuration: 400 });
+            setMoveu(false);
+          }}
         >
           {rotuloReenquadrar}
         </button>

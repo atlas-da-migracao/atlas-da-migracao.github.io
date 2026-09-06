@@ -108,6 +108,29 @@ export function indicadoresAgregados(imig: number, emig: number, pop5: number) {
   return { saldo, tlm, iem };
 }
 
+/** Valida um bbox para enquadramento (fitBounds) e, se degenerado (largura ou altura
+ *  efetivamente zero -- um município minúsculo, um par de centroides coincidente),
+ *  expande-o para uma largura/altura mínima em graus. `WebMercatorViewport.fitBounds`
+ *  lança "assertion failed" para um bbox de área zero, então nunca deve receber um sem
+ *  passar por aqui. Retorna null se o bbox não puder ser tornado válido (coordenada não
+ *  finita, ou mínimo maior que o máximo). */
+export function validarEExpandirBbox(bbox: Bbox | null | undefined, margemMinGraus = 0.02): Bbox | null {
+  if (!bbox) return null;
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) return null;
+  if (minLon > maxLon || minLat > maxLat) return null;
+  const achataLon = maxLon - minLon < margemMinGraus;
+  const achataLat = maxLat - minLat < margemMinGraus;
+  if (!achataLon && !achataLat) return bbox;
+  const cx = (minLon + maxLon) / 2, cy = (minLat + maxLat) / 2;
+  return [
+    achataLon ? cx - margemMinGraus / 2 : minLon,
+    achataLat ? cy - margemMinGraus / 2 : minLat,
+    achataLon ? cx + margemMinGraus / 2 : maxLon,
+    achataLat ? cy + margemMinGraus / 2 : maxLat,
+  ];
+}
+
 /** Prioridade única de enquadramento do mapa: fluxo selecionado > seleção (município ou
  *  unidade agregada) > RM ativa > Brasil. Extraída do App para poder ser testada sem React. */
 export function prioridadeFoco<T>(fluxoFoco: T | null, selecaoFoco: T | null, rmFoco: T | null): T | null {

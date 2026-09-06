@@ -95,6 +95,13 @@ function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalh
 
 export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, recorte,
                                  recorteCarregando, aoSelecionarFluxo, aoFechar }: Props) {
+  // Hook chamado incondicionalmente, antes de qualquer "return" antecipado: `m` começa
+  // null (dados do município ainda não chegaram) e vira truthy num re-render seguinte do
+  // MESMO componente montado -- chamar o hook só no ramo `m truthy` violaria as regras dos
+  // hooks (contagem de hooks diferente entre renders da mesma fibra), o que o React 19 acusa
+  // como "Expected static flag was missing" em vez do aviso de dev mais usual.
+  const duckdbPronto = usarDuckDBPronto();
+
   if (!m) {
     return (
       <aside className="painel" aria-label="Painel de detalhes">
@@ -115,7 +122,6 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
 
   const entradas = fluxos.filter((f) => f.direcao === "entrada");
   const saidas = fluxos.filter((f) => f.direcao === "saida");
-  const duckdbPronto = usarDuckDBPronto();
 
   return (
     <aside className="painel" aria-label="Painel de detalhes">

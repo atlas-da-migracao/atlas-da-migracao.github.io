@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agruparOcupacao, agruparTempo, bboxDeCentroides, bboxDeGeometria, calcularRankingSaldoIntraRM,
-  indicadoresAgregados, prepararSankey, prioridadeFoco, uniaoDeBboxes,
+  indicadoresAgregados, prepararSankey, prioridadeFoco, uniaoDeBboxes, validarEExpandirBbox,
 } from "../rm";
 
 describe("indicadoresAgregados (F6: níveis RGI/RGInt/UF)", () => {
@@ -106,6 +106,43 @@ describe("bboxDeCentroides", () => {
     const bbox = bboxDeCentroides([{ lon: -47, lat: -23 }])!;
     expect(bbox[2] - bbox[0]).toBeGreaterThan(0);
     expect(bbox[3] - bbox[1]).toBeGreaterThan(0);
+  });
+});
+
+describe("validarEExpandirBbox (F6 leva 3: guarda contra bbox degenerado no fitBounds)", () => {
+  it("bbox válido e já maior que a margem mínima passa inalterado", () => {
+    const bbox: [number, number, number, number] = [-47, -23, -46, -22];
+    expect(validarEExpandirBbox(bbox)).toEqual(bbox);
+  });
+
+  it("bbox puramente pontual (min == max nas duas dimensões) é expandido", () => {
+    const bbox = validarEExpandirBbox([-47, -23, -47, -23])!;
+    expect(bbox[2] - bbox[0]).toBeGreaterThan(0);
+    expect(bbox[3] - bbox[1]).toBeGreaterThan(0);
+    // o centro do bbox expandido continua no ponto original
+    expect((bbox[0] + bbox[2]) / 2).toBeCloseTo(-47, 6);
+    expect((bbox[1] + bbox[3]) / 2).toBeCloseTo(-23, 6);
+  });
+
+  it("achata só a dimensão degenerada quando a outra já tem largura suficiente", () => {
+    const bbox = validarEExpandirBbox([-47, -23, -40, -23], 0.02)!;
+    expect(bbox[2] - bbox[0]).toBeCloseTo(7, 6); // longitude preservada
+    expect(bbox[3] - bbox[1]).toBeGreaterThanOrEqual(0.02); // latitude expandida
+  });
+
+  it("null / undefined devolvem null", () => {
+    expect(validarEExpandirBbox(null)).toBeNull();
+    expect(validarEExpandirBbox(undefined)).toBeNull();
+  });
+
+  it("coordenada não finita (NaN/Infinity) devolve null", () => {
+    expect(validarEExpandirBbox([NaN, -23, -46, -22])).toBeNull();
+    expect(validarEExpandirBbox([-47, -23, Infinity, -22])).toBeNull();
+  });
+
+  it("min > max (bbox invertido/inconsistente) devolve null", () => {
+    expect(validarEExpandirBbox([-46, -23, -47, -22])).toBeNull();
+    expect(validarEExpandirBbox([-47, -22, -46, -23])).toBeNull();
   });
 });
 
