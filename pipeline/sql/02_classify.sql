@@ -12,7 +12,12 @@ COPY (
             p.df_local, p.df_uf, p.df_mun,
             p.nasc_local, p.nasc_uf, p.nasc_mun, p.nacionalidade,
             p.nivel_instr_4, p.nivel_instr_7, p.anos_estudo,
-            p.imp_df_local, p.imp_df_mun,
+            p.imp_df_local, p.imp_df_mun, p.imp_trab_mun,
+            -- deslocamento pendular (F2b)
+            p.ocupado_10, p.pos_ocup, p.atividade, p.grande_grupo, p.renda_trab,
+            p.trab_local, p.trab_uf, p.trab_mun, p.retorna_3dias, p.transporte,
+            p.tempo_desloc_cat, p.tempo_desloc_min,
+            p.freq_escolar, p.curso, p.estudo_local, p.estudo_uf, p.estudo_mun,
             d.renda_pc, d.tipo_domicilio
         FROM read_parquet('data/interim/pessoas.parquet') p
         LEFT JOIN read_parquet('data/interim/domicilios.parquet') d
@@ -20,7 +25,71 @@ COPY (
     )
     SELECT
         uf, cd_mun, cd_apond, controle, peso, idade, df_mun, df_uf, nivel_instr_4, renda_pc,
-        imp_df_local, imp_df_mun,
+        imp_df_local, imp_df_mun, imp_trab_mun,
+        trab_local, trab_uf, trab_mun, retorna_3dias, transporte,
+        tempo_desloc_cat, tempo_desloc_min, renda_trab,
+        freq_escolar, curso, estudo_local, estudo_uf, estudo_mun,
+
+        -- universos do bloco de deslocamento
+        COALESCE(ocupado_10 = '1', FALSE)                                AS ocupado,
+        COALESCE(freq_escolar = '1', FALSE)                              AS estudante,
+        -- pendularidade para trabalho: trabalha em outro município do Brasil, com destino conhecido
+        COALESCE(trab_local = '3' AND trab_mun NOT IN ('8888888', '9999999')
+                 AND trab_mun <> cd_mun, FALSE)                          AS pendular_trab,
+        COALESCE(estudo_local = '2' AND estudo_mun NOT IN ('8888888', '9999999')
+                 AND estudo_mun <> cd_mun, FALSE)                        AS pendular_estudo,
+
+        -- posição na ocupação em 5 grupos (P1020)
+        CASE
+            WHEN pos_ocup IN ('01', '03', '05') THEN 'empregado_com_carteira'
+            WHEN pos_ocup IN ('02', '04', '06') THEN 'empregado_sem_carteira'
+            WHEN pos_ocup = '07'                THEN 'militar_estatutario'
+            WHEN pos_ocup = '08'                THEN 'empregador'
+            WHEN pos_ocup IN ('09', '10')       THEN 'conta_propria_familiar'
+        END                                                              AS pos_grupo,
+
+        -- setor de atividade em 8 grupos (P1030)
+        CASE
+            WHEN atividade = '01'                              THEN 'agropecuaria'
+            WHEN atividade IN ('02', '03', '04', '05')         THEN 'industria'
+            WHEN atividade = '06'                              THEN 'construcao'
+            WHEN atividade = '07'                              THEN 'comercio'
+            WHEN atividade = '08'                              THEN 'transporte_logistica'
+            WHEN atividade IN ('10', '11', '12', '13', '14')   THEN 'servicos_empresariais'
+            WHEN atividade IN ('15', '16', '17')               THEN 'admin_educacao_saude'
+            WHEN atividade IN ('09', '18', '19', '20', '21', '22') THEN 'outros_servicos'
+        END                                                              AS setor_grupo,
+
+        grande_grupo                                                     AS ocup_grupo,
+
+        -- meio de transporte em 6 grupos (P1170)
+        CASE
+            WHEN transporte IN ('01', '02')             THEN 'a_pe_bicicleta'
+            WHEN transporte IN ('03', '04')             THEN 'motocicleta'
+            WHEN transporte IN ('05', '06')             THEN 'automovel_taxi'
+            WHEN transporte IN ('07', '08', '09')       THEN 'onibus_van_brt'
+            WHEN transporte = '10'                      THEN 'trem_metro'
+            WHEN transporte IN ('11', '12', '13', '14', '99') THEN 'outros'
+        END                                                              AS modo_grupo,
+
+        -- rendimento do trabalho em classes de salário mínimo (SM = R$ 1.212)
+        CASE
+            WHEN renda_trab IS NULL      THEN 'sem_declaracao'
+            WHEN renda_trab <= 1212.00   THEN 'ate_1_sm'
+            WHEN renda_trab <= 2424.00   THEN 'de_1_a_2_sm'
+            WHEN renda_trab <= 3636.00   THEN 'de_2_a_3_sm'
+            WHEN renda_trab <= 6060.00   THEN 'de_3_a_5_sm'
+            ELSE 'mais_de_5_sm'
+        END                                                              AS renda_trab_classe,
+
+        -- nível do curso frequentado em 4 grupos (P0660)
+        CASE
+            WHEN curso IN ('01', '02', '03', '04', '05') THEN 'infantil_fundamental'
+            WHEN curso IN ('06', '07')                   THEN 'medio'
+            WHEN curso = '08'                            THEN 'graduacao'
+            WHEN curso IN ('09', '10', '11')             THEN 'pos_graduacao'
+        END                                                              AS curso_grupo,
+
 
         -- COALESCE obrigatório: df_local é NULL para quem mora há 6+ anos no município
         -- (P0600 em branco). Sem isso, `NOT is_migrante` vira NULL e apaga ~19 milhões de

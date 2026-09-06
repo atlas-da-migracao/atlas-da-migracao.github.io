@@ -129,11 +129,79 @@ def main() -> int:
     else:
         ok("R1", "perfis municipais: nenhuma categoria nominal publicada com menos de 5 observações")
 
+    # ---- R1/R2 nos fluxos pendulares (F2b) ----
+    for tipo, univ, orig, dest in (("trab", "ocupado AND pendular_trab", "cd_mun", "trab_mun"),
+                                   ("estudo", "estudante AND pendular_estudo", "cd_mun", "estudo_mun")):
+        arq = PROCESSED / f"pendular_{tipo}.parquet"
+        if not arq.exists():
+            continue
+        con.execute(f"""
+            CREATE OR REPLACE TEMP TABLE cel_p AS
+            SELECT {orig} AS origem, {dest} AS destino, COUNT(*) n, COUNT(DISTINCT controle) ndom
+            FROM read_parquet('{INTERIM}/pessoas_classificado.parquet')
+            WHERE {univ} GROUP BY 1, 2
+        """)
+        v = con.execute(f"""
+            SELECT COUNT(*) FROM read_parquet('{arq}') p
+            LEFT JOIN cel_p c ON c.origem = p.origem AND c.destino = p.destino
+            WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS} OR c.ndom < {R.MIN_DOMICILIOS}
+        """).fetchone()[0]
+        if v:
+            falha("R1", f"pendular_{tipo}: {v} fluxos abaixo do limiar")
+        else:
+            n = con.execute(f"SELECT COUNT(*) FROM read_parquet('{arq}')").fetchone()[0]
+            ok("R1", f"pendular_{tipo}: {n:,} fluxos publicados, todos acima do limiar")
+        dim = PROCESSED / f"pendular_{tipo}_dim.parquet"
+        if dim.exists():
+            v = con.execute(f"""
+                SELECT COUNT(*) FROM read_parquet('{dim}') d
+                LEFT JOIN cel_p c ON c.origem = d.origem AND c.destino = d.destino
+                WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS_DETALHE}
+            """).fetchone()[0]
+            if v:
+                falha("R2", f"pendular_{tipo}_dim: {v} linhas de detalhe em fluxos com n<{R.MIN_PESSOAS_DETALHE}")
+            else:
+                ok("R2", f"pendular_{tipo}_dim: detalhe restrito a fluxos com n>={R.MIN_PESSOAS_DETALHE}")
+            v = con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{dim}') WHERE categoria <> 'outros' AND n_faixa = '<5'"
+            ).fetchone()[0]
+            if v:
+                falha("R1", f"pendular_{tipo}_dim: {v} categorias nominais com n<5")
+
+    # ---- R1 nas tabelas metropolitanas ----
+    for arq, univ, o, d in (
+        ("rm_fluxos_intra.parquet", "origem_valida", "df_mun", "cd_mun"),
+        ("rm_mig_estudo.parquet", "origem_valida AND estudante", "df_mun", "cd_mun"),
+    ):
+        f = PROCESSED / arq
+        if not f.exists():
+            continue
+        con.execute(f"""
+            CREATE OR REPLACE TEMP TABLE cel_rm AS
+            SELECT {o} AS origem, {d} AS destino, COUNT(*) n, COUNT(DISTINCT controle) ndom
+            FROM read_parquet('{INTERIM}/pessoas_classificado.parquet') WHERE {univ} GROUP BY 1, 2
+        """)
+        col_o = "origem" if arq == "rm_fluxos_intra.parquet" else "origem_mig"
+        col_d = "destino" if arq == "rm_fluxos_intra.parquet" else "destino_mig"
+        v = con.execute(f"""
+            SELECT COUNT(*) FROM read_parquet('{f}') p
+            LEFT JOIN cel_rm c ON c.origem = p.{col_o} AND c.destino = p.{col_d}
+            WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS}
+        """).fetchone()[0]
+        if v:
+            falha("R1", f"{arq}: {v} linhas abaixo do limiar")
+        else:
+            ok("R1", f"{arq}: todas as linhas acima do limiar de {R.MIN_PESSOAS} observações")
+
     # ---- R4: valores ponderados em múltiplos de 5 ----
     checagens = [("fluxos.parquet", "total"), ("municipios.parquet", "imig"),
                  ("municipios.parquet", "emig"), ("municipios.parquet", "pop"),
                  ("municipios_dim.parquet", "valor"), ("fluxos_uf.parquet", "total"),
-                 ("fluxos_rgi.parquet", "total"), ("fluxos_rgint.parquet", "total")]
+                 ("fluxos_rgi.parquet", "total"), ("fluxos_rgint.parquet", "total"),
+                 ("pendular_trab.parquet", "total"), ("pendular_estudo.parquet", "total"),
+                 ("pendular_trab_dim.parquet", "valor"), ("rm_fluxos_intra.parquet", "total"),
+                 ("rm_mig_pendular.parquet", "total"), ("rm_resumo.parquet", "mig_intra"),
+                 ("municipios_pendular.parquet", "saida_trab")]
     ruins = []
     for arq, col in checagens:
         v = con.execute(
@@ -149,7 +217,9 @@ def main() -> int:
 
     # ---- R5: n só em faixas, nunca exato ----
     faixas_validas = {rot for _, _, rot in R.FAIXAS_N} | {"<5"}
-    for arq in ("fluxos.parquet", "fluxos_uf.parquet", "municipios_dim.parquet"):
+    for arq in ("fluxos.parquet", "fluxos_uf.parquet", "municipios_dim.parquet",
+                "pendular_trab.parquet", "pendular_trab_dim.parquet", "pendular_estudo.parquet",
+                "rm_fluxos_intra.parquet", "rm_mig_pendular.parquet"):
         cols = {c.lower() for c in con.execute(f"SELECT * FROM read_parquet('{PROCESSED}/{arq}') LIMIT 0").df().columns}
         numericas = [c for c in cols if c == "n" or c.startswith("n_") and not c.endswith("_faixa")]
         if numericas:

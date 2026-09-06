@@ -53,6 +53,24 @@ Ver o plano completo (`PLANO_Atlas_Migracao_Censo2022.pdf`) para as fórmulas e 
 - Verificações demográficas: retorno nordestino acima da média nacional, seletividade educacional positiva, desconcentração metropolitana entre os maiores fluxos.
 - Gate de revelação aprovado sem violações; ver `docs/relatorio_revelacao_2026-09-05.md` e `docs/qa/F2_relatorio.md`.
 
+
+## Decisões de implementação (F2b)
+
+- **Universos.** Pendularidade para trabalho considera pessoas ocupadas de 10 anos ou mais (`P0960 = 1`); para estudo, quem frequenta escola ou creche (`P0650 = 1`).
+- **Fluxo pendular.** Trabalha ou estuda em outro município do Brasil, com destino conhecido e diferente da residência. Quem trabalha em mais de um município ou no exterior entra apenas como categoria nos indicadores municipais, nunca na matriz de fluxos.
+- **Agrupamentos.** Transporte em 6 grupos, posição na ocupação em 5, setor de atividade em 8, rendimento do trabalho em 5 classes de salário mínimo, nível do curso em 4. As correspondências estão em `pipeline/sql/02_classify.sql`.
+- **Núcleo metropolitano.** Município mais populoso de cada região, registrado em `pipeline/rm_nucleo.csv` e editável. Todos os 81 núcleos coincidem com a sede esperada.
+- **Cruzamento migração × pendularidade.** Para cada migrante intrametropolitano ocupado, registra-se o município de trabalho e sua classe: `origem` (voltou a trabalhar de onde saiu), `nucleo` (trabalha no núcleo sem ter vindo dele), `outro`, `proprio` (trabalha onde mora), `varios`, `exterior`. Para quem saiu do próprio núcleo, `origem` e núcleo são o mesmo município, então o percentual que segue trabalhando no núcleo aparece na classe `origem`.
+- **Formato da caracterização pendular.** Longo em vez de largo, por causa do número de dimensões.
+
+## Validações já realizadas (F2b)
+
+- Σ saídas = Σ entradas para trabalho (9.057.282) e para estudo (3.811.136).
+- Σ da tripla origem→residência→trabalho = migrantes intra-RM ocupados (1.571.255).
+- Guarulhos→São Paulo é o maior par pendular do país; Santana→Macapá presente, conforme previsto no plano.
+- Cada região metropolitana tem exatamente um núcleo; nenhum município pertence a mais de uma.
+- Gate de revelação aprovado sobre as 18 tabelas publicadas. Detalhes em `docs/qa/F2b_relatorio.md`.
+
 ## Limitações conhecidas
 
 - Estimativas de erro amostral usam um estimador conservador de conglomerados (domicílio como UPA, área de ponderação como estrato), pois o IBGE não disponibiliza estratos/UPAs formais nos microdados da amostra; cross-checado contra a Função de Variância Generalizada do IBGE.
