@@ -14,6 +14,14 @@ import disclosure_rules as R  # noqa: E402
 
 SALARIO_MINIMO_2022 = 1212.00
 
+# DOI emitido pelo Zenodo ao publicar a release v1.0.0 (integração GitHub -> Zenodo).
+# Única fonte destas constantes para o front-end interativo; as páginas estáticas de SEO
+# têm suas próprias (pipeline/build_paginas.py), mantidas em sincronia manualmente.
+DOI_CONCEITO = "10.5281/zenodo.22469791"  # resolve sempre para a versão mais recente
+DOI_VERSAO = "10.5281/zenodo.22469792"    # esta versão (v1.0.0)
+AUTOR_NOME = "Daniel Pessini"
+AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
+
 ROTULOS = {
     "status": {
         "retorno_natal": "Retorno ao município natal",
@@ -95,6 +103,18 @@ def main() -> None:
             "cv_cautela": R.CV_CAUTELA,
         },
         "rotulos": ROTULOS,
+        "citacao": {
+            "autor": AUTOR_NOME,
+            "autor_orcid": AUTOR_ORCID,
+            "doi_conceito": DOI_CONCEITO,
+            "doi_versao": DOI_VERSAO,
+            "licenca": "CC BY 4.0",
+            "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
+            "texto": (
+                f"{AUTOR_NOME}. Atlas da migração interna no Brasil. Dados do Censo "
+                "Demográfico 2022 (IBGE). DOI: https://doi.org/" + DOI_CONCEITO + "."
+            ),
+        },
         "aviso": (
             "Estimativas elaboradas pelo autor a partir dos microdados da amostra do "
             "Censo Demográfico 2022 (IBGE, acesso controlado), sujeitas a erro amostral "

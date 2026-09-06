@@ -152,6 +152,25 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
         </ul>
       </section>
 
+      {meta?.citacao && (
+        <section>
+          <h3>Como citar</h3>
+          <p>
+            {meta.citacao.autor} (<a href={meta.citacao.autor_orcid}>ORCID</a>). <em>Atlas
+            da migração interna no Brasil</em>. Dados do Censo Demográfico 2022 (IBGE).
+            DOI: <a href={`https://doi.org/${meta.citacao.doi_conceito}`}>{meta.citacao.doi_conceito}</a>
+            {" "}(todas as versões) /{" "}
+            <a href={`https://doi.org/${meta.citacao.doi_versao}`}>{meta.citacao.doi_versao}</a> (v1.0.0).
+          </p>
+          <p className="muted-pequeno">
+            Dados e conteúdo sob{" "}
+            <a href={meta.citacao.licenca_url}>{meta.citacao.licenca}</a>, com atribuição ao
+            IBGE como fonte primária. Metadados estruturados em{" "}
+            <a href="https://github.com/atlas-da-migracao/atlas-da-migracao.github.io/blob/main/CITATION.cff">CITATION.cff</a>.
+          </p>
+        </section>
+      )}
+
       {meta?.aviso && (
         <section>
           <h3>Aviso padrão</h3>

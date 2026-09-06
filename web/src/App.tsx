@@ -591,7 +591,15 @@ export default function App() {
 
       {meta && (
         <footer className="rodape">
-          {meta.aviso} Dados de {meta.versao_dados}. <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button>
+          <p>{meta.aviso} Dados de {meta.versao_dados}. <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button></p>
+          {meta.citacao && (
+            <p className="rodape-citacao">
+              Como citar: {meta.citacao.autor} <em>(<a href={meta.citacao.autor_orcid}>ORCID</a>)</em>.
+              Atlas da migração interna no Brasil. Dados do Censo Demográfico 2022 (IBGE).
+              DOI:{" "}
+              <a href={`https://doi.org/${meta.citacao.doi_conceito}`}>{meta.citacao.doi_conceito}</a>.
+            </p>
+          )}
         </footer>
       )}
     </div>

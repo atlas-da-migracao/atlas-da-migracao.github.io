@@ -1102,6 +1102,15 @@ fora da soma, e não há erro-padrão publicado.</p></section>
 unidade primária, área de ponderação como estrato).</li>
 </ul></section>
 
+<section class="secao"><h2>Como citar</h2>
+<p>{AUTOR_NOME}. <em>Atlas da migração interna no Brasil</em>. Dados do Censo Demográfico 2022
+(IBGE). DOI: <a href="https://doi.org/{DOI_CONCEITO}">{DOI_CONCEITO}</a> (todas as versões) /
+<a href="https://doi.org/{DOI_VERSAO}">{DOI_VERSAO}</a> (v1.0.0).</p>
+<p>Dados e conteúdo sob <a href="{LICENCA_DADOS_URL}">CC BY 4.0</a>, com atribuição ao IBGE
+como fonte primária. Metadados estruturados em
+<a href="https://github.com/atlas-da-migracao/atlas-da-migracao.github.io/blob/main/CITATION.cff">CITATION.cff</a>.</p>
+</section>
+
 <section class="secao"><h2>Aviso padrão</h2><p class="aviso">{AVISO}</p></section>
 """
         self._pagina_indice("/metodologia/", "Metodologia do atlas",

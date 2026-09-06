@@ -207,6 +207,10 @@
 
 .rodape { padding: 8px 16px; font-size: 11.5px; color: var(--ink-muted-texto);
           background: var(--surface); border-top: 1px solid var(--hairline); }
+.rodape p { margin: 0 0 3px; }
+.rodape p:last-child { margin-bottom: 0; }
+.rodape-citacao { font-variant-numeric: tabular-nums; }
+.rodape a { color: inherit; }
 
 @media (max-width: 900px) {
   .conteudo { flex-direction: column; }

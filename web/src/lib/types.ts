@@ -30,5 +30,9 @@ export interface Meta {
   revelacao: { min_pessoas: number; min_domicilios: number; min_pessoas_detalhe: number;
                arredondamento: number; cv_boa: number; cv_cautela: number };
   rotulos: Record<string, Record<string, string>>;
+  citacao?: {
+    autor: string; autor_orcid: string; doi_conceito: string; doi_versao: string;
+    licenca: string; licenca_url: string; texto: string;
+  };
   aviso: string;
 }
