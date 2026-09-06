@@ -27,6 +27,15 @@ Ver o plano completo (`PLANO_Atlas_Migracao_Censo2022.pdf`) para as fórmulas e 
 - Todos os códigos observados de município de residência há 5 anos (`P0620`) pertencem à lista de municípios de 2022 (nenhuma harmonização territorial necessária entre 2017 e 2022).
 - Malha municipal do IBGE (2022) obtida em `data/geo/raw` para a etapa F3.
 
+
+## Validações já realizadas (F1)
+
+- Extração das 27 UFs via DuckDB (`pipeline/sql/01_extract.sql`) em 56,4 s: 21.539.579 registros de pessoas e 7.689.963 de domicílios, batendo exatamente com os totais do Questionário da Amostra (Notas 04/2026, Tabela 1).
+- Soma nacional de `P0111` = 203.080.756, exata em relação à Tabela 3 das Notas 04/2026.
+- Join pessoas↔domicílios por `controle`: 100% de correspondência.
+- 100% dos códigos de município (residência atual e residência há 5 anos, quando conhecida) pertencem à lista oficial de 2022.
+- Detalhes completos em `docs/qa/F1_relatorio.md`.
+
 ## Limitações conhecidas
 
 - Estimativas de erro amostral usam um estimador conservador de conglomerados (domicílio como UPA, área de ponderação como estrato), pois o IBGE não disponibiliza estratos/UPAs formais nos microdados da amostra; cross-checado contra a Função de Variância Generalizada do IBGE.
