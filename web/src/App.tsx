@@ -205,6 +205,27 @@ export default function App() {
     })();
   }, []);
 
+  // F8 (SEO): a home publica um SearchAction (?q=...) no JSON-LD para a busca do Google --
+  // preenche e seleciona o primeiro resultado assim que os municípios carregarem, com a
+  // mesma normalização (sem acento, sem caixa) da busca da interface (Busca.tsx). Só roda
+  // uma vez: `selecionarMunicipio` já reescreve a URL sem o `q` (paraUrl monta a query do
+  // zero), então não há necessidade de limpar o parâmetro manualmente.
+  const [qProcessado, setQProcessado] = useState(false);
+  useEffect(() => {
+    if (qProcessado || !municipios.length) return;
+    const q = new URLSearchParams(location.search).get("q");
+    setQProcessado(true);
+    if (!q?.trim()) return;
+    const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    const alvo = normalizar(q.trim());
+    const achado = municipios
+      .map((m) => ({ m, chave: normalizar(`${m.nm_mun}/${m.uf_sigla}`) }))
+      .filter((x) => x.chave.includes(alvo))
+      .sort((a, b) => (a.chave.startsWith(alvo) === b.chave.startsWith(alvo)
+        ? b.m.pop - a.m.pop : a.chave.startsWith(alvo) ? -1 : 1))[0];
+    if (achado) selecionarMunicipio(achado.m.cd_mun);
+  }, [municipios, qProcessado]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // malha ativa: municipal por padrão, ou a do nível agregado escolhido
   const malhaAtiva = nivelEfetivo === "mun" ? malha : malhaNivel[nivelEfetivo] ?? null;
   const campoId = CAMPO_ID[nivelEfetivo];

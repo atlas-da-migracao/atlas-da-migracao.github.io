@@ -11,7 +11,8 @@
     "copy-duckdb": "sh scripts/copy-duckdb.sh",
     "sync-data": "sh scripts/sync-data.sh",
     "prebuild": "npm run copy-duckdb",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:site": "vite build && python3 ../pipeline/build_paginas.py --producao"
   },
   "dependencies": {
     "@deck.gl/core": "^9.4.0",

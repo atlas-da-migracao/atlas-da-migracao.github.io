@@ -20,6 +20,7 @@ Os microdados em `data/raw` são de **acesso controlado** do IBGE (Censo 2022). 
 - Malha municipal 2022 (shapefile IBGE): `data/geo/raw/BR_Municipios_2022.{shp,dbf,shx,prj,cpg}`.
 - Dados intermediários: `data/interim` (Parquet, gitignored). Dados publicáveis: `data/processed` (Parquet/JSON, só após o gate).
 - Metodologia: `docs/METODOLOGIA.md`. Termos de acesso (fora do repo): `docs/termos/`.
+- SEO/páginas estáticas: `docs/SEO.md` (estratégia) e `pipeline/build_paginas.py` (gerador, lê só `data/processed`, escreve em `web/dist`).
 
 ## Comandos
 
@@ -35,6 +36,8 @@ npm run dev --prefix web             # servidor de desenvolvimento do atlas (por
 npm run sync-data --prefix web       # copia data/processed -> web/public/data (exige .gate_ok)
 npm run copy-duckdb --prefix web     # copia o runtime do DuckDB-WASM para web/public/duckdb
 npm test --prefix web                # testes do front-end (vitest)
+SITE_URL=https://<dominio> npm run build:site --prefix web  # vite build + páginas estáticas de SEO (exige SITE_URL)
+python pipeline/build_paginas.py [--producao] [--out DIR]    # gerador de páginas de SEO (ver docs/SEO.md); roda depois de `vite build`, escreve em web/dist
 ```
 
 ## Orquestração de modelos

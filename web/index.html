@@ -3,11 +3,134 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Atlas da migração interna no Brasil — Censo 2022</title>
-    <meta name="description" content="Saldos e fluxos migratórios entre os municípios brasileiros no quinquênio 2017–2022, a partir dos microdados da amostra do Censo Demográfico 2022." />
+    <meta name="description" content="Saldos e fluxos migratórios entre os 5.570 municípios brasileiros no quinquênio 2017–2022, a partir dos microdados da amostra do Censo Demográfico 2022 do IBGE." />
+    <link rel="canonical" href="__SITE_URL__/" />
+    <meta name="robots" content="index,follow" />
+    <link rel="alternate" hreflang="pt-BR" href="__SITE_URL__/" />
+    <link rel="alternate" hreflang="en" href="__SITE_URL__/en/" />
+    <link rel="alternate" hreflang="x-default" href="__SITE_URL__/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Atlas da migração interna no Brasil" />
+    <meta property="og:title" content="Atlas da migração interna no Brasil — Censo 2022" />
+    <meta property="og:description" content="Saldos e fluxos migratórios entre os 5.570 municípios brasileiros no quinquênio 2017–2022, a partir dos microdados da amostra do Censo Demográfico 2022 do IBGE." />
+    <meta property="og:url" content="__SITE_URL__/" />
+    <meta property="og:image" content="__SITE_URL__/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Atlas da migração interna no Brasil — Censo 2022" />
+    <meta name="twitter:description" content="Saldos e fluxos migratórios entre os 5.570 municípios brasileiros no quinquênio 2017–2022." />
+    <meta name="twitter:image" content="__SITE_URL__/og.png" />
+
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Atlas da migração interna no Brasil",
+      "url": "__SITE_URL__/",
+      "inLanguage": "pt-BR",
+      "description": "Saldos e fluxos migratórios entre os municípios brasileiros no quinquênio 2017–2022, a partir dos microdados da amostra do Censo Demográfico 2022.",
+      "potentialAction": {
+        "@type": "SearchAction",
+        "target": { "@type": "EntryPoint", "urlTemplate": "__SITE_URL__/?q={search_term_string}" },
+        "query-input": "required name=search_term_string"
+      }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Dataset",
+      "name": "Atlas da migração interna no Brasil — Censo 2022",
+      "description": "Indicadores e fluxos de migração interna, deslocamento pendular e módulo metropolitano por município, região imediata, região intermediária e UF do Brasil, no quinquênio 2017–2022, a partir dos microdados da amostra do Censo Demográfico 2022 (IBGE, acesso controlado). Estimativas amostrais sujeitas a controle estatístico de revelação (supressão, arredondamento e faixas de contagem).",
+      "creator": { "@type": "Person", "name": "__AUTOR_PLACEHOLDER__" },
+      "license": "__LICENCA_PLACEHOLDER__",
+      "temporalCoverage": "2017-07-31/2022-07-31",
+      "spatialCoverage": { "@type": "Place", "name": "Brasil" },
+      "isBasedOn": {
+        "@type": "Dataset",
+        "name": "Censo Demográfico 2022 — IBGE",
+        "creator": { "@type": "Organization", "name": "Instituto Brasileiro de Geografia e Estatística (IBGE)" }
+      },
+      "keywords": ["migração interna", "Censo 2022", "IBGE", "demografia", "municípios do Brasil", "migração de retorno", "deslocamento pendular", "regiões metropolitanas"],
+      "url": "__SITE_URL__/dados/"
+    }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Conteúdo indexável estático: substituído pelo React ao montar (ver src/main.tsx).
+           Rastreadores que não executam JS, ou que veem a página antes do DuckDB-WASM
+           inicializar, encontram aqui um resumo real do atlas e os links de navegação. -->
+      <main>
+        <header>
+          <h1>Atlas da migração interna no Brasil</h1>
+          <p>Censo Demográfico 2022 · quinquênio de data fixa 2017–2022</p>
+        </header>
+        <p>
+          O Atlas da migração interna no Brasil mapeia para onde as pessoas se mudaram entre
+          31 de julho de 2017 e 31 de julho de 2022, a partir do quesito de migração dos
+          microdados da amostra do Censo Demográfico 2022 do IBGE (acesso controlado). Ele
+          mostra saldo migratório, taxas, perfil dos migrantes (escolaridade, renda, idade e
+          sexo), deslocamento pendular para trabalho e estudo, e um módulo dedicado às regiões
+          metropolitanas e RIDEs — sempre no nível de município, região imediata, região
+          intermediária e UF.
+        </p>
+        <p>
+          <strong>12,9 milhões de pessoas</strong> mudaram de município nesse período, em
+          <strong> 5.570 municípios</strong> brasileiros, totalizando
+          <strong> 53.097 pares</strong> origem–destino publicados após o controle estatístico
+          de revelação.
+        </p>
+        <nav aria-label="Navegação do atlas">
+          <ul>
+            <li><a href="/municipios/">Municípios (lista por UF)</a></li>
+            <li><a href="/regioes-metropolitanas/">Regiões metropolitanas e RIDEs</a></li>
+            <li><a href="/ufs/">Unidades da Federação</a></li>
+            <li><a href="/regioes/">Regiões imediatas e intermediárias</a></li>
+            <li><a href="/achados/">Principais achados</a></li>
+            <li><a href="/metodologia/">Metodologia</a></li>
+            <li><a href="/glossario/">Glossário</a></li>
+            <li><a href="/dados/">Dados publicados</a></li>
+            <li><a href="/sobre/">Sobre o projeto</a></li>
+            <li><a href="/en/">English summary</a></li>
+          </ul>
+        </nav>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
+    <footer id="rodape-estatico">
+      <nav aria-label="Links do rodapé">
+        <a href="/municipios/">Municípios</a> ·
+        <a href="/regioes-metropolitanas/">Regiões metropolitanas</a> ·
+        <a href="/ufs/">UFs</a> ·
+        <a href="/regioes/">Regiões</a> ·
+        <a href="/achados/">Achados</a> ·
+        <a href="/metodologia/">Metodologia</a> ·
+        <a href="/glossario/">Glossário</a> ·
+        <a href="/dados/">Dados</a> ·
+        <a href="/sobre/">Sobre</a> ·
+        <a href="/en/">English</a>
+      </nav>
+      <p>
+        Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo
+        Demográfico 2022 (IBGE, acesso controlado), sujeitas a erro amostral e a controle
+        estatístico de revelação; podem divergir das tabulações oficiais do IBGE (SIDRA).
+        Fonte: IBGE, Censo Demográfico 2022.
+      </p>
+    </footer>
+    <style>
+      /* Estilo mínimo do conteúdo estático e do rodapé -- não depende do React montar.
+         Repetido (não importado) de src/styles/tokens.css de propósito: este bloco precisa
+         funcionar mesmo se o bundle falhar ao carregar. */
+      #rodape-estatico { font: 11.5px/1.4 system-ui, sans-serif; color: #6f6e68; padding: 8px 16px;
+                          background: #f9f9f7; border-top: 1px solid #e1e0d9; }
+      #rodape-estatico a { color: inherit; }
+      #rodape-estatico nav { margin-bottom: 4px; }
+      @media (prefers-color-scheme: dark) {
+        #rodape-estatico { background: #0d0d0d; color: #9c9a93; border-top-color: #2c2c2a; }
+      }
+    </style>
   </body>
 </html>
