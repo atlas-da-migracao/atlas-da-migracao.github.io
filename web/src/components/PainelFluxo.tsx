@@ -1,9 +1,11 @@
 /** Painel do fluxo selecionado: volume, precisão, o fluxo reverso e o perfil dos
  *  migrantes daquele par, comparado com três referências. */
 import { useEffect, useState } from "react";
-import { detalheDoFluxo, referenciasDoPerfil, type DetalheFluxo } from "../db/queries";
+import {
+  destinosTrabalhoDoFluxo, detalheDoFluxo, referenciasDoPerfil, rmDoPar, type DetalheFluxo,
+} from "../db/queries";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
-import { DIMENSOES, type NomeDimensao } from "../lib/paletas";
+import { CLASSE_TRAB, DIMENSOES, type NomeDimensao } from "../lib/paletas";
 import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
 
 interface Props {
@@ -39,6 +41,7 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
   const [dados, setDados] = useState<Awaited<ReturnType<typeof detalheDoFluxo>> | null>(null);
   const [refs, setRefs] = useState<Refs>([]);
   const [carregando, setCarregando] = useState(true);
+  const [destinosTrabalho, setDestinosTrabalho] = useState<Awaited<ReturnType<typeof destinosTrabalhoDoFluxo>>>([]);
 
   useEffect(() => {
     let vivo = true;
@@ -46,6 +49,17 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
     Promise.all([detalheDoFluxo(origem, destino), referenciasDoPerfil(origem, destino)])
       .then(([d, r]) => { if (vivo) { setDados(d); setRefs(r); } })
       .finally(() => { if (vivo) setCarregando(false); });
+    return () => { vivo = false; };
+  }, [origem, destino]);
+
+  // se o par pertence a uma RM, busca onde os migrantes desse percurso trabalham
+  useEffect(() => {
+    let vivo = true;
+    setDestinosTrabalho([]);
+    rmDoPar(origem, destino).then((cd_rm) => {
+      if (!cd_rm) return null;
+      return destinosTrabalhoDoFluxo(cd_rm, origem, destino);
+    }).then((r) => { if (vivo && r) setDestinosTrabalho(r); }).catch(() => {});
     return () => { vivo = false; };
   }, [origem, destino]);
 
@@ -151,6 +165,31 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
                            categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
             );
           })}
+        </>
+      )}
+
+      {destinosTrabalho.length > 0 && (
+        <>
+          <h3 className="secao-titulo">Onde trabalham os que fizeram este percurso</h3>
+          <p className="muted-pequeno explicacao">
+            Dos migrantes intra-RM que saíram de {ida.nm_origem} e passaram a morar em {ida.nm_destino},
+            local de trabalho declarado em 2022.
+          </p>
+          <table className="tabela-fluxos">
+            <tbody>
+              {destinosTrabalho.map((d, i) => (
+                <tr key={i}>
+                  <td>
+                    {d.nm_destino_trab
+                      ? <>{d.nm_destino_trab}<span className="uf">/{d.uf_destino_trab}</span></>
+                      : (CLASSE_TRAB as Record<string, { rotulo: string }>)[d.classe_trab]?.rotulo ?? d.classe_trab}
+                  </td>
+                  <td className="valor-cel">{num(d.total)}</td>
+                  <td className="valor-cel muted-pequeno">{d.n_faixa}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </>
       )}
     </aside>

@@ -1,12 +1,14 @@
 /** Mapa do atlas: coroplético dos municípios + arcos de fluxo.
  *  Sem basemap externo -- a base é a própria malha do IBGE, o que evita dependência
  *  de terceiros e mantém a leitura cartográfica limpa. */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer, ArcLayer } from "@deck.gl/layers";
+import { WebMercatorViewport } from "@deck.gl/core";
 import type { MapViewState, PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Fluxo, Metrica, Municipio } from "../lib/types";
+import type { Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal } from "../lib/format";
 
@@ -24,6 +26,12 @@ interface Props {
   escuro: boolean;
   aoSelecionar: (cd: string | null) => void;
   aoSelecionarFluxo: (o: string, d: string) => void;
+  /** bbox [minLon,minLat,maxLon,maxLat] para enquadrar uma região (modo RM); null = Brasil */
+  foco?: Bbox | null;
+  /** municípios a destacar (modo RM); os demais recebem alpha reduzido */
+  destacar?: Set<string> | null;
+  /** código do núcleo da RM ativa, para contorno mais grosso */
+  nucleo?: string | null;
 }
 
 const valorDaMetrica = (m: Municipio | undefined, metrica: Metrica): number | null => {
@@ -39,13 +47,41 @@ const valorDaMetrica = (m: Municipio | undefined, metrica: Metrica): number | nu
 
 export function MapaAtlas({
   malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
+  foco = null, destacar = null, nucleo = null,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   // vista controlada: garante que a carga da página sempre comece enquadrando o Brasil
   const [vista, setVista] = useState<MapViewState>(VISTA_BRASIL);
   const [moveu, setMoveu] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { setVista(VISTA_BRASIL); }, []);
+  /** Vista que enquadra o `foco` (fitBounds com 48px de margem) ou o Brasil, se não houver foco. */
+  const vistaDoFoco = (): MapViewState => {
+    if (!foco) return VISTA_BRASIL;
+    const el = containerRef.current;
+    const width = el?.clientWidth || window.innerWidth;
+    const height = el?.clientHeight || window.innerHeight;
+    const vp = new WebMercatorViewport({ width, height });
+    const ajustado = vp.fitBounds([[foco[0], foco[1]], [foco[2], foco[3]]], { padding: 48 });
+    return { longitude: ajustado.longitude, latitude: ajustado.latitude, zoom: ajustado.zoom, pitch: 0, bearing: 0 };
+  };
+
+  // recalcula o enquadramento sempre que a RM muda (ou ao voltar para o Brasil)
+  const focoChave = foco ? foco.join(",") : null;
+  useEffect(() => {
+    setVista(vistaDoFoco());
+    setMoveu(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focoChave]);
+
+  // Espessura dos arcos: proporcional à raiz quadrada do volume (área ~ volume, leitura
+  // perceptualmente honesta), normalizada pelo maior fluxo EM TELA. Assim o maior arco de
+  // qualquer vista é sempre nitidamente grosso e os menores, finos -- a hierarquia não
+  // depende da escala absoluta do município escolhido.
+  const maiorVolume = useMemo(() => Math.max(1, ...arcos.map((a) => a.total)), [arcos]);
+  const LARGURA_MIN = 1.5, LARGURA_MAX = 14;
+  const larguraDoArco = (total: number) =>
+    LARGURA_MIN + (LARGURA_MAX - LARGURA_MIN) * Math.sqrt(Math.max(0, total) / maiorVolume);
 
   const camadas = useMemo(() => {
     if (!malha) return [];
@@ -58,24 +94,34 @@ export function MapaAtlas({
       stroked: true,
       filled: true,
       lineWidthUnits: "pixels",
-      getLineWidth: (f: Feature<Geometry, { CD_MUN: string }>) =>
-        f.properties.CD_MUN === selecionado ? 2 : 0.3,
-      getLineColor: (f: Feature<Geometry, { CD_MUN: string }>) =>
-        f.properties.CD_MUN === selecionado
-          ? (escuro ? [255, 255, 255, 255] : [11, 11, 11, 255])
-          : [...contorno, 180],
-      getFillColor: (f: Feature<Geometry, { CD_MUN: string }>) =>
-        [...corDivergente(valorDaMetrica(porCodigo.get(f.properties.CD_MUN), metrica), quebras, escuro), 235] as
-          [number, number, number, number],
+      getLineWidth: (f: Feature<Geometry, { CD_MUN: string }>) => {
+        const cd = f.properties.CD_MUN;
+        if (cd === selecionado) return 2;
+        if (nucleo && cd === nucleo) return 3;
+        return 0.3;
+      },
+      getLineColor: (f: Feature<Geometry, { CD_MUN: string }>) => {
+        const cd = f.properties.CD_MUN;
+        if (cd === selecionado) return escuro ? [255, 255, 255, 255] : [11, 11, 11, 255];
+        if (nucleo && cd === nucleo) return escuro ? [255, 255, 255, 220] : [11, 11, 11, 220];
+        const fora = destacar && !destacar.has(cd);
+        return [...contorno, fora ? 90 : 180];
+      },
+      getFillColor: (f: Feature<Geometry, { CD_MUN: string }>) => {
+        const cd = f.properties.CD_MUN;
+        const c = corDivergente(valorDaMetrica(porCodigo.get(cd), metrica), quebras, escuro);
+        const fora = destacar && !destacar.has(cd);
+        return [...c, fora ? 70 : 235] as [number, number, number, number];
+      },
       onClick: (info: PickingInfo) => {
         const cd = (info.object as Feature<Geometry, { CD_MUN: string }> | undefined)?.properties?.CD_MUN;
         aoSelecionar(cd ?? null);
         return true;
       },
       updateTriggers: {
-        getFillColor: [metrica, quebras.join(","), escuro, porCodigo.size],
-        getLineColor: [selecionado, escuro],
-        getLineWidth: [selecionado],
+        getFillColor: [metrica, quebras.join(","), escuro, porCodigo.size, destacar],
+        getLineColor: [selecionado, escuro, nucleo, destacar],
+        getLineWidth: [selecionado, nucleo],
       },
     });
 
@@ -85,13 +131,20 @@ export function MapaAtlas({
       pickable: true,
       getSourcePosition: (d: Fluxo) => [d.lon_o!, d.lat_o!],
       getTargetPosition: (d: Fluxo) => [d.lon_d!, d.lat_d!],
-      getSourceColor: (d: Fluxo & { direcao?: string }) =>
-        (d.direcao === "saida" ? [235, 104, 52, 200] : [42, 120, 214, 200]) as [number, number, number, number],
-      getTargetColor: (d: Fluxo & { direcao?: string }) =>
-        (d.direcao === "saida" ? [235, 104, 52, 90] : [42, 120, 214, 90]) as [number, number, number, number],
-      getWidth: (d: Fluxo) => Math.max(1, Math.sqrt(d.total) / 34),
-      // fluxos de baixa precisão aparecem esmaecidos, nunca escondidos
-      opacity: 0.7,
+      getSourceColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
+        const a = d.cruza ? 90 : 200;
+        if (d.corRgb) return [...d.corRgb, a] as [number, number, number, number];
+        return (d.direcao === "saida" ? [235, 104, 52, a] : [42, 120, 214, a]) as [number, number, number, number];
+      },
+      getTargetColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
+        const a = d.cruza ? 40 : 90;
+        if (d.corRgb) return [...d.corRgb, a] as [number, number, number, number];
+        return (d.direcao === "saida" ? [235, 104, 52, a] : [42, 120, 214, a]) as [number, number, number, number];
+      },
+      getWidth: (d: Fluxo) => larguraDoArco(d.total),
+      widthMinPixels: LARGURA_MIN,
+      widthMaxPixels: LARGURA_MAX,
+      opacity: 0.75,
       widthUnits: "pixels",
       getHeight: 0.35,
       onClick: (info: PickingInfo) => {
@@ -99,18 +152,20 @@ export function MapaAtlas({
         if (f) aoSelecionarFluxo(f.origem, f.destino);
         return true;
       },
-      updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro] },
+      updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
     });
 
     return [municipios, fluxos];
-  }, [malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo, maiorVolume,
+      destacar, nucleo]);
 
   const dica = hover?.object as
     | (Feature<Geometry, { CD_MUN: string; NM_MUN: string; SIGLA_UF: string }> & Fluxo)
     | undefined;
 
   return (
-    <div style={{ position: "absolute", inset: 0 }}>
+    <div ref={containerRef} style={{ position: "absolute", inset: 0 }}>
       <DeckGL
         viewState={vista}
         onViewStateChange={({ viewState, interactionState }) => {
@@ -132,9 +187,9 @@ export function MapaAtlas({
       {moveu && (
         <button
           className="reenquadrar"
-          onClick={() => { setVista(VISTA_BRASIL); setMoveu(false); }}
+          onClick={() => { setVista(vistaDoFoco()); setMoveu(false); }}
         >
-          Ver o Brasil
+          {foco ? "Ver a RM" : "Ver o Brasil"}
         </button>
       )}
       {dica && hover && (

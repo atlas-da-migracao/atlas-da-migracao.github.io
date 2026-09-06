@@ -5,12 +5,18 @@ import type { Topology } from "topojson-specification";
 import { MapaAtlas } from "./map/MapaAtlas";
 import { PainelMunicipio } from "./components/PainelMunicipio";
 import { PainelFluxo } from "./components/PainelFluxo";
+import { PainelRM } from "./components/PainelRM";
+import { PainelPendular } from "./components/PainelPendular";
 import { Legenda } from "./components/Legenda";
 import { Busca } from "./components/Busca";
 import { Filtro } from "./components/Filtro";
-import { carregarMunicipios, fluxosDoMunicipio, fluxosPorCategoria, maioresFluxos,
-         saldoPorCategoria } from "./db/queries";
+import { SeletorRM } from "./components/SeletorRM";
+import { carregarMunicipios, centroidesDaRM, fluxosDoMunicipio, fluxosIntraDaRM, fluxosPorCategoria,
+         listarRMs, maioresFluxos, municipiosDaRM, pendularDaRM, saldoPorCategoria,
+         type ResumoRM } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
+import { bboxDeCentroides, type Bbox } from "./lib/rm";
+import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro } from "./state/store";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
 
@@ -31,18 +37,28 @@ const METRICAS: { valor: Metrica; rotulo: string }[] = [
   { valor: "iem", rotulo: "Eficácia" },
 ];
 
+const CORES_TIPOLOGIA = new Map<string, [number, number, number]>(
+  TIPOLOGIA_INTRA_RM.categorias.map((c) => [c.chave, hexParaRgb(c.cor.claro)]));
+
 export default function App() {
   const [malha, setMalha] = useState<FeatureCollection | null>(null);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [arcos, setArcos] = useState<(Fluxo & { direcao?: string })[]>([]);
+  const [arcos, setArcos] = useState<(Fluxo & { direcao?: string; cruza?: boolean; corRgb?: [number, number, number] })[]>([]);
   const [carregandoFluxos, setCarregandoFluxos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const { municipio, origem, destino, metrica, filtro, tema,
-          selecionarMunicipio, selecionarFluxo, setMetrica, setFiltro, setTema } = useStore();
+  const { municipio, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
+          selecionarMunicipio, selecionarFluxo, setMetrica, setFiltro, setTema,
+          entrarModoRM, sairModoRM, setAba, setCruzar } = useStore();
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
+
+  // lista de RMs para o seletor do cabeçalho, carregada uma vez
+  const [rmsCabecalho, setRmsCabecalho] = useState<ResumoRM[]>([]);
+  useEffect(() => { listarRMs().then(setRmsCabecalho).catch(() => {}); }, []);
+  // segmentado "Regiões metropolitanas" pedido, mas RM ainda não escolhida
+  const [pedindoRM, setPedindoRM] = useState(false);
 
   // aplica o tema salvo antes da primeira pintura
   useEffect(() => { setTema(tema); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -88,22 +104,58 @@ export default function App() {
     })();
   }, []);
 
-  // fluxos do município selecionado
-  const topN = useStore((s) => s.topN);
+  // ============ Módulo metropolitano: enquadramento do mapa (bbox, destaque, núcleo) ============
+  const [rmFoco, setRmFoco] = useState<Bbox | null>(null);
+  const [rmDestacar, setRmDestacar] = useState<Set<string> | null>(null);
+  const [rmNucleo, setRmNucleo] = useState<string | null>(null);
+
   useEffect(() => {
+    if (!rm) { setRmFoco(null); setRmDestacar(null); setRmNucleo(null); return; }
+    let vivo = true;
+    Promise.all([municipiosDaRM(rm), centroidesDaRM(rm)]).then(([muns, cent]) => {
+      if (!vivo) return;
+      setRmDestacar(new Set(muns.map((m) => m.cd_mun)));
+      setRmNucleo(muns.find((m) => m.nucleo)?.cd_mun ?? null);
+      setRmFoco(bboxDeCentroides(cent));
+    }).catch((e) => setErro(`Falha ao carregar a RM: ${(e as Error).message}`));
+    return () => { vivo = false; };
+  }, [rm]);
+
+  // fluxos exibidos no mapa: nacionais (modo Brasil) ou da RM ativa (modo metropolitano)
+  const topNStore = topN;
+  useEffect(() => {
+    if (rm) {
+      setCarregandoFluxos(true);
+      const t0 = performance.now();
+      const consulta = aba === "mig"
+        ? fluxosIntraDaRM(rm).then((f) => f.slice(0, topNStore).map((x) => ({
+            ...x, corRgb: CORES_TIPOLOGIA.get(x.tipologia),
+          })))
+        : pendularDaRM(rm, aba === "trab" ? "pendular_trab" : "pendular_estudo", topNStore, cruzar);
+      consulta
+        .then(setArcos)
+        .catch((e) => setErro(`Falha ao consultar fluxos da RM: ${(e as Error).message}`))
+        .finally(() => {
+          setCarregandoFluxos(false);
+          if (import.meta.env.DEV) {
+            console.debug(`[F5b] troca de RM/aba em ${(performance.now() - t0).toFixed(0)} ms`);
+          }
+        });
+      return;
+    }
     if (!municipio) {
       if (municipios.length) maioresFluxos(150).then(setArcos).catch(() => {});
       return;
     }
     setCarregandoFluxos(true);
     const consulta = filtro
-      ? fluxosPorCategoria(municipio, filtro, topN)
-      : fluxosDoMunicipio(municipio, topN);
+      ? fluxosPorCategoria(municipio, filtro, topNStore)
+      : fluxosDoMunicipio(municipio, topNStore);
     consulta
       .then(setArcos)
       .catch((e) => setErro(`Falha ao consultar fluxos: ${(e as Error).message}`))
       .finally(() => setCarregandoFluxos(false));
-  }, [municipio, topN, filtro, municipios.length]);
+  }, [municipio, topNStore, filtro, municipios.length, rm, aba, cruzar]);
 
   // sob recorte, o coroplético passa a mostrar o saldo daquele subgrupo
   useEffect(() => {
@@ -151,6 +203,29 @@ export default function App() {
   const selecionado = municipio ? porCodigo.get(municipio) ?? null : null;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
 
+  const painelDireita = rm ? (
+    origem && destino ? (
+      aba === "mig"
+        ? <PainelFluxo origem={origem} destino={destino} escuro={escuro}
+                       aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
+        : <PainelPendular origem={origem} destino={destino} tipo={aba} escuro={escuro}
+                          aoFechar={() => selecionarFluxo(null, null)} />
+    ) : (
+      <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro}
+                aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
+                aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo} />
+    )
+  ) : origem && destino ? (
+    <PainelFluxo origem={origem} destino={destino} escuro={escuro}
+                 aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
+  ) : (
+    <PainelMunicipio municipio={selecionado} fluxos={arcos} carregando={carregandoFluxos}
+                     escuro={escuro} recorte={filtro}
+                     recorteCarregando={Boolean(filtro) && !recorte}
+                     aoSelecionarFluxo={aoSelecionarFluxo}
+                     aoFechar={() => selecionarMunicipio(null)} />
+  );
+
   return (
     <div className="app">
       <header className="cabecalho">
@@ -159,16 +234,31 @@ export default function App() {
           <span className="muted"> · Censo 2022, data fixa 2017–2022</span>
         </div>
         <div className="controles">
-          <Busca municipios={municipios} aoEscolher={selecionarMunicipio} />
-          <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />
-          <div className="segmentado" role="group" aria-label="Métrica do mapa">
-            {METRICAS.map((m) => (
-              <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
-                      aria-pressed={metrica === m.valor} onClick={() => setMetrica(m.valor)}>
-                {m.rotulo}
-              </button>
-            ))}
+          <div className="segmentado" role="group" aria-label="Modo do atlas">
+            <button className={!rm ? "ativo" : ""} aria-pressed={!rm}
+                    onClick={() => { setPedindoRM(false); sairModoRM(); }}>
+              Brasil
+            </button>
+            <button className={rm ? "ativo" : ""} aria-pressed={Boolean(rm)}
+                    onClick={() => setPedindoRM(true)}>
+              Regiões metropolitanas
+            </button>
           </div>
+          {(pedindoRM || rm) && (
+            <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
+          )}
+          {!rm && <Busca municipios={municipios} aoEscolher={selecionarMunicipio} />}
+          {!rm && <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />}
+          {!rm && (
+            <div className="segmentado" role="group" aria-label="Métrica do mapa">
+              {METRICAS.map((m) => (
+                <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
+                        aria-pressed={metrica === m.valor} onClick={() => setMetrica(m.valor)}>
+                  {m.rotulo}
+                </button>
+              ))}
+            </div>
+          )}
           <button className="tema" onClick={() => setTema(escuro ? "claro" : "escuro")}
                   aria-label={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}>
             {escuro ? "☀" : "☾"}
@@ -184,20 +274,11 @@ export default function App() {
             malha={malha} porCodigo={porCodigo} metrica={metrica} quebras={quebras}
             arcos={arcos} selecionado={municipio} escuro={escuro}
             aoSelecionar={selecionarMunicipio} aoSelecionarFluxo={aoSelecionarFluxo}
+            foco={rmFoco} destacar={rmDestacar} nucleo={rmNucleo}
           />
-          {municipios.length > 0 && <Legenda metrica={metrica} quebras={quebras} escuro={escuro} />}
+          {municipios.length > 0 && !rm && <Legenda metrica={metrica} quebras={quebras} escuro={escuro} />}
         </div>
-        {origem && destino ? (
-          <PainelFluxo origem={origem} destino={destino} escuro={escuro}
-                       aoFechar={() => selecionarFluxo(null, null)}
-                       aoAbrirMunicipio={selecionarMunicipio} />
-        ) : (
-          <PainelMunicipio municipio={selecionado} fluxos={arcos} carregando={carregandoFluxos}
-                           escuro={escuro} recorte={filtro}
-                           recorteCarregando={Boolean(filtro) && !recorte}
-                           aoSelecionarFluxo={aoSelecionarFluxo}
-                           aoFechar={() => selecionarMunicipio(null)} />
-        )}
+        {painelDireita}
       </main>
 
       {meta && (

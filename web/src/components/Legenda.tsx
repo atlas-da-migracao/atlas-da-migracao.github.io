@@ -26,6 +26,10 @@ export function Legenda({ metrica, quebras, escuro }: { metrica: Metrica; quebra
       <div className="legenda-nota">
         Arcos: <span className="amostra pequena" style={{ background: "var(--arc-in)" }} /> entradas ·{" "}
         <span className="amostra pequena" style={{ background: "var(--arc-out)" }} /> saídas
+        <div className="legenda-espessura" aria-label="Espessura proporcional ao volume">
+          <span style={{ height: 2 }} /><span style={{ height: 5 }} /><span style={{ height: 9 }} />
+          <em>espessura ∝ √volume</em>
+        </div>
       </div>
     </div>
   );

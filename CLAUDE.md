@@ -31,6 +31,10 @@ python pipeline/disclosure_check.py  # gate de revelação R1–R9 antes de publ
 ./geo/build.sh                     # malha 2022 -> TopoJSON (municípios + UF), dado público
 python pipeline/build_centroids.py # centroides via extensão espacial do DuckDB
 python pipeline/build_meta.py      # data/processed/meta.json (rótulos, cortes, limiares)
+npm run dev --prefix web             # servidor de desenvolvimento do atlas (porta 5174)
+npm run sync-data --prefix web       # copia data/processed -> web/public/data (exige .gate_ok)
+npm run copy-duckdb --prefix web     # copia o runtime do DuckDB-WASM para web/public/duckdb
+npm test --prefix web                # testes do front-end (vitest)
 ```
 
 ## Orquestração de modelos

@@ -124,3 +124,203 @@ export const saldoPorCategoria = (coluna: string) =>
 export const fluxosEntreUFs = () =>
   consultar<{ origem: string; destino: string; total: number }>(`
     SELECT origem, destino, total FROM fluxos_uf WHERE origem <> destino ORDER BY total DESC`);
+
+// ================= F5b: módulo metropolitano =================
+
+export interface ResumoRM {
+  cd_rm: string; nm_rm: string; tipo: string; nm_nucleo: string; nucleo_uf: string | null;
+  n_municipios: number; pop: number;
+  mig_intra: number; nucleo_periferia: number; periferia_nucleo: number; periferia_periferia: number;
+  entradas_externas: number; saidas_externas: number; saldo_externo: number;
+  ocupados: number; pendulares: number; pct_pendular: number | null; tempo_mediano: number | null;
+  pct_coletivo: number | null; pct_diario: number | null;
+}
+
+const SQL_RESUMO_RM = `
+  SELECT rr.*, n.uf_sigla AS nucleo_uf
+  FROM rm_resumo rr
+  LEFT JOIN rm n ON n.cd_rm = rr.cd_rm AND n.nucleo`;
+
+/** Lista de RMs/RIDEs para o seletor, ordenada por população. */
+export const listarRMs = () => consultar<ResumoRM>(`${SQL_RESUMO_RM} ORDER BY rr.pop DESC`);
+
+export const resumoDaRM = (cd_rm: string) =>
+  consultar<ResumoRM>(`${SQL_RESUMO_RM} WHERE rr.cd_rm = ${lit(cd_rm)}`).then((r) => r[0] ?? null);
+
+export interface MunicipioRM { cd_mun: string; nm_mun: string; uf_sigla: string; nucleo: boolean; pop: number }
+
+/** Municípios de uma RM, para o seletor de destaque e a legenda núcleo/periferia. */
+export const municipiosDaRM = (cd_rm: string) =>
+  consultar<MunicipioRM>(`
+    SELECT cd_mun, nm_mun, uf_sigla, nucleo, pop FROM rm WHERE cd_rm = ${lit(cd_rm)} ORDER BY pop DESC`);
+
+/** Centroides dos municípios de uma RM, para o enquadramento (fitBounds) do mapa. */
+export const centroidesDaRM = (cd_rm: string) =>
+  consultar<{ cd_mun: string; lon: number; lat: number }>(`
+    SELECT c.cd_mun, c.lon, c.lat
+    FROM read_parquet('geo/centroides.parquet') c
+    JOIN rm r ON r.cd_mun = c.cd_mun
+    WHERE r.cd_rm = ${lit(cd_rm)}`);
+
+/** Todos os fluxos intra-RM (para arcos, matriz núcleo x periferia e ranking de saldo). */
+export const fluxosIntraDaRM = (cd_rm: string) =>
+  consultar<Fluxo & { tipologia: string; cd_rm: string }>(`
+    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet'))
+    SELECT f.cd_rm, f.origem, f.destino, f.tipologia, f.total, f.se, f.cv, f.n_faixa,
+           ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
+           rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+    FROM rm_fluxos_intra f
+    JOIN municipios_ref ro ON ro.cd_mun = f.origem
+    JOIN municipios_ref rd ON rd.cd_mun = f.destino
+    JOIN cent co ON co.cd_mun = f.origem
+    JOIN cent cd_ ON cd_.cd_mun = f.destino
+    WHERE f.cd_rm = ${lit(cd_rm)}
+    ORDER BY f.total DESC`);
+
+export interface FluxoPendularRM extends Fluxo {
+  tem_detalhe: boolean; tempo_mediano: number | null; pct_diario: number | null; pct_coletivo: number | null;
+  cruza: boolean;
+}
+
+/** Fluxos pendulares (trabalho ou estudo) com origem e destino na RM; com `cruzar`,
+ *  inclui também os pares com exatamente uma ponta na RM (destacados como "cruza"). */
+export function pendularDaRM(
+  cd_rm: string, tabela: "pendular_trab" | "pendular_estudo", topN: number, cruzar: boolean,
+) {
+  const camposExtra = tabela === "pendular_trab"
+    ? "p.tem_detalhe, p.tempo_mediano, p.pct_diario, p.pct_coletivo"
+    : "p.tem_detalhe, NULL AS tempo_mediano, NULL AS pct_diario, NULL AS pct_coletivo";
+  return consultar<FluxoPendularRM>(`
+    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
+    rmset AS (SELECT cd_mun FROM rm WHERE cd_rm = ${lit(cd_rm)}),
+    intra AS (
+      SELECT p.origem, p.destino, p.total, p.se, p.cv, p.n_faixa, p.precisao, ${camposExtra}, false AS cruza
+      FROM ${tabela} p
+      WHERE p.origem IN (SELECT cd_mun FROM rmset) AND p.destino IN (SELECT cd_mun FROM rmset)
+      ORDER BY p.total DESC LIMIT ${topN}
+    )
+    ${cruzar ? `
+    , fronteira AS (
+      SELECT p.origem, p.destino, p.total, p.se, p.cv, p.n_faixa, p.precisao, ${camposExtra}, true AS cruza
+      FROM ${tabela} p
+      WHERE (p.origem IN (SELECT cd_mun FROM rmset)) <> (p.destino IN (SELECT cd_mun FROM rmset))
+      ORDER BY p.total DESC LIMIT ${topN}
+    ), u AS (SELECT * FROM intra UNION ALL SELECT * FROM fronteira)
+    ` : ", u AS (SELECT * FROM intra)"}
+    SELECT u.*, ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
+           rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+    FROM u
+    JOIN municipios_ref ro ON ro.cd_mun = u.origem
+    JOIN municipios_ref rd ON rd.cd_mun = u.destino
+    JOIN cent co ON co.cd_mun = u.origem
+    JOIN cent cd_ ON cd_.cd_mun = u.destino
+    ORDER BY u.total DESC`);
+}
+
+export interface DetalhePendular {
+  origem: string; destino: string; nm_origem: string; uf_origem: string; nm_destino: string; uf_destino: string;
+  total: number; se: number | null; cv: number | null; n_faixa: string; precisao: string; tem_detalhe: boolean;
+  tempo_mediano: number | null; pct_diario: number | null; pct_coletivo: number | null;
+}
+
+/** Um par pendular o->d com o fluxo reverso, para o PainelPendular. */
+export async function detalhePendular(o: string, d: string, tabela: "pendular_trab" | "pendular_estudo") {
+  const camposExtra = tabela === "pendular_trab"
+    ? "p.tempo_mediano, p.pct_diario, p.pct_coletivo"
+    : "NULL AS tempo_mediano, NULL AS pct_diario, NULL AS pct_coletivo";
+  const linhas = await consultar<DetalhePendular>(`
+    SELECT p.origem, p.destino, p.total, p.se, p.cv, p.n_faixa, p.precisao, p.tem_detalhe, ${camposExtra},
+           ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
+           rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino
+    FROM ${tabela} p
+    JOIN municipios_ref ro ON ro.cd_mun = p.origem
+    JOIN municipios_ref rd ON rd.cd_mun = p.destino
+    WHERE (p.origem = ${lit(o)} AND p.destino = ${lit(d)}) OR (p.origem = ${lit(d)} AND p.destino = ${lit(o)})`);
+  return {
+    ida: linhas.find((l) => l.origem === o && l.destino === d) ?? null,
+    volta: linhas.find((l) => l.origem === d && l.destino === o) ?? null,
+  };
+}
+
+/** Dimensões de caracterização de um par pendular (formato longo). */
+export const dimensoesPendular = (o: string, d: string, tabela: "pendular_trab_dim" | "pendular_estudo_dim") =>
+  consultar<{ dimensao: string; categoria: string; valor: number; n_faixa: string }>(`
+    SELECT dimensao, categoria, valor, n_faixa FROM ${tabela}
+    WHERE origem = ${lit(o)} AND destino = ${lit(d)}`);
+
+/** Indicadores municipais de pendularidade, para os rankings de saída e atração,
+ *  restritos aos municípios de uma RM. */
+export const municipiosPendularDaRM = (cd_rm: string) =>
+  consultar<{
+    cd_mun: string; nm_mun: string; uf_sigla: string;
+    taxa_saida_pendular: number | null; indice_atracao: number | null; ocupados: number;
+  }>(`
+    SELECT mp.cd_mun, r.nm_mun, r.uf_sigla, mp.taxa_saida_pendular, mp.indice_atracao, mp.ocupados
+    FROM municipios_pendular mp
+    JOIN rm ON rm.cd_mun = mp.cd_mun AND rm.cd_rm = ${lit(cd_rm)}
+    JOIN municipios_ref r ON r.cd_mun = mp.cd_mun`);
+
+export interface MigPendularResumoRM {
+  migrantes_intra: number; mig_ocupados: number; mig_pendulares: number;
+  pendular_para_origem: number; pendular_para_nucleo: number; trabalha_onde_mora: number;
+  mig_estudantes: number; mig_estud_pendulares: number;
+}
+
+/** KPIs somados sobre rm_mig_pendular_resumo, para o sub-painel "Migrantes e trabalho". */
+export const migPendularResumoDaRM = (cd_rm: string) =>
+  consultar<MigPendularResumoRM>(`
+    SELECT SUM(migrantes_intra) AS migrantes_intra, SUM(mig_ocupados) AS mig_ocupados,
+           SUM(mig_pendulares) AS mig_pendulares, SUM(pendular_para_origem) AS pendular_para_origem,
+           SUM(pendular_para_nucleo) AS pendular_para_nucleo, SUM(trabalha_onde_mora) AS trabalha_onde_mora,
+           SUM(mig_estudantes) AS mig_estudantes, SUM(mig_estud_pendulares) AS mig_estud_pendulares
+    FROM rm_mig_pendular_resumo WHERE cd_rm = ${lit(cd_rm)}`).then((r): MigPendularResumoRM | null => r[0] ?? null);
+
+/** Caminhos morava-em -> mora-em -> trabalha-em de uma RM, com destino_trab conhecido
+ *  (classes origem/nucleo/outro), para o diagrama aluvial. */
+export const caminhosPendularDaRM = (cd_rm: string) =>
+  consultar<{ origem_mig: string; destino_mig: string; destino_trab: string; classe_trab: string;
+             total: number; n_faixa: string }>(`
+    SELECT origem_mig, destino_mig, destino_trab, classe_trab, total, n_faixa
+    FROM rm_mig_pendular
+    WHERE cd_rm = ${lit(cd_rm)} AND classe_trab IN ('origem', 'nucleo', 'outro')
+    ORDER BY total DESC`);
+
+/** Nomes de município usados para rotular os nós do diagrama aluvial. */
+export const nomesDeMunicipios = (codigos: string[]) => {
+  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; nm_mun: string; uf_sigla: string }[]);
+  return consultar<{ cd_mun: string; nm_mun: string; uf_sigla: string }>(`
+    SELECT cd_mun, nm_mun, uf_sigla FROM municipios_ref WHERE cd_mun IN (${codigos.map(lit).join(",")})`);
+};
+
+/** Destinos de trabalho dos migrantes de um par o->d de uma RM (bloco do PainelFluxo). */
+export const destinosTrabalhoDoFluxo = (cd_rm: string, o: string, d: string) =>
+  consultar<{ destino_trab: string; nm_destino_trab: string; uf_destino_trab: string;
+              classe_trab: string; total: number; n_faixa: string }>(`
+    SELECT p.destino_trab, r.nm_mun AS nm_destino_trab, r.uf_sigla AS uf_destino_trab,
+           p.classe_trab, p.total, p.n_faixa
+    FROM rm_mig_pendular p
+    LEFT JOIN municipios_ref r ON r.cd_mun = p.destino_trab
+    WHERE p.cd_rm = ${lit(cd_rm)} AND p.origem_mig = ${lit(o)} AND p.destino_mig = ${lit(d)}
+    ORDER BY p.total DESC`);
+
+/** Estudantes pendulares da RM: soma de saida_estudo dos municípios da RM. */
+export const estudoPendularDaRM = (cd_rm: string) =>
+  consultar<{ saida_estudo: number; entrada_estudo: number }>(`
+    SELECT SUM(mp.saida_estudo) AS saida_estudo, SUM(mp.entrada_estudo) AS entrada_estudo
+    FROM municipios_pendular mp JOIN rm ON rm.cd_mun = mp.cd_mun AND rm.cd_rm = ${lit(cd_rm)}`)
+    .then((r) => r[0] ?? { saida_estudo: 0, entrada_estudo: 0 });
+
+/** Migração intra-RM que estuda em outro município (classe_estudo), para a aba de estudo. */
+export const migEstudoDaRM = (cd_rm: string) =>
+  consultar<{ classe_estudo: string; total: number }>(`
+    SELECT classe_estudo, SUM(total) AS total FROM rm_mig_estudo
+    WHERE cd_rm = ${lit(cd_rm)} GROUP BY 1`);
+
+/** Dado o par o->d, a RM (se houver) à qual ambos pertencem -- usada pelo PainelFluxo
+ *  para decidir se mostra o bloco "onde trabalham os que fizeram este percurso". */
+export const rmDoPar = (o: string, d: string) =>
+  consultar<{ cd_rm: string }>(`
+    SELECT DISTINCT r1.cd_rm FROM rm r1 JOIN rm r2 ON r1.cd_rm = r2.cd_rm
+    WHERE r1.cd_mun = ${lit(o)} AND r2.cd_mun = ${lit(d)}`).then((r) => r[0]?.cd_rm ?? null);
