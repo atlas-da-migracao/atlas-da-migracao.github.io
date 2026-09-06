@@ -2,23 +2,37 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { feature } from "topojson-client";
 import type { FeatureCollection } from "geojson";
 import type { Topology } from "topojson-specification";
-import { MapaAtlas } from "./map/MapaAtlas";
+import { MapaAtlas, type ValorMapa } from "./map/MapaAtlas";
 import { PainelMunicipio } from "./components/PainelMunicipio";
 import { PainelFluxo } from "./components/PainelFluxo";
+import { PainelFluxoUnidade } from "./components/PainelFluxoUnidade";
+import { PainelUnidade } from "./components/PainelUnidade";
 import { PainelRM } from "./components/PainelRM";
 import { PainelPendular } from "./components/PainelPendular";
 import { Legenda } from "./components/Legenda";
-import { Busca } from "./components/Busca";
+import { EstadoDados } from "./components/EstadoDados";
+import { Tour, tourJaVisto } from "./components/Tour";
+import { PaginaMetodologia } from "./components/PaginaMetodologia";
+import { Busca, type ItemBusca } from "./components/Busca";
 import { Filtro } from "./components/Filtro";
 import { SeletorRM } from "./components/SeletorRM";
-import { carregarMunicipios, centroidesDaRM, fluxosDoMunicipio, fluxosIntraDaRM, fluxosPorCategoria,
-         listarRMs, maioresFluxos, municipiosDaRM, pendularDaRM, saldoPorCategoria,
-         type ResumoRM } from "./db/queries";
+import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunicipios,
+         centroidesDeUnidades, fluxosDaUnidade, fluxosDoMunicipio, fluxosIntraDaRM, fluxosPorCategoria,
+         listarRMs, maioresFluxos, maioresFluxosNivel, municipiosDaRM, pendularDaRM, saldoPorCategoria,
+         type NivelAgregado, type ResumoRM, type UnidadeAgregada } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
-import { bboxDeCentroides, type Bbox } from "./lib/rm";
+import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, type Bbox } from "./lib/rm";
 import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
-import { useStore, usarModoEscuro } from "./state/store";
+import { useStore, usarModoEscuro, type Nivel } from "./state/store";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
+
+const CAMPO_ID: Record<Nivel, string> = { mun: "CD_MUN", rgi: "cd_rgi", rgint: "cd_rgint", uf: "cd_uf" };
+const ROTULO_NIVEL: Record<Nivel, string> = {
+  mun: "Município", rgi: "Reg. imediata", rgint: "Reg. intermediária", uf: "UF",
+};
+const PLACEHOLDER_BUSCA: Record<Nivel, string> = {
+  mun: "Buscar município…", rgi: "Buscar região imediata…", rgint: "Buscar região intermediária…", uf: "Buscar UF…",
+};
 
 /** Arquivo enxuto usado só na primeira pintura do mapa. */
 interface MunicipiosMapa {
@@ -48,17 +62,75 @@ export default function App() {
   const [carregandoFluxos, setCarregandoFluxos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const { municipio, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
-          selecionarMunicipio, selecionarFluxo, setMetrica, setFiltro, setTema,
+  const { municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
+          selecionarMunicipio, selecionarUnidade, selecionarFluxo, setNivel, setMetrica, setFiltro, setTema,
           entrarModoRM, sairModoRM, setAba, setCruzar } = useStore();
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
+
+  // F6: níveis de agregação. `rm` sempre implica município (modo RM não existe nos demais
+  // níveis); fora do modo RM, o nível efetivo é o escolhido pelo usuário.
+  const nivelEfetivo: Nivel = rm ? "mun" : nivel;
+  const [malhaNivel, setMalhaNivel] = useState<Partial<Record<NivelAgregado, FeatureCollection>>>({});
+  const [unidadesNivel, setUnidadesNivel] = useState<Partial<Record<NivelAgregado, UnidadeAgregada[]>>>({});
+  const [avisoNivel, setAvisoNivel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (nivelEfetivo === "mun" || malhaNivel[nivelEfetivo]) return;
+    const n = nivelEfetivo;
+    fetch(`data/geo/${n}.topojson`).then((r) => r.json() as Promise<Topology>).then((topo) => {
+      const chave = Object.keys(topo.objects)[0];
+      const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
+      setMalhaNivel((m) => ({ ...m, [n]: fc }));
+    }).catch((e) => setErro(`Falha ao carregar a malha (${n}): ${(e as Error).message}`));
+  }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (nivelEfetivo === "mun" || unidadesNivel[nivelEfetivo]) return;
+    const n = nivelEfetivo;
+    carregarUnidades(n).then((u) => setUnidadesNivel((m) => ({ ...m, [n]: u })))
+      .catch((e) => setErro(`Falha ao consultar as unidades (${n}): ${(e as Error).message}`));
+  }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const aoMudarNivel = (n: Nivel) => {
+    const limpou = setNivel(n);
+    if (limpou) {
+      setAvisoNivel("O recorte por característica só existe no nível município; foi limpo ao trocar de nível.");
+      setTimeout(() => setAvisoNivel(null), 6000);
+    }
+  };
 
   // lista de RMs para o seletor do cabeçalho, carregada uma vez
   const [rmsCabecalho, setRmsCabecalho] = useState<ResumoRM[]>([]);
   useEffect(() => { listarRMs().then(setRmsCabecalho).catch(() => {}); }, []);
   // segmentado "Regiões metropolitanas" pedido, mas RM ainda não escolhida
   const [pedindoRM, setPedindoRM] = useState(false);
+
+  // F6: tour de boas-vindas -- abre sozinho na primeira visita
+  const [mostrarTour, setMostrarTour] = useState(() => !tourJaVisto());
+
+  // F6: página de metodologia, roteada por ?pagina=metodologia (não afeta o resto da URL/estado)
+  const [paginaMetodologia, setPaginaMetodologia] = useState(
+    () => new URLSearchParams(location.search).get("pagina") === "metodologia",
+  );
+  const abrirMetodologia = () => {
+    setPaginaMetodologia(true);
+    const p = new URLSearchParams(location.search);
+    p.set("pagina", "metodologia");
+    history.pushState(null, "", `?${p.toString()}`);
+  };
+  const fecharMetodologia = () => {
+    setPaginaMetodologia(false);
+    const p = new URLSearchParams(location.search);
+    p.delete("pagina");
+    const qs = p.toString();
+    history.pushState(null, "", qs ? `?${qs}` : location.pathname);
+  };
+  useEffect(() => {
+    const aoNavegar = () => setPaginaMetodologia(new URLSearchParams(location.search).get("pagina") === "metodologia");
+    window.addEventListener("popstate", aoNavegar);
+    return () => window.removeEventListener("popstate", aoNavegar);
+  }, []);
 
   // aplica o tema salvo antes da primeira pintura
   useEffect(() => { setTema(tema); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -104,6 +176,40 @@ export default function App() {
     })();
   }, []);
 
+  // malha ativa: municipal por padrão, ou a do nível agregado escolhido
+  const malhaAtiva = nivelEfetivo === "mun" ? malha : malhaNivel[nivelEfetivo] ?? null;
+  const campoId = CAMPO_ID[nivelEfetivo];
+
+  // ============ F6: enquadramento (zoom) da seleção — bbox por feição da malha ativa,
+  // calculada uma única vez ao carregá-la, e bbox de um fluxo (par de centroides) sob demanda. ============
+  const bboxPorFeicao = useMemo(() => {
+    const m = new Map<string, Bbox>();
+    if (!malhaAtiva) return m;
+    for (const f of malhaAtiva.features) {
+      const cd = (f.properties as Record<string, string> | null)?.[campoId];
+      if (!cd || !f.geometry) continue;
+      const bb = bboxDeGeometria(f.geometry as { type: string; coordinates: unknown });
+      if (bb) m.set(cd, bb);
+    }
+    return m;
+  }, [malhaAtiva, campoId]);
+
+  const codigoSelecionado = nivelEfetivo === "mun" ? municipio : selecao;
+
+  const [fluxoFoco, setFluxoFoco] = useState<Bbox | null>(null);
+  useEffect(() => {
+    if (!origem || !destino) { setFluxoFoco(null); return; }
+    let vivo = true;
+    const consulta = nivelEfetivo === "mun"
+      ? centroidesDeMunicipios([origem, destino])
+      : centroidesDeUnidades(nivelEfetivo as NivelAgregado, [origem, destino]);
+    consulta.then((pts) => { if (vivo) setFluxoFoco(bboxDeCentroides(pts, 0.25)); })
+      .catch(() => setFluxoFoco(null));
+    return () => { vivo = false; };
+  }, [origem, destino, nivelEfetivo]);
+
+  const selecaoFoco = codigoSelecionado && !rm ? bboxPorFeicao.get(codigoSelecionado) ?? null : null;
+
   // ============ Módulo metropolitano: enquadramento do mapa (bbox, destaque, núcleo) ============
   const [rmFoco, setRmFoco] = useState<Bbox | null>(null);
   const [rmDestacar, setRmDestacar] = useState<Set<string> | null>(null);
@@ -143,6 +249,22 @@ export default function App() {
         });
       return;
     }
+    if (nivelEfetivo !== "mun") {
+      const n = nivelEfetivo as NivelAgregado;
+      setCarregandoFluxos(true);
+      const t0 = performance.now();
+      const consulta = selecao ? fluxosDaUnidade(n, selecao, topNStore) : maioresFluxosNivel(n, 300);
+      consulta
+        .then(setArcos)
+        .catch((e) => setErro(`Falha ao consultar fluxos (${n}): ${(e as Error).message}`))
+        .finally(() => {
+          setCarregandoFluxos(false);
+          if (import.meta.env.DEV) {
+            console.debug(`[F6] troca de nível (${n}) em ${(performance.now() - t0).toFixed(0)} ms`);
+          }
+        });
+      return;
+    }
     if (!municipio) {
       if (municipios.length) maioresFluxos(150).then(setArcos).catch(() => {});
       return;
@@ -155,7 +277,7 @@ export default function App() {
       .then(setArcos)
       .catch((e) => setErro(`Falha ao consultar fluxos: ${(e as Error).message}`))
       .finally(() => setCarregandoFluxos(false));
-  }, [municipio, topNStore, filtro, municipios.length, rm, aba, cruzar]);
+  }, [municipio, selecao, nivelEfetivo, topNStore, filtro, municipios.length, rm, aba, cruzar]);
 
   // sob recorte, o coroplético passa a mostrar o saldo daquele subgrupo
   useEffect(() => {
@@ -190,18 +312,45 @@ export default function App() {
   const porCodigo = useMemo(
     () => new Map(municipiosVisiveis.map((m) => [m.cd_mun, m])), [municipiosVisiveis]);
 
+  // F6: indicadores da malha ativa -- municipais, ou das unidades do nível agregado escolhido
+  const unidadesAtivas = nivelEfetivo === "mun" ? null : unidadesNivel[nivelEfetivo] ?? [];
+  const porCodigoAtivo: Map<string, ValorMapa> = useMemo(() => {
+    if (nivelEfetivo === "mun") return porCodigo;
+    return new Map((unidadesAtivas ?? []).map((u) => [u.codigo, u]));
+  }, [nivelEfetivo, porCodigo, unidadesAtivas]);
 
   const quebras = useMemo(() => {
-    if (!municipiosVisiveis.length) return [1, 2, 3];
-    const valores = municipiosVisiveis.map((m) =>
+    const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? []);
+    if (!valores.length) return [1, 2, 3];
+    const vs = valores.map((m) =>
       metrica === "saldo" ? m.saldo : metrica === "tlm" ? (m.tlm ?? 0)
       : metrica === "imig" ? m.imig : metrica === "emig" ? -m.emig
       : (m.iem ?? 0) * 100);
-    return quebrasSimetricas(valores);
-  }, [municipiosVisiveis, metrica]);
+    return quebrasSimetricas(vs);
+  }, [municipiosVisiveis, unidadesAtivas, nivelEfetivo, metrica]);
 
   const selecionado = municipio ? porCodigo.get(municipio) ?? null : null;
+  const unidadeSelecionada = nivelEfetivo !== "mun" && selecao
+    ? (unidadesAtivas ?? []).find((u) => u.codigo === selecao) ?? null : null;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
+  const aoSelecionarNoMapa = nivelEfetivo === "mun" ? selecionarMunicipio : selecionarUnidade;
+  // rótulo da dica flutuante do mapa (nome/UF), pelo código da feição sob o cursor
+  const rotuloDaFeicao = useCallback((cd: string): string | null => {
+    if (nivelEfetivo === "mun") {
+      const m = porCodigo.get(cd);
+      return m ? `${m.nm_mun}/${m.uf_sigla}` : null;
+    }
+    const u = (unidadesAtivas ?? []).find((x) => x.codigo === cd);
+    if (!u) return null;
+    return u.uf_sigla && u.uf_sigla !== u.codigo ? `${u.nome}/${u.uf_sigla}` : u.nome;
+  }, [nivelEfetivo, porCodigo, unidadesAtivas]);
+
+  // F6: prioridade única de enquadramento — fluxo > seleção (município/unidade) > RM > Brasil.
+  const foco = prioridadeFoco(fluxoFoco, selecaoFoco, rmFoco);
+  const zoomMaximo = fluxoFoco ? undefined : selecaoFoco && nivelEfetivo === "mun" ? 9 : undefined;
+  const rotuloReenquadrar = fluxoFoco ? "Ver o fluxo"
+    : selecaoFoco ? `Ver ${nivelEfetivo === "mun" ? "o município" : nivelEfetivo === "uf" ? "a UF" : "a região"}`
+    : rm ? "Ver a RM" : "Ver o Brasil";
 
   const painelDireita = rm ? (
     origem && destino ? (
@@ -215,6 +364,15 @@ export default function App() {
                 aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
                 aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo} />
     )
+  ) : nivelEfetivo !== "mun" ? (
+    origem && destino ? (
+      <PainelFluxoUnidade nivel={nivelEfetivo} origem={origem} destino={destino}
+                          aoFechar={() => selecionarFluxo(null, null)} />
+    ) : (
+      <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} fluxos={arcos}
+                    carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
+                    aoFechar={() => selecionarUnidade(null)} />
+    )
   ) : origem && destino ? (
     <PainelFluxo origem={origem} destino={destino} escuro={escuro}
                  aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
@@ -226,6 +384,14 @@ export default function App() {
                      aoFechar={() => selecionarMunicipio(null)} />
   );
 
+  // F6: itens de busca e rótulo do campo, de acordo com o nível ativo
+  const itensBusca: ItemBusca[] = nivelEfetivo === "mun"
+    ? municipios.map((m) => ({ codigo: m.cd_mun, rotulo: `${m.nm_mun}/${m.uf_sigla}`, peso: m.pop }))
+    : (unidadesAtivas ?? []).map((u) => ({
+        codigo: u.codigo, rotulo: u.uf_sigla && u.uf_sigla !== u.codigo ? `${u.nome}/${u.uf_sigla}` : u.nome,
+        peso: u.pop5,
+      }));
+
   return (
     <div className="app">
       <header className="cabecalho">
@@ -234,7 +400,7 @@ export default function App() {
           <span className="muted"> · Censo 2022, data fixa 2017–2022</span>
         </div>
         <div className="controles">
-          <div className="segmentado" role="group" aria-label="Modo do atlas">
+          <div className="segmentado" role="group" aria-label="Modo do atlas" data-tour="modo-rm">
             <button className={!rm ? "ativo" : ""} aria-pressed={!rm}
                     onClick={() => { setPedindoRM(false); sairModoRM(); }}>
               Brasil
@@ -247,10 +413,25 @@ export default function App() {
           {(pedindoRM || rm) && (
             <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
           )}
-          {!rm && <Busca municipios={municipios} aoEscolher={selecionarMunicipio} />}
-          {!rm && <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />}
           {!rm && (
-            <div className="segmentado" role="group" aria-label="Métrica do mapa">
+            <div className="segmentado" role="group" aria-label="Nível de agregação">
+              {(["mun", "rgi", "rgint", "uf"] as Nivel[]).map((n) => (
+                <button key={n} className={nivel === n ? "ativo" : ""} aria-pressed={nivel === n}
+                        onClick={() => aoMudarNivel(n)}>
+                  {ROTULO_NIVEL[n]}
+                </button>
+              ))}
+            </div>
+          )}
+          {!rm && (
+            <div data-tour="busca">
+              <Busca itens={itensBusca} placeholder={PLACEHOLDER_BUSCA[nivelEfetivo]}
+                     aoEscolher={aoSelecionarNoMapa} />
+            </div>
+          )}
+          {!rm && nivelEfetivo === "mun" && <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />}
+          {!rm && (
+            <div className="segmentado" role="group" aria-label="Métrica do mapa" data-tour="metrica">
               {METRICAS.map((m) => (
                 <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
                         aria-pressed={metrica === m.valor} onClick={() => setMetrica(m.valor)}>
@@ -259,6 +440,8 @@ export default function App() {
               ))}
             </div>
           )}
+          <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button>
+          <button className="como-usar" onClick={() => setMostrarTour(true)}>Como usar</button>
           <button className="tema" onClick={() => setTema(escuro ? "claro" : "escuro")}
                   aria-label={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}>
             {escuro ? "☀" : "☾"}
@@ -266,24 +449,34 @@ export default function App() {
         </div>
       </header>
 
+      <EstadoDados />
+      {avisoNivel && <div className="aviso-nivel" role="status">{avisoNivel}</div>}
+
       <main className="conteudo">
-        <div className="mapa">
-          {!malha && !erro && <div className="carregando">Carregando o mapa…</div>}
+        <div className="mapa" data-tour="mapa">
+          {!malhaAtiva && !erro && <div className="carregando">Carregando o mapa…</div>}
           {erro && <div className="erro" role="alert">{erro}</div>}
           <MapaAtlas
-            malha={malha} porCodigo={porCodigo} metrica={metrica} quebras={quebras}
-            arcos={arcos} selecionado={municipio} escuro={escuro}
-            aoSelecionar={selecionarMunicipio} aoSelecionarFluxo={aoSelecionarFluxo}
-            foco={rmFoco} destacar={rmDestacar} nucleo={rmNucleo}
+            malha={malhaAtiva} porCodigo={porCodigoAtivo} metrica={metrica} quebras={quebras}
+            arcos={arcos} selecionado={codigoSelecionado} escuro={escuro}
+            aoSelecionar={aoSelecionarNoMapa} aoSelecionarFluxo={aoSelecionarFluxo}
+            foco={foco} zoomMaximo={zoomMaximo} rotuloReenquadrar={rotuloReenquadrar}
+            destacar={rmDestacar} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
           />
-          {municipios.length > 0 && !rm && <Legenda metrica={metrica} quebras={quebras} escuro={escuro} />}
+          {porCodigoAtivo.size > 0 && !rm && (
+            <Legenda metrica={metrica} quebras={quebras} escuro={escuro}
+                     notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined} />
+          )}
         </div>
         {painelDireita}
       </main>
 
+      {mostrarTour && <Tour aoFechar={() => setMostrarTour(false)} />}
+      {paginaMetodologia && <PaginaMetodologia meta={meta} aoFechar={fecharMetodologia} />}
+
       {meta && (
         <footer className="rodape">
-          {meta.aviso} Dados de {meta.versao_dados}.
+          {meta.aviso} Dados de {meta.versao_dados}. <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button>
         </footer>
       )}
     </div>

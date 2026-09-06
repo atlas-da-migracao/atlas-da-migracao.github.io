@@ -1,7 +1,92 @@
 import { describe, expect, it } from "vitest";
 import {
-  agruparOcupacao, agruparTempo, bboxDeCentroides, calcularRankingSaldoIntraRM, prepararSankey,
+  agruparOcupacao, agruparTempo, bboxDeCentroides, bboxDeGeometria, calcularRankingSaldoIntraRM,
+  indicadoresAgregados, prepararSankey, prioridadeFoco, uniaoDeBboxes,
 } from "../rm";
+
+describe("indicadoresAgregados (F6: níveis RGI/RGInt/UF)", () => {
+  it("calcula saldo, TLM e IEM a partir de imig/emig/pop5", () => {
+    const r = indicadoresAgregados(1200, 800, 100000);
+    expect(r.saldo).toBe(400);
+    expect(r.tlm).toBeCloseTo(4, 6); // (400/100000)*1000
+    expect(r.iem).toBeCloseTo(400 / 2000, 6);
+  });
+
+  it("pop5 = 0 -> TLM nula (sem divisão por zero)", () => {
+    expect(indicadoresAgregados(10, 5, 0).tlm).toBeNull();
+  });
+
+  it("imig = emig = 0 -> IEM nula", () => {
+    expect(indicadoresAgregados(0, 0, 1000).iem).toBeNull();
+  });
+
+  it("saldo negativo (emigração líquida)", () => {
+    const r = indicadoresAgregados(100, 300, 10000);
+    expect(r.saldo).toBe(-200);
+    expect(r.tlm).toBeLessThan(0);
+    expect(r.iem).toBeLessThan(0);
+  });
+});
+
+describe("prioridadeFoco (F6: fluxo > seleção > RM > Brasil)", () => {
+  it("fluxo tem prioridade sobre seleção e RM", () => {
+    expect(prioridadeFoco("fluxo", "selecao", "rm")).toBe("fluxo");
+  });
+  it("sem fluxo, a seleção (município ou unidade) tem prioridade sobre a RM", () => {
+    expect(prioridadeFoco(null, "selecao", "rm")).toBe("selecao");
+  });
+  it("sem fluxo nem seleção, cai para a RM ativa", () => {
+    expect(prioridadeFoco(null, null, "rm")).toBe("rm");
+  });
+  it("nada selecionado -> null (enquadra o Brasil)", () => {
+    expect(prioridadeFoco(null, null, null)).toBeNull();
+  });
+});
+
+describe("bboxDeGeometria (F6: zoom na seleção de um município)", () => {
+  it("calcula a bbox de um Polygon com margem", () => {
+    const geom = { type: "Polygon", coordinates: [[[-47, -23], [-46, -23], [-46, -22], [-47, -22], [-47, -23]]] };
+    const bbox = bboxDeGeometria(geom)!;
+    expect(bbox[0]).toBeLessThan(-47);
+    expect(bbox[1]).toBeLessThan(-23);
+    expect(bbox[2]).toBeGreaterThan(-46);
+    expect(bbox[3]).toBeGreaterThan(-22);
+  });
+
+  it("calcula a bbox de um MultiPolygon (percorre todos os anéis)", () => {
+    const geom = {
+      type: "MultiPolygon",
+      coordinates: [
+        [[[-50, -25], [-49, -25], [-49, -24], [-50, -24], [-50, -25]]],
+        [[[-40, -10], [-39, -10], [-39, -9], [-40, -9], [-40, -10]]],
+      ],
+    };
+    const bbox = bboxDeGeometria(geom)!;
+    expect(bbox[0]).toBeLessThan(-50);
+    expect(bbox[2]).toBeGreaterThan(-39);
+  });
+
+  it("geometria vazia/sem coordenadas devolve null", () => {
+    expect(bboxDeGeometria({ type: "Polygon", coordinates: [] })).toBeNull();
+  });
+});
+
+describe("uniaoDeBboxes", () => {
+  it("une duas bboxes no menor retângulo que contém ambas", () => {
+    const a: [number, number, number, number] = [-50, -25, -48, -23];
+    const b: [number, number, number, number] = [-45, -10, -44, -9];
+    expect(uniaoDeBboxes([a, b])).toEqual([-50, -25, -44, -9]);
+  });
+
+  it("ignora entradas nulas", () => {
+    const a: [number, number, number, number] = [-50, -25, -48, -23];
+    expect(uniaoDeBboxes([a, null])).toEqual(a);
+  });
+
+  it("lista só de nulos devolve null", () => {
+    expect(uniaoDeBboxes([null, null])).toBeNull();
+  });
+});
 
 describe("bboxDeCentroides", () => {
   it("envolve todos os pontos com margem positiva", () => {

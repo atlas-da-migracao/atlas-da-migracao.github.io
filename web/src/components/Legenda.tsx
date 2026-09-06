@@ -9,7 +9,11 @@ const TITULOS: Record<Metrica, string> = {
   iem: "Índice de eficácia migratória (%)",
 };
 
-export function Legenda({ metrica, quebras, escuro }: { metrica: Metrica; quebras: number[]; escuro: boolean }) {
+export function Legenda({ metrica, quebras, escuro, notaNivel }: {
+  metrica: Metrica; quebras: number[]; escuro: boolean;
+  /** F6: rótulo do nível agregado ativo (ex.: "Reg. imediata"); omitido no nível município. */
+  notaNivel?: string;
+}) {
   const unidade = metrica === "tlm" ? "‰" : metrica === "iem" ? "%" : "";
   const faixas = faixasLegenda(quebras, unidade);
   return (
@@ -31,6 +35,12 @@ export function Legenda({ metrica, quebras, escuro }: { metrica: Metrica; quebra
           <em>espessura ∝ √volume</em>
         </div>
       </div>
+      {notaNivel && (
+        <div className="legenda-nota">
+          Nível agregado ({notaNivel}): migração entre municípios da mesma unidade não é
+          contabilizada; pares suprimidos ficam fora da soma; sem erro-padrão publicado.
+        </div>
+      )}
     </div>
   );
 }

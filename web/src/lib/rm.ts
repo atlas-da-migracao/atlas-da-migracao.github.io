@@ -19,6 +19,40 @@ export function bboxDeCentroides(pontos: { lon: number; lat: number }[], margem 
   return [minLon - dx * margem, minLat - dy * margem, maxLon + dx * margem, maxLat + dy * margem];
 }
 
+/** Bbox de uma geometria GeoJSON (Polygon ou MultiPolygon), com margem relativa. */
+export function bboxDeGeometria(geom: { type: string; coordinates: unknown }, margem = 0.12): Bbox | null {
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
+  const visitar = (coords: unknown): void => {
+    if (!Array.isArray(coords) || coords.length === 0) return;
+    if (typeof coords[0] === "number") {
+      const [lon, lat] = coords as [number, number];
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      return;
+    }
+    for (const c of coords) visitar(c);
+  };
+  visitar(geom.coordinates);
+  if (!Number.isFinite(minLon)) return null;
+  const dx = maxLon - minLon || 0.05;
+  const dy = maxLat - minLat || 0.05;
+  return [minLon - dx * margem, minLat - dy * margem, maxLon + dx * margem, maxLat + dy * margem];
+}
+
+/** União de duas ou mais bboxes (menor retângulo que contém todas). */
+export function uniaoDeBboxes(bboxes: (Bbox | null)[]): Bbox | null {
+  const validas = bboxes.filter((b): b is Bbox => b != null);
+  if (validas.length === 0) return null;
+  return [
+    Math.min(...validas.map((b) => b[0])),
+    Math.min(...validas.map((b) => b[1])),
+    Math.max(...validas.map((b) => b[2])),
+    Math.max(...validas.map((b) => b[3])),
+  ];
+}
+
 /** Mapeia as 9 categorias publicadas de tempo de deslocamento em 5 classes ordinais
  *  mais "não se desloca"/"ignorado" neutros, somando os valores de cada linha. */
 const MAPA_TEMPO: Record<string, string> = {
@@ -59,6 +93,25 @@ export function agruparOcupacao(linhas: { categoria: string; valor: number }[]):
     out[chave] = (out[chave] ?? 0) + l.valor;
   }
   return out;
+}
+
+// ================= F6: níveis de agregação (RGI, RGInt, UF) =================
+
+/** Saldo, TLM e IEM de uma unidade agregada a partir de imig/emig/pop5 -- a mesma fórmula
+ *  usada em queries.ts (SQL), extraída aqui como função pura para poder ser testada sem
+ *  DuckDB. Indicadores agregados são somas diretas dos fluxos municipais publicados, sem
+ *  erro-padrão próprio (ver metodologia). */
+export function indicadoresAgregados(imig: number, emig: number, pop5: number) {
+  const saldo = imig - emig;
+  const tlm = pop5 > 0 ? (saldo / pop5) * 1000 : null;
+  const iem = imig + emig > 0 ? saldo / (imig + emig) : null;
+  return { saldo, tlm, iem };
+}
+
+/** Prioridade única de enquadramento do mapa: fluxo selecionado > seleção (município ou
+ *  unidade agregada) > RM ativa > Brasil. Extraída do App para poder ser testada sem React. */
+export function prioridadeFoco<T>(fluxoFoco: T | null, selecaoFoco: T | null, rmFoco: T | null): T | null {
+  return fluxoFoco ?? selecaoFoco ?? rmFoco ?? null;
 }
 
 /** Saldo intra-RM de cada município: Σ entradas − Σ saídas nos fluxos intra-RM. */

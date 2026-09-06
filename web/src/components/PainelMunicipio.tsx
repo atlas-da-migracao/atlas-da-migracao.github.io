@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Fluxo, Municipio } from "../lib/types";
 import { ic95, num, num1, num2, rotuloPrecisao, sinal } from "../lib/format";
 import { perfilDoMunicipio } from "../db/queries";
+import { usarDuckDBPronto } from "../db/duckdb";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { DIMENSOES, type NomeDimensao } from "../lib/paletas";
 import { exportarFluxos } from "../lib/exportar";
@@ -104,6 +105,7 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
 
   const entradas = fluxos.filter((f) => f.direcao === "entrada");
   const saidas = fluxos.filter((f) => f.direcao === "saida");
+  const duckdbPronto = usarDuckDBPronto();
 
   return (
     <aside className="painel">
@@ -156,7 +158,7 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
       )}
 
       {carregando ? (
-        <p className="muted">Carregando fluxos…</p>
+        <p className="muted">{duckdbPronto ? "Carregando fluxos…" : "preparando os dados…"}</p>
       ) : (
         <>
           <TabelaFluxos titulo="Principais origens" cor="var(--arc-in)" fluxos={entradas}

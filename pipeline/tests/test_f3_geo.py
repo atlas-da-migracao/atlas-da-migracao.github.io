@@ -49,7 +49,7 @@ def test_nenhum_corpo_dagua_ou_placeholder_no_topojson(con):
 
 def test_uf_topojson_tem_27_unidades(con):
     _req(GEO / "uf.topojson")
-    ids = _topojson_ids(GEO / "uf.topojson", id_field="SIGLA_UF")
+    ids = _topojson_ids(GEO / "uf.topojson", id_field="cd_uf")
     assert len(ids) == 27
 
 
@@ -73,3 +73,45 @@ def test_meta_json_valido(con):
     meta = json.loads((PROC / "meta.json").read_text(encoding="utf-8"))
     assert meta["revelacao"]["min_pessoas"] == 5
     assert "rotulos" in meta and "status" in meta["rotulos"]
+
+
+# ---- F6: níveis de agregação (RGI, RGInt, UF) ----
+
+def test_rgi_topojson_tem_510_unidades_dentro_do_orcamento(con):
+    _req(GEO / "rgi.topojson")
+    tam = (GEO / "rgi.topojson").stat().st_size
+    assert tam <= 800 * 1024, f"{tam/1e3:.0f} KB excede o orçamento de 800 KB"
+    ids = _topojson_ids(GEO / "rgi.topojson", id_field="cd_rgi")
+    assert len(ids) == 510
+
+
+def test_rgint_topojson_tem_133_unidades_dentro_do_orcamento(con):
+    _req(GEO / "rgint.topojson")
+    tam = (GEO / "rgint.topojson").stat().st_size
+    assert tam <= 400 * 1024, f"{tam/1e3:.0f} KB excede o orçamento de 400 KB"
+    ids = _topojson_ids(GEO / "rgint.topojson", id_field="cd_rgint")
+    assert len(ids) == 133
+
+
+def test_rgi_ids_batem_com_municipios_ref(con):
+    _req(GEO / "rgi.topojson", PROC / "municipios_ref.parquet")
+    ids_geo = _topojson_ids(GEO / "rgi.topojson", id_field="cd_rgi")
+    ids_dados, = [set(r[0] for r in con.execute(
+        f"SELECT DISTINCT cd_rgi FROM read_parquet('{PROC}/municipios_ref.parquet')").fetchall())]
+    assert ids_geo == ids_dados
+
+
+def test_rgint_ids_batem_com_municipios_ref(con):
+    _req(GEO / "rgint.topojson", PROC / "municipios_ref.parquet")
+    ids_geo = _topojson_ids(GEO / "rgint.topojson", id_field="cd_rgint")
+    ids_dados, = [set(r[0] for r in con.execute(
+        f"SELECT DISTINCT cd_rgint FROM read_parquet('{PROC}/municipios_ref.parquet')").fetchall())]
+    assert ids_geo == ids_dados
+
+
+def test_centroides_agregados_cobrem_todas_as_unidades(con):
+    _req(GEO / "centroides_rgi.parquet", GEO / "centroides_rgint.parquet", GEO / "centroides_uf.parquet")
+    n_rgi, = con.execute(f"SELECT COUNT(*) FROM read_parquet('{GEO}/centroides_rgi.parquet')").fetchone()
+    n_rgint, = con.execute(f"SELECT COUNT(*) FROM read_parquet('{GEO}/centroides_rgint.parquet')").fetchone()
+    n_uf, = con.execute(f"SELECT COUNT(*) FROM read_parquet('{GEO}/centroides_uf.parquet')").fetchone()
+    assert (n_rgi, n_rgint, n_uf) == (510, 133, 27)

@@ -1,7 +1,7 @@
 # Relatório de controle de revelação
 
 - Versão dos dados: **2026-09-05**
-- Gerado em: 2026-09-05 20:48 (fuso local)
+- Gerado em: 2026-09-05 23:11 (fuso local)
 - Fonte: IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado).
 
 ## Regras aplicadas

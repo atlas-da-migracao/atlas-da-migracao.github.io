@@ -1,6 +1,7 @@
 /** Painel do fluxo selecionado: volume, precisão, o fluxo reverso e o perfil dos
  *  migrantes daquele par, comparado com três referências. */
 import { useEffect, useState } from "react";
+import { usarDuckDBPronto } from "../db/duckdb";
 import {
   destinosTrabalhoDoFluxo, detalheDoFluxo, referenciasDoPerfil, rmDoPar, type DetalheFluxo,
 } from "../db/queries";
@@ -63,7 +64,8 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
     return () => { vivo = false; };
   }, [origem, destino]);
 
-  if (carregando) return <aside className="painel"><p className="muted">Carregando o fluxo…</p></aside>;
+  const pronto = usarDuckDBPronto();
+  if (carregando) return <aside className="painel"><p className="muted">{pronto ? "Carregando o fluxo…" : "preparando os dados…"}</p></aside>;
 
   const ida = dados?.ida ?? null;
   const volta = dados?.volta ?? null;

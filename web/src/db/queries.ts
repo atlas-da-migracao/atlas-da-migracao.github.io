@@ -120,6 +120,131 @@ export const saldoPorCategoria = (coluna: string) =>
            COALESCE(e.v, 0) - COALESCE(s.v, 0) AS saldo
     FROM e FULL OUTER JOIN s ON e.cd_mun = s.cd_mun`);
 
+// ================= F6: níveis de agregação (RGI, RGInt, UF) =================
+// Os fluxos por nível já vêm publicados (fluxos_rgi/rgint/uf, mesmo esquema de `fluxos`).
+// Os indicadores agregados (I, E, saldo, TLM) são somados aqui a partir desses fluxos e de
+// `municipios` (para pop5) -- não são uma nova estimativa com variância própria, por isso
+// não têm erro-padrão: ver a nota "sem estimativa" na legenda e na página de metodologia.
+export type NivelAgregado = "rgi" | "rgint" | "uf";
+
+export interface UnidadeAgregada {
+  codigo: string; nome: string; uf_sigla: string | null;
+  pop5: number; imig: number; emig: number; saldo: number; tlm: number | null; iem: number | null;
+}
+
+/** Tabela de fluxos, coluna do código na malha/em municipios_ref, e arquivo de centroides
+ *  (coluna "cd") de cada nível. UF usa o código numérico de 2 dígitos como identificador
+ *  canônico em todo lugar -- o mesmo que já aparece em fluxos_uf/municipios.uf e no id
+ *  (`cd_uf`) do uf.topojson -- para não precisar de tradução sigla<->código; uf_sigla é só
+ *  um campo de exibição, como nos demais níveis. */
+const CONFIG_NIVEL: Record<NivelAgregado, { fluxos: string; campo: string; nomeCol: string; centroides: string }> = {
+  rgi: { fluxos: "fluxos_rgi", campo: "cd_rgi", nomeCol: "nm_rgi", centroides: "geo/centroides_rgi.parquet" },
+  rgint: { fluxos: "fluxos_rgint", campo: "cd_rgint", nomeCol: "nm_rgint", centroides: "geo/centroides_rgint.parquet" },
+  uf: { fluxos: "fluxos_uf", campo: "uf", nomeCol: "uf_nome", centroides: "geo/centroides_uf.parquet" },
+};
+
+/** Indicadores de todas as unidades de um nível, para o coroplético e os painéis. */
+export function carregarUnidades(nivel: NivelAgregado) {
+  const { fluxos, campo, nomeCol } = CONFIG_NIVEL[nivel];
+  return consultar<UnidadeAgregada>(`
+    WITH nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+         pop AS (SELECT ${campo} AS codigo, SUM(pop5) AS pop5 FROM municipios GROUP BY 1),
+         imig AS (SELECT destino AS codigo, SUM(total) AS imig FROM ${fluxos} GROUP BY 1),
+         emig AS (SELECT origem AS codigo, SUM(total) AS emig FROM ${fluxos} GROUP BY 1)
+    SELECT n.codigo, n.nome, n.uf_sigla, COALESCE(p.pop5, 0) AS pop5,
+           COALESCE(im.imig, 0) AS imig, COALESCE(em.emig, 0) AS emig,
+           COALESCE(im.imig, 0) - COALESCE(em.emig, 0) AS saldo,
+           CASE WHEN COALESCE(p.pop5, 0) > 0
+                THEN (COALESCE(im.imig, 0) - COALESCE(em.emig, 0)) / p.pop5 * 1000 END AS tlm,
+           CASE WHEN COALESCE(im.imig, 0) + COALESCE(em.emig, 0) > 0
+                THEN (COALESCE(im.imig, 0) - COALESCE(em.emig, 0)) / (COALESCE(im.imig, 0) + COALESCE(em.emig, 0)) END AS iem
+    FROM nomes n LEFT JOIN pop p ON p.codigo = n.codigo
+    LEFT JOIN imig im ON im.codigo = n.codigo LEFT JOIN emig em ON em.codigo = n.codigo`);
+}
+
+/** Principais fluxos de entrada e saída de uma unidade agregada, com coordenadas. */
+export function fluxosDaUnidade(nivel: NivelAgregado, codigo: string, topN: number) {
+  const { fluxos, campo, nomeCol, centroides } = CONFIG_NIVEL[nivel];
+  return consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
+    WITH cent AS (SELECT cd, lon, lat FROM read_parquet('${centroides}')),
+    nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    entradas AS (
+      SELECT 'entrada' AS direcao, origem, destino, total, se, cv, n_faixa, precisao
+      FROM ${fluxos} WHERE destino = ${lit(codigo)} ORDER BY total DESC LIMIT ${topN}
+    ), saidas AS (
+      SELECT 'saida' AS direcao, origem, destino, total, se, cv, n_faixa, precisao
+      FROM ${fluxos} WHERE origem = ${lit(codigo)} ORDER BY total DESC LIMIT ${topN}
+    ), u AS (SELECT * FROM entradas UNION ALL SELECT * FROM saidas)
+    SELECT u.origem, u.destino, u.direcao, u.total, u.se, u.cv, u.n_faixa, u.precisao,
+           no_.nome AS nm_origem, no_.uf_sigla AS uf_origem, nd.nome AS nm_destino, nd.uf_sigla AS uf_destino,
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+    FROM u
+    JOIN nomes no_ ON no_.codigo = u.origem
+    JOIN nomes nd ON nd.codigo = u.destino
+    JOIN cent co ON co.cd = u.origem
+    JOIN cent cd_ ON cd_.cd = u.destino
+    ORDER BY u.total DESC`);
+}
+
+/** Maiores fluxos do país num nível agregado, para a primeira pintura do mapa. */
+export function maioresFluxosNivel(nivel: NivelAgregado, limite = 300) {
+  const { fluxos, campo, nomeCol, centroides } = CONFIG_NIVEL[nivel];
+  return consultar<Fluxo>(`
+    WITH cent AS (SELECT cd, lon, lat FROM read_parquet('${centroides}')),
+    nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    t AS (SELECT * FROM ${fluxos} ORDER BY total DESC LIMIT ${limite})
+    SELECT t.origem, t.destino, t.total, t.se, t.cv, t.n_faixa, t.precisao,
+           no_.nome AS nm_origem, no_.uf_sigla AS uf_origem, nd.nome AS nm_destino, nd.uf_sigla AS uf_destino,
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+    FROM t
+    JOIN nomes no_ ON no_.codigo = t.origem
+    JOIN nomes nd ON nd.codigo = t.destino
+    JOIN cent co ON co.cd = t.origem
+    JOIN cent cd_ ON cd_.cd = t.destino`);
+}
+
+/** Centroides de um conjunto de unidades de um nível agregado (F6: enquadramento de um fluxo
+ *  entre unidades). */
+export function centroidesDeUnidades(nivel: NivelAgregado, codigos: string[]) {
+  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; lon: number; lat: number }[]);
+  const { centroides } = CONFIG_NIVEL[nivel];
+  return consultar<{ cd_mun: string; lon: number; lat: number }>(`
+    SELECT cd AS cd_mun, lon, lat FROM read_parquet('${centroides}') WHERE cd IN (${codigos.map(lit).join(",")})`);
+}
+
+export interface DetalheFluxoUnidade {
+  origem: string; destino: string; nm_origem: string; uf_origem: string | null;
+  nm_destino: string; uf_destino: string | null; total: number; n_faixa: string; precisao: string;
+}
+
+/** Um par o->d de uma unidade agregada, com o fluxo reverso -- sem perfil (não existe nesse nível). */
+export async function detalheFluxoUnidade(nivel: NivelAgregado, o: string, d: string) {
+  const { fluxos, campo, nomeCol } = CONFIG_NIVEL[nivel];
+  const linhas = await consultar<DetalheFluxoUnidade>(`
+    WITH nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    par AS (
+      SELECT origem, destino, total, n_faixa, precisao FROM ${fluxos}
+      WHERE (origem = ${lit(o)} AND destino = ${lit(d)}) OR (origem = ${lit(d)} AND destino = ${lit(o)})
+    )
+    SELECT par.origem, par.destino, par.total, par.n_faixa, par.precisao,
+           no_.nome AS nm_origem, no_.uf_sigla AS uf_origem, nd.nome AS nm_destino, nd.uf_sigla AS uf_destino
+    FROM par
+    JOIN nomes no_ ON no_.codigo = par.origem
+    JOIN nomes nd ON nd.codigo = par.destino`);
+  return {
+    ida: linhas.find((l) => l.origem === o && l.destino === d) ?? null,
+    volta: linhas.find((l) => l.origem === d && l.destino === o) ?? null,
+  };
+}
+
+/** Centroides de um conjunto arbitrário de municípios (F6: enquadramento de um fluxo). */
+export const centroidesDeMunicipios = (codigos: string[]) => {
+  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; lon: number; lat: number }[]);
+  return consultar<{ cd_mun: string; lon: number; lat: number }>(`
+    SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')
+    WHERE cd_mun IN (${codigos.map(lit).join(",")})`);
+};
+
 /** Maiores fluxos entre UFs, para a matriz de acordes. */
 export const fluxosEntreUFs = () =>
   consultar<{ origem: string; destino: string; total: number }>(`

@@ -10,6 +10,7 @@ import {
 } from "../db/queries";
 import type { Fluxo } from "../lib/types";
 import { calcularRankingSaldoIntraRM, prepararSankey } from "../lib/rm";
+import { exportarCaminhosAluvial, exportarRankingRM } from "../lib/exportar";
 import { CLASSE_ESTUDO, CLASSE_TRAB, TIPOLOGIA_INTRA_RM, cor } from "../lib/paletas";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { Sankey } from "./Sankey";
@@ -248,6 +249,12 @@ export function PainelRM({
 
           <h3 className="secao-titulo">Saldo intra-RM por município</h3>
           <RankingDivergente itens={rankingSaldo} rotuloValor={sinal} />
+          {rankingSaldo.length > 0 && (
+            <button className="exportar"
+                    onClick={() => exportarRankingRM(resumo, "saldo_intra_rm", "saldo_intra_rm", rankingSaldo)}>
+              Baixar este ranking em CSV
+            </button>
+          )}
 
           <h3 className="secao-titulo">Principais fluxos intra-RM</h3>
           <p className="muted-pequeno explicacao">
@@ -317,6 +324,10 @@ export function PainelRM({
                     ))}
                   </tbody>
                 </table>
+                <button className="exportar"
+                        onClick={() => exportarCaminhosAluvial(resumo, sankeyDados.caminhos)}>
+                  Baixar estes caminhos em CSV
+                </button>
               </details>
             </>
           ) : (
@@ -340,11 +351,27 @@ export function PainelRM({
           <RankingDivergente
             itens={rankingTaxaSaida.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.taxa_saida_pendular ?? 0 }))}
             rotuloValor={(v) => `${num1(v)}%`} />
+          {rankingTaxaSaida.length > 0 && (
+            <button className="exportar" onClick={() => exportarRankingRM(
+              resumo, "taxa_saida_pendular", "taxa_saida_pendular_por_mil",
+              rankingTaxaSaida.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.taxa_saida_pendular ?? 0 })),
+            )}>
+              Baixar este ranking em CSV
+            </button>
+          )}
 
           <h3 className="secao-titulo">Maior índice de atração</h3>
           <RankingDivergente
             itens={rankingAtracao.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.indice_atracao ?? 0 }))}
             rotuloValor={(v) => num1(v)} />
+          {rankingAtracao.length > 0 && (
+            <button className="exportar" onClick={() => exportarRankingRM(
+              resumo, "indice_atracao", "indice_atracao",
+              rankingAtracao.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.indice_atracao ?? 0 })),
+            )}>
+              Baixar este ranking em CSV
+            </button>
+          )}
 
           <h3 className="secao-titulo">Principais fluxos pendulares</h3>
           <p className="muted-pequeno explicacao">Clique em uma linha para ver a caracterização do fluxo.</p>
