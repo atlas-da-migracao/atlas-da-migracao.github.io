@@ -18,6 +18,22 @@ uma declaração do titular, não uma checagem automática.
       aditado para mencionar) a publicação de resultados agregados em formato de atlas/
       dashboard público. Se não cobria, solicitei o aditamento pelo mesmo canal da
       concessão e recebi confirmação por escrito.
+      **Análise da sessão em 2026-09-06** (Termo de Compromisso de Confidencialidade e
+      Responsabilidade, Microdados da Amostra do Censo 2022, assinado via gov.br em
+      31/08/2026 -- CPF e e-mail institucional do titular omitidos deste registro por
+      sigilo): finalidade declarada é **"Pesquisa acadêmica"**, área temática "Migrações".
+      As cláusulas de sigilo/não compartilhamento (2), uso restrito (3), não reidentificação
+      (4), rastreabilidade (5) e auditoria (6) tratam do **arquivo de microdados**, nunca
+      publicado por este projeto -- satisfeitas pelo desenho do pipeline (gate de
+      revelação + `verify_gate.py`). **O termo é omisso** sobre divulgação em formato de
+      site público interativo, dataset sob licença aberta (CC BY 4.0), indexação ativa em
+      buscadores e depósito com DOI -- não veda, mas também não autoriza explicitamente.
+      **Item continua genuinamente pendente**: solicitar confirmação por escrito ao IBGE de
+      que "Pesquisa acadêmica" cobre esse formato, dado que o site já está publicado.
+      **Ponto correlato, fora do escopo do IBGE**: a autorização de acesso está vinculada
+      ao vínculo institucional do titular declarado no Termo; o atlas publicado está em
+      nome pessoal, sem menção a essa instituição -- vale confirmar internamente se a
+      autorização concedida contemplava esse uso e essa forma de divulgação.
 - [ ] **Termos e e-mail de concessão arquivados.** Cópia do Termo de Compromisso de
       Confidencialidade e Responsabilidade, do Termo de Uso e Finalidade, e do e-mail de
       concessão (e do eventual aditamento acima) estão salvos em `docs/termos/`
