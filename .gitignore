@@ -1,0 +1,25 @@
+# --- SIGILO: microdados de acesso controlado do IBGE nunca entram no repositório ---
+data/raw
+data/raw/**
+data/interim/
+data/geo/raw/
+*.csv
+*.CSV
+*.txt.gz
+docs/termos/*
+!docs/termos/README.md
+# dados processados só após passar pelo gate de revelação (ver CLAUDE.md)
+data/processed/*.parquet
+data/processed/*.json
+web/public/data/
+# ambiente
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+node_modules/
+web/dist/
+.duckdb/
+*.duckdb
+*.duckdb.wal
