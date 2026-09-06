@@ -151,7 +151,7 @@ jobs:
           echo "Checagem pós-build aprovada."
 
       - name: Publicar artefato do Pages
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: web/dist
 
