@@ -1,0 +1,17 @@
+# Configuração do gitleaks para este repositório.
+# Mantém TODAS as regras padrão e abre uma única exceção, restrita por caminho:
+# as assinaturas SHA-256 gravadas pelo gate de revelação (data/processed/.gate_ok) e
+# citadas nos relatórios de revelação são somas de verificação públicas de integridade,
+# não credenciais -- mas têm 64 caracteres hexadecimais e casam com regras de token.
+title = "Atlas da migração interna"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Assinaturas SHA-256 do gate de revelação (integridade dos agregados publicados)"
+paths = [
+  '''^data/processed/\.gate_ok$''',
+  '''^docs/relatorio_revelacao_[0-9-]+\.md$''',
+]
+regexes = ['''\b[0-9a-f]{64}\b''']
