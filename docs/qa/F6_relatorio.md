@@ -143,7 +143,7 @@ Gerado em 2026-09-06. Trabalho realizado entre 5 e 6 de setembro de 2026 (leva 1
 
 6. **Erros de console durante HMR**: reoptimização Vite + instalação d3-sankey causou "Invalid hook call"/"luma.gl already initialized". **Resolvido**: aba nova com console limpo; `npm ls react` confirma uma cópia única.
 
-7. **Modo escuro com 1,8% de imigrantes internos**: valor citado como "1,8%" mas total nacional ponderado é 1,15% (150.375 de 13.033.665), arredondado para "1,2%" → **correção** em texto publicado.
+7. **Proporção de origem não informada citada errada na página de metodologia**: o texto dizia "cerca de 1,8%" (estimativa preliminar de quatro UFs, do plano), mas o valor nacional ponderado apurado em `municipios.parquet` é 1,15% (150.375 de 13.033.665 imigrantes internos). Corrigido para "cerca de 1,2% (150,4 mil de 13,0 milhões)".
 
 8. **Legenda "espessura ∝ √volume" críptica**: → **mudada para "espessura cresce com o volume (raiz quadrada)"** mais legível.
 
