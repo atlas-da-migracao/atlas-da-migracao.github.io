@@ -302,6 +302,25 @@ def main() -> None:
         TO '{PROCESSED}/municipios_ref.parquet' (FORMAT PARQUET)
     """)
 
+    # ---------------- primeira pintura do mapa ----------------
+    # Arquivo enxuto só com o que o coroplético precisa. Evita que o mapa fique cinza
+    # esperando o DuckDB-WASM (36 MB) baixar e compilar: a cor aparece de imediato e o
+    # DuckDB assume depois, para fluxos, perfis e filtros.
+    import json as _json
+    linhas = con.execute(f"""
+        SELECT cd_mun, nm_mun, uf_sigla, pop, imig, emig, saldo, tlm, iem, cv_imig
+        FROM read_parquet('{PROCESSED}/municipios.parquet') ORDER BY cd_mun
+    """).fetchall()
+    mapa = {
+        "colunas": ["cd", "nm", "uf", "pop", "imig", "emig", "saldo", "tlm", "iem", "cv"],
+        "linhas": [[r[0], r[1], r[2], r[3], r[4], r[5], r[6],
+                    None if r[7] is None else round(r[7], 2),
+                    None if r[8] is None else round(r[8], 4),
+                    None if r[9] is None else round(r[9], 1)] for r in linhas],
+    }
+    (PROCESSED / "municipios_mapa.json").write_text(
+        _json.dumps(mapa, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
     print("Arquivos publicáveis gravados em data/processed:")
     for f in sorted(PROCESSED.glob("*.parquet")):
         n = con.execute(f"SELECT COUNT(*) FROM read_parquet('{f}')").fetchone()[0]

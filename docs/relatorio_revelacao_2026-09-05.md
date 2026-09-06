@@ -1,7 +1,7 @@
 # Relatório de controle de revelação
 
 - Versão dos dados: **2026-09-05**
-- Gerado em: 2026-09-05 20:15 (fuso local)
+- Gerado em: 2026-09-05 20:48 (fuso local)
 - Fonte: IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado).
 
 ## Regras aplicadas
@@ -35,18 +35,18 @@
 
 | Arquivo | Linhas | Tamanho | SHA-256 (12) |
 |---|---:|---:|---|
-| `fluxos.parquet` | 53,097 | 0.9 MB | `0246199edecd` |
+| `fluxos.parquet` | 53,097 | 0.9 MB | `62803324eeea` |
 | `fluxos_rgi.parquet` | 23,083 | 0.3 MB | `07e0d91abc12` |
 | `fluxos_rgint.parquet` | 9,155 | 0.1 MB | `cff1994e80f6` |
 | `fluxos_uf.parquet` | 689 | 0.0 MB | `a0d0df846b8c` |
 | `municipios.parquet` | 5,570 | 0.5 MB | `288cfcf169ce` |
-| `municipios_dim.parquet` | 342,005 | 1.8 MB | `fe3dbbadc76d` |
+| `municipios_dim.parquet` | 342,005 | 1.7 MB | `beca91b9bbfc` |
 | `municipios_pendular.parquet` | 5,570 | 0.2 MB | `b0aac3d9de2d` |
 | `municipios_ref.parquet` | 5,570 | 0.2 MB | `e497fe05679f` |
 | `pendular_estudo.parquet` | 16,429 | 0.3 MB | `9bde67bfe9e8` |
-| `pendular_estudo_dim.parquet` | 31,748 | 0.2 MB | `3590e18bcf26` |
+| `pendular_estudo_dim.parquet` | 31,748 | 0.2 MB | `b0c211e79f80` |
 | `pendular_trab.parquet` | 21,327 | 0.5 MB | `b364c0886d93` |
-| `pendular_trab_dim.parquet` | 209,743 | 1.3 MB | `cbf9f97923f9` |
+| `pendular_trab_dim.parquet` | 209,743 | 1.3 MB | `dcd88148e73f` |
 | `rm.parquet` | 1,388 | 0.0 MB | `585e9eec6587` |
 | `rm_fluxos_intra.parquet` | 6,490 | 0.1 MB | `03ab0fc358cf` |
 | `rm_mig_estudo.parquet` | 2,851 | 0.0 MB | `1a4b9ebad226` |

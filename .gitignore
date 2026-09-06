@@ -22,7 +22,11 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 node_modules/
-web/dist/
 .duckdb/
 *.duckdb
 *.duckdb.wal
+
+# front-end
+web/dist/
+web/public/data/
+web/public/duckdb/
