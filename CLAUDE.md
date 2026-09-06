@@ -12,13 +12,14 @@ Os microdados em `data/raw` são de **acesso controlado** do IBGE (Censo 2022). 
 3. `data/processed` só é copiado para `web/public/data` ou commitado depois de passar por `pipeline/disclosure_check.py` (regras R1–R9, ver `docs/METODOLOGIA.md`).
 4. `.gitignore` e o hook `pre-commit` bloqueiam `data/raw`, `data/interim`, `data/geo/raw`, qualquer `*.csv` e `docs/termos/*`. Não contornar esses bloqueios.
 5. Em caso de dúvida sobre se uma saída individualiza alguém, tratar como individualizante e não publicar.
+6. **`data/processed` é versionado (F7), mas só via o gate.** Diferente de `data/raw`/`data/interim`, `data/processed/**` (parquet, json, `geo/*.topojson`, `geo/*.parquet`, `.gate_ok`) é commitado no repositório — é o agregado já aprovado que o CI usa para publicar o site sem precisar de acesso aos microdados. O hook `pre-commit` roda `pipeline/verify_gate.py` automaticamente sempre que houver arquivo de `data/processed` no stage e bloqueia o commit se ele reprovar. Nunca commitar `data/processed` sem rodar `disclosure_check.py` antes.
 
 ## Caminhos
 
 - Microdados brutos: `data/raw` (symlink) → `<UF>/Pessoas_<UF>_controlado.csv`, `Domicilios_*`, `Familia_*`, `Mortalidade_*`.
 - Rótulos/códigos (públicos, gerados): `pipeline/labels.py` (regenerar com `python pipeline/gen_labels.py data/raw`).
 - Malha municipal 2022 (shapefile IBGE): `data/geo/raw/BR_Municipios_2022.{shp,dbf,shx,prj,cpg}`.
-- Dados intermediários: `data/interim` (Parquet, gitignored). Dados publicáveis: `data/processed` (Parquet/JSON, só após o gate).
+- Dados intermediários: `data/interim` (Parquet, gitignored). Dados publicáveis: `data/processed` (Parquet/JSON/TopoJSON, **versionado no git**, só depois do gate — ver `.gate_ok` e `pipeline/verify_gate.py`).
 - Metodologia: `docs/METODOLOGIA.md`. Termos de acesso (fora do repo): `docs/termos/`.
 - SEO/páginas estáticas: `docs/SEO.md` (estratégia) e `pipeline/build_paginas.py` (gerador, lê só `data/processed`, escreve em `web/dist`).
 
@@ -28,7 +29,8 @@ Os microdados em `data/raw` são de **acesso controlado** do IBGE (Censo 2022). 
 source .venv/bin/activate          # Python 3.14 + duckdb, pyarrow, pandas, openpyxl, pytest
 python pipeline/run.py             # orquestra as etapas do pipeline (a implementar por fase)
 python pipeline/validate.py        # testes de consistência (ver plano, seção Verificação)
-python pipeline/disclosure_check.py  # gate de revelação R1–R9 antes de publicar
+python pipeline/disclosure_check.py --versao <v>  # gate de revelação R1–R9; grava data/processed/.gate_ok (JSON: versão, timestamp, SHA-256 de cada arquivo publicável)
+python pipeline/verify_gate.py       # confere o carimbo do gate de forma independente, SEM microdados (roda no CI e em qualquer clone)
 ./geo/build.sh                     # malha 2022 -> TopoJSON (municípios + UF), dado público
 python pipeline/build_centroids.py # centroides via extensão espacial do DuckDB
 python pipeline/build_meta.py      # data/processed/meta.json (rótulos, cortes, limiares)

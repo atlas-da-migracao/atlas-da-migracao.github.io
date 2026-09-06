@@ -40,6 +40,26 @@ DESCRICAO_SITE = ("Saldos e fluxos migratórios entre os municípios brasileiros
                    "quinquênio 2017-2022, a partir dos microdados da amostra do Censo "
                    "Demográfico 2022 do IBGE.")
 
+# ============================== autoria e licenças (F7) ==============================
+# Decisões do titular do projeto (ver plano F7): autoria, repositório GitHub, e as duas
+# licenças do projeto -- dados/conteúdo em CC BY 4.0 (com atribuição obrigatória ao IBGE
+# como fonte primária) e código em MIT. O DOI é um placeholder explícito até a publicação
+# no Zenodo (não inventar um número).
+AUTOR_NOME = "Daniel Pessini"
+AUTOR_GITHUB_USER = "Damnielps"
+AUTOR_GITHUB_URL = f"https://github.com/{AUTOR_GITHUB_USER}"
+AUTOR_EMAIL_PUBLICO = "129672935+Damnielps@users.noreply.github.com"
+AUTOR_VINCULO_INSTITUCIONAL = ""  # campo opcional, deixado vazio de propósito -- preencher se houver
+REPO_URL = "https://github.com/atlas-da-migracao/atlas-da-migracao.github.io"
+LICENCA_DADOS_NOME = "CC BY 4.0"
+LICENCA_DADOS_URL = "https://creativecommons.org/licenses/by/4.0/deed.pt-br"
+LICENCA_CODIGO_NOME = "MIT"
+DOI_PLACEHOLDER = "DOI a ser atribuído no Zenodo"
+ATRIBUICAO_PADRAO = (
+    "Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso "
+    "controlado). Estimativas: Daniel Pessini, Atlas da migração interna no Brasil."
+)
+
 # ============================== metadados públicos ==============================
 META = json.loads((PROCESSED / "meta.json").read_text(encoding="utf-8"))
 ROTULOS = META["rotulos"]
@@ -615,7 +635,7 @@ class Gerador:
     def base_ctx(self, **extra) -> dict:
         ctx = dict(
             nome_site=NOME_SITE, site_url=self.site_url, aviso=AVISO, fonte=FONTE,
-            versao_dados=VERSAO_DADOS, autor_placeholder="[AUTOR A PREENCHER]",
+            versao_dados=VERSAO_DADOS, autor_placeholder=AUTOR_NOME,
         )
         ctx.update(extra)
         return ctx
@@ -1145,13 +1165,19 @@ contagens amostrais apenas em faixas. Formato: Apache Parquet.</p>
 <tbody>{linhas}</tbody></table></section>
 
 <section class="secao"><h2>Licença</h2>
-<p>[LICENÇA A DEFINIR PELO AUTOR -- placeholder. Os microdados originais do Censo 2022 são de
-acesso controlado do IBGE; as tabelas agregadas e arredondadas aqui publicadas não permitem
-reidentificação individual.]</p></section>
+<p>Os dados agregados publicados aqui (tabelas Parquet, páginas estáticas e conteúdo
+textual do atlas) estão sob a licença
+<a href="{LICENCA_DADOS_URL}">{LICENCA_DADOS_NOME}</a>, com atribuição obrigatória ao IBGE
+como fonte primária. O código-fonte do projeto está sob licença {LICENCA_CODIGO_NOME}
+(repositório no GitHub). Os microdados originais do Censo 2022 são de acesso controlado do
+IBGE e NÃO estão incluídos neste site nem no repositório: permanecem sujeitos aos termos de
+uso do IBGE. As tabelas agregadas e arredondadas aqui publicadas passaram pelo controle
+estatístico de revelação e não permitem reidentificação individual.</p></section>
 
 <section class="secao"><h2>Como citar</h2>
-<p class="citacao">[AUTOR A PREENCHER]. <em>{NOME_SITE}</em>. Dados do Censo Demográfico 2022
-(IBGE). Versão dos dados: {VERSAO_DADOS}. DOI: [DOI A PREENCHER, ex. Zenodo]. Disponível em: {self.url('/')}.</p></section>
+<p class="citacao">{AUTOR_NOME}. <em>{NOME_SITE}</em>. Dados do Censo Demográfico 2022
+(IBGE). Versão dos dados: {VERSAO_DADOS}. DOI: {DOI_PLACEHOLDER}. Disponível em: {self.url('/')}.</p>
+<p class="nota">{ATRIBUICAO_PADRAO}</p></section>
 
 <section class="secao"><h2>Fonte e aviso</h2>
 <p>Fonte: {FONTE}.</p>
@@ -1163,8 +1189,8 @@ reidentificação individual.]</p></section>
         dataset = {
             "@context": "https://schema.org", "@type": "Dataset",
             "name": f"{NOME_SITE} -- dados publicados", "description": descricao,
-            "creator": {"@type": "Person", "name": "[AUTOR A PREENCHER]"},
-            "license": "[LICENÇA A DEFINIR]",
+            "creator": {"@type": "Person", "name": AUTOR_NOME, "url": AUTOR_GITHUB_URL},
+            "license": LICENCA_DADOS_URL,
             "temporalCoverage": "2017-07-31/2022-07-31",
             "spatialCoverage": {"@type": "Place", "name": "Brasil"},
             "isBasedOn": {"@type": "Dataset", "name": "Censo Demográfico 2022 -- IBGE",
@@ -1184,13 +1210,15 @@ reidentificação individual.]</p></section>
         self.escrever("/dados/", html)
 
     def gerar_sobre(self) -> None:
-        corpo = """
+        vinculo = AUTOR_VINCULO_INSTITUCIONAL or "não informado"
+        corpo = f"""
 <p>O Atlas da migração interna no Brasil reúne, num único painel navegável, os fluxos de
 migração interna, o deslocamento pendular e o módulo metropolitano do Censo Demográfico 2022
 do IBGE, no nível de município, região imediata, região intermediária e UF.</p>
 
 <section class="secao"><h2>Quem fez</h2>
-<p>[AUTORIA A PREENCHER PELO RESPONSÁVEL DO PROJETO]</p></section>
+<p>{AUTOR_NOME} (GitHub: <a href="{AUTOR_GITHUB_URL}">@{AUTOR_GITHUB_USER}</a>).
+Vínculo institucional: {vinculo}.</p></section>
 
 <section class="secao"><h2>Política de uso dos microdados</h2>
 <p>Os microdados da amostra do Censo Demográfico 2022 usados neste projeto são de acesso
@@ -1199,8 +1227,15 @@ controlado do IBGE. Nenhum registro individual é publicado: todas as tabelas di
 revelação (supressão de células pequenas, arredondamento, faixas de contagem amostral) antes
 de sair do ambiente controlado.</p></section>
 
+<section class="secao"><h2>Licenças</h2>
+<p>Dados agregados e conteúdo textual sob <a href="{LICENCA_DADOS_URL}">{LICENCA_DADOS_NOME}</a>,
+com atribuição obrigatória ao IBGE como fonte primária; código-fonte sob licença
+{LICENCA_CODIGO_NOME}. Ver <a href="/dados/">/dados/</a> para os detalhes.</p></section>
+
 <section class="secao"><h2>Contato</h2>
-<p>[CONTATO A PREENCHER]</p></section>
+<p>Para dúvidas, correções ou relatos de erro, abra uma <em>issue</em> no
+<a href="{REPO_URL}">repositório do projeto no GitHub</a> ou escreva para o e-mail público
+de contato do autor, {AUTOR_EMAIL_PUBLICO}.</p></section>
 """
         self._pagina_indice("/sobre/", "Sobre o projeto",
                              "O que é o Atlas da migração interna no Brasil, quem fez, e a política de uso dos microdados do Censo 2022.",

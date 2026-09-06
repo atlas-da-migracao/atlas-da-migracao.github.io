@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "Se você usar este atlas, seus dados ou seu código, cite-o desta forma."
+title: "Atlas da migração interna no Brasil"
+type: dataset
+authors:
+  - family-names: "Pessini"
+    given-names: "Daniel"
+year: 2026
+version: "2026-09-06"
+url: "https://atlas-da-migracao.github.io"
+repository-code: "https://github.com/atlas-da-migracao/atlas-da-migracao.github.io"
+license: "CC-BY-4.0"
+license-url: "https://creativecommons.org/licenses/by/4.0/deed.pt-br"
+identifiers:
+  - type: doi
+    value: "DOI a ser atribuído no Zenodo"
+    description: "DOI do conjunto de dados e do código, ainda não emitido (ver docs/CHECKLIST_PUBLICACAO.md)."
+keywords:
+  - migração interna
+  - censo 2022
+  - ibge
+  - demografia
+  - brasil
+  - migração de retorno
+  - deslocamento pendular
+  - regiões metropolitanas
+abstract: >-
+  Atlas interativo dos fluxos de migração interna, deslocamento pendular e do módulo
+  metropolitano do Brasil no quinquênio 2017-2022, a partir do quesito de migração de
+  data fixa dos microdados da amostra do Censo Demográfico 2022 do IBGE (acesso
+  controlado). Publica indicadores e fluxos agregados, já aprovados por um gate de
+  controle estatístico de revelação, por município, região imediata, região
+  intermediária, UF e região metropolitana/RIDE.
+preferred-citation:
+  type: dataset
+  title: "Atlas da migração interna no Brasil"
+  authors:
+    - family-names: "Pessini"
+      given-names: "Daniel"
+  year: 2026
+  url: "https://atlas-da-migracao.github.io"
+  notes: >-
+    Dados do Censo Demográfico 2022 (IBGE), microdados da amostra (acesso controlado).
+    Versão dos dados indicada no site em /dados/ e em data/processed/meta.json.

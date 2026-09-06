@@ -1,0 +1,171 @@
+name: Publicar
+
+# Publica o Atlas em GitHub Pages. Não roda o pipeline de dados (precisa dos microdados
+# controlados do IBGE, só existentes na máquina local do titular do acesso -- ver
+# CLAUDE.md e docs/CHECKLIST_PUBLICACAO.md): o CI só verifica, constrói e publica os
+# agregados já aprovados pelo gate de revelação e versionados em data/processed.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: Verificar (gate de revelação, testes, segredos, histórico)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (histórico completo, para a varredura de segredos e do histórico)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências Python
+        run: pip install -r requirements.txt
+
+      - name: Gate de revelação -- verificação independente (sem microdados)
+        run: python pipeline/verify_gate.py
+
+      - name: Testes (pipeline)
+        run: |
+          pytest -q
+
+      - name: Baixar gitleaks (binário oficial, sem exigir licença de organização)
+        run: |
+          set -euo pipefail
+          # Usa o binário publicado no release oficial do GitHub (não a action
+          # gitleaks/gitleaks-action, que exige licença paga para organizações).
+          # Resolve a versão mais recente via a API do GitHub em vez de fixar um número
+          # que pode deixar de existir.
+          VERSAO=$(curl -sSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest | \
+                   python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          ARQ="gitleaks_${VERSAO}_linux_x64.tar.gz"
+          curl -sSLo "$ARQ" "https://github.com/gitleaks/gitleaks/releases/download/v${VERSAO}/${ARQ}"
+          tar -xzf "$ARQ" gitleaks
+          chmod +x gitleaks
+          ./gitleaks version
+
+      - name: Varredura de segredos (gitleaks)
+        run: ./gitleaks detect --source . --redact --exit-code 1
+
+      - name: Nenhum arquivo bruto/intermediário no histórico do git
+        run: |
+          set -euo pipefail
+          ARQUIVOS=$(git log --all --name-only --pretty=format: | sort -u | sed '/^$/d')
+          SUSPEITOS=$(printf '%s\n' "$ARQUIVOS" \
+            | grep -E '^(data/raw/|data/interim/)|\.(csv|CSV)$' \
+            | grep -v '^pipeline/rm_nucleo\.csv$' || true)
+          if [ -n "$SUSPEITOS" ]; then
+            echo "ERRO: arquivos de dados brutos/intermediários ou CSV encontrados no histórico do git:" >&2
+            printf '%s\n' "$SUSPEITOS" | sed 's/^/  - /' >&2
+            exit 1
+          fi
+          echo "Histórico limpo: nenhum arquivo em data/raw, data/interim ou *.csv (exceto pipeline/rm_nucleo.csv)."
+
+  construir:
+    name: Construir o site (Vite + páginas estáticas)
+    needs: verificar
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python (para o gerador de páginas estáticas)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências Python
+        run: pip install -r requirements.txt
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependências do front-end
+        working-directory: web
+        run: npm ci
+
+      - name: Copiar runtime do DuckDB-WASM
+        working-directory: web
+        run: npm run copy-duckdb
+
+      - name: Sincronizar dados publicados (data/processed -> web/public/data)
+        working-directory: web
+        run: npm run sync-data
+
+      - name: Build do site (Vite + páginas estáticas de SEO)
+        working-directory: web
+        env:
+          SITE_URL: https://atlas-da-migracao.github.io
+        run: npm run build:site
+
+      - name: Marcar dist para o GitHub Pages (sem processamento Jekyll)
+        run: touch web/dist/.nojekyll
+
+      - name: Checagem pós-build (nenhum artefato sensível ou de desenvolvimento no dist)
+        run: |
+          set -euo pipefail
+          PROBLEMA=0
+          if find web/dist -name '*.map' | grep -q .; then
+            echo "ERRO: sourcemap (*.map) encontrado em web/dist." >&2
+            PROBLEMA=1
+          fi
+          if find web/dist -name '*.csv' -o -name '*.CSV' | grep -q .; then
+            echo "ERRO: arquivo CSV encontrado em web/dist." >&2
+            PROBLEMA=1
+          fi
+          if find web/dist -name '.gate_ok' | grep -q .; then
+            echo "ERRO: .gate_ok não deveria estar em web/dist." >&2
+            PROBLEMA=1
+          fi
+          if grep -rIl '/Users/' web/dist >/dev/null 2>&1; then
+            echo "ERRO: caminho local (/Users/...) vazado em web/dist." >&2
+            PROBLEMA=1
+          fi
+          if [ ! -f web/dist/sitemap.xml ]; then
+            echo "ERRO: web/dist/sitemap.xml ausente." >&2
+            PROBLEMA=1
+          fi
+          if [ ! -f web/dist/404.html ]; then
+            echo "ERRO: web/dist/404.html ausente." >&2
+            PROBLEMA=1
+          fi
+          if [ "$PROBLEMA" -ne 0 ]; then
+            exit 1
+          fi
+          echo "Checagem pós-build aprovada."
+
+      - name: Publicar artefato do Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  publicar:
+    name: Publicar no GitHub Pages
+    needs: construir
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,34 @@
+#!/bin/sh
+# Bloqueia qualquer tentativa de commitar dados brutos/intermediários ou CSVs (sigilo IBGE),
+# e exige o gate de revelação verde para qualquer commit que toque data/processed.
+# Instalado a partir de scripts/pre-commit -- ver README.md ("Como rodar") para reinstalar
+# depois de um clone novo (hooks não viajam com o git clone).
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+blocked=$(printf '%s\n' "$staged" | grep -E '^(data/raw/|data/interim/|data/geo/raw/)|\.(csv|CSV)$|(^|/)\.env(\.|$)|\.(pem|key|p12|pfx)$|credentials.*\.json$' \
+          | grep -v '^pipeline/rm_nucleo\.csv$' || true)
+# docs/termos: tudo bloqueado, exceto o README
+termos=$(printf '%s\n' "$staged" | grep -E '^docs/termos/' | grep -v '^docs/termos/README\.md$' || true)
+blocked="$blocked
+$termos"
+blocked=$(printf '%s\n' "$blocked" | sed '/^$/d')
+if [ -n "$blocked" ]; then
+  echo "ERRO (sigilo): arquivos bloqueados para commit:" >&2
+  printf '%s\n' "$blocked" | sed 's/^/  - /' >&2
+  echo "Microdados de acesso controlado, intermediários, CSVs e arquivos de segredo (.env, chaves) nunca entram no repositório." >&2
+  exit 1
+fi
+
+# data/processed só é commitado com o gate de revelação verificado de forma independente
+# (verify_gate.py recomputa os SHA-256 do carimbo .gate_ok e as checagens estruturais R1-R6
+# que não dependem de microdado -- ver pipeline/verify_gate.py).
+proc=$(printf '%s\n' "$staged" | grep -E '^data/processed/' || true)
+if [ -n "$proc" ]; then
+  PY=.venv/bin/python
+  [ -x "$PY" ] || PY=python3
+  if ! "$PY" pipeline/verify_gate.py; then
+    echo "ERRO (revelação): pipeline/verify_gate.py reprovou -- commit bloqueado." >&2
+    echo "Rode 'python pipeline/disclosure_check.py --versao <v>' e depois 'python pipeline/verify_gate.py' antes de comitar data/processed." >&2
+    exit 1
+  fi
+fi
+exit 0

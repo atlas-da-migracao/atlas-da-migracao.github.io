@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import json
 import os
 import pathlib
 import sys
@@ -26,8 +27,34 @@ from publish import COL_DIM, FILTRO_DIM, nome_col  # noqa: E402
 INTERIM = ROOT / "data/interim"
 PROCESSED = ROOT / "data/processed"
 
+GATE_OK = PROCESSED / ".gate_ok"
+GATE_VERSAO_FORMATO = 1  # versão do esquema do carimbo .gate_ok, não da versão dos dados
+
 violacoes: list[str] = []
 notas: list[str] = []
+
+
+def sha256_arquivo(caminho: pathlib.Path) -> str:
+    h = hashlib.sha256()
+    with caminho.open("rb") as fh:
+        for bloco in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(bloco)
+    return h.hexdigest()
+
+
+def hashes_publicaveis() -> dict[str, str]:
+    """SHA-256 de todo arquivo publicável em data/processed (recursivo, geo/ incluído).
+
+    Caminhos relativos em POSIX (`/`), ordenados, excluindo o próprio carimbo `.gate_ok`
+    -- é o que `verify_gate.py` recomputa e confere de forma independente do resto do gate.
+    """
+    hashes = {}
+    for f in sorted(PROCESSED.rglob("*")):
+        if not f.is_file() or f == GATE_OK:
+            continue
+        rel = f.relative_to(PROCESSED).as_posix()
+        hashes[rel] = sha256_arquivo(f)
+    return dict(sorted(hashes.items()))
 
 
 def falha(regra: str, msg: str) -> None:
@@ -237,7 +264,7 @@ def main() -> int:
     # ---- relatório ----
     if violacoes:
         print(f"\nGATE REPROVADO: {len(violacoes)} violação(ões).")
-        (PROCESSED / ".gate_ok").unlink(missing_ok=True)
+        GATE_OK.unlink(missing_ok=True)
         return 1
 
     linhas = ["# Relatório de controle de revelação",
@@ -277,8 +304,16 @@ def main() -> int:
     ]
     dest = ROOT / f"docs/relatorio_revelacao_{args.versao}.md"
     dest.write_text("\n".join(linhas) + "\n", encoding="utf-8")
-    (PROCESSED / ".gate_ok").write_text(f"{args.versao}\n{dt.datetime.now().isoformat()}\n", encoding="utf-8")
+
+    carimbo = {
+        "formato_versao": GATE_VERSAO_FORMATO,
+        "versao_dados": args.versao,
+        "timestamp": dt.datetime.now().isoformat(),
+        "arquivos": hashes_publicaveis(),
+    }
+    GATE_OK.write_text(json.dumps(carimbo, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"\nGATE APROVADO. Relatório: {dest.relative_to(ROOT)}")
+    print(f"Carimbo: {GATE_OK.relative_to(ROOT)} ({len(carimbo['arquivos'])} arquivos)")
     return 0
 
 

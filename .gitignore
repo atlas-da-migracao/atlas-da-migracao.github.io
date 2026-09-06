@@ -11,9 +11,12 @@ data/geo/raw/
 *.txt.gz
 docs/termos/*
 !docs/termos/README.md
-# dados processados só após passar pelo gate de revelação (ver CLAUDE.md)
-data/processed/*.parquet
-data/processed/*.json
+# data/processed (parquet, json, geo/*.topojson, geo/*.parquet e o carimbo .gate_ok) É
+# VERSIONADO: são os agregados já aprovados pelo gate de revelação (R1-R9), e o CI precisa
+# deles para publicar o site sem acesso aos microdados. O hook pre-commit (ver
+# scripts/pre-commit) recusa o commit se data/processed estiver em stage sem
+# .gate_ok/verify_gate.py verde -- não remover esse gate ao tocar neste arquivo.
+# web/public/data é uma cópia local de build (gerada por `npm run sync-data`), não commitada.
 web/public/data/
 # ambiente
 .venv/
