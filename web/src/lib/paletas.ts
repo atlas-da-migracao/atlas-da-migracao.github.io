@@ -85,6 +85,12 @@ export const DIMENSOES = {
 
 export type NomeDimensao = keyof typeof DIMENSOES;
 
+/** Nome legível de um recorte, a partir da chave "dimensao__categoria". */
+export function rotuloRecorte(chave: string): string {
+  const [dim, cat] = chave.split("__") as [NomeDimensao, string];
+  return DIMENSOES[dim]?.categorias.find((c) => c.chave === cat)?.rotulo ?? chave;
+}
+
 /** Faixas etárias como rampa ordinal; o sexo vira linha separada. */
 export const FAIXAS_IDADE = [
   { chave: "05_14", rotulo: "5 a 14", cor: AZUL(0) },

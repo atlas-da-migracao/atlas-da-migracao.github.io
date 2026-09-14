@@ -1,11 +1,15 @@
 /** Estado da aplicação, espelhado na URL para permitir compartilhar uma vista. */
 import { create } from "zustand";
 import type { Metrica } from "../lib/types";
+import { DIMENSOES } from "../lib/paletas";
 
 export type AbaRM = "mig" | "trab" | "estudo";
 /** F6: nível de agregação do mapa/painéis. "mun" (ausente na URL) é o padrão. */
 export type Nivel = "mun" | "rgi" | "rgint" | "uf";
 const NIVEIS: Nivel[] = ["mun", "rgi", "rgint", "uf"];
+// o recorte vira nome de coluna no SQL: só aceita pares dimensão__categoria conhecidos
+const RECORTES = new Set(Object.entries(DIMENSOES).flatMap(([dim, d]) =>
+  d.categorias.map((c) => `${dim}__${c.chave}`)));
 
 interface Estado {
   municipio: string | null;      // município selecionado (nivel "mun")
@@ -56,7 +60,7 @@ function daUrl() {
     nivel: (n && NIVEIS.includes(n) ? n : "mun") as Nivel,
     origem: p.get("o"),
     destino: p.get("d"),
-    filtro: p.get("f"),
+    filtro: RECORTES.has(p.get("f") ?? "") ? p.get("f") : null,
     metrica: (m && ["saldo", "tlm", "imig", "emig", "iem"].includes(m) ? m : "tlm") as Metrica,
     topN: Number(p.get("top") ?? 15),
     rm: p.get("rm"),

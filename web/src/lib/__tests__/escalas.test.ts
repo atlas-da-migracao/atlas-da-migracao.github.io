@@ -88,28 +88,3 @@ describe("paletas de perfil", () => {
     }
   });
 });
-
-describe("exportação em CSV", () => {
-  it("escapa separador, aspas e quebra de linha", async () => {
-    const { montarCsv } = await import("../exportar");
-    const csv = montarCsv(["a", "b", "c"], [["x;y", 'd"e', "f\ng"]]);
-    const linhaDados = csv.split("\n").slice(-2).join("\n");
-    expect(linhaDados).toContain('"x;y"');      // separador vira campo entre aspas
-    expect(linhaDados).toContain('"d""e"');     // aspas duplicadas
-    expect(linhaDados).toContain('"f');         // quebra de linha protegida
-  });
-
-  it("sempre inclui a atribuição de fonte exigida pela política de uso", async () => {
-    const { montarCsv } = await import("../exportar");
-    const csv = montarCsv(["a"], [[1]]);
-    expect(csv).toContain("IBGE, Censo Demográfico 2022");
-    expect(csv).toContain("acesso controlado");
-    expect(csv).toContain("erro amostral");
-  });
-
-  it("registra o recorte aplicado nas notas", async () => {
-    const { montarCsv } = await import("../exportar");
-    const csv = montarCsv(["a"], [[1]], ["Recorte aplicado: superior completo."]);
-    expect(csv).toContain("# Recorte aplicado: superior completo.");
-  });
-});

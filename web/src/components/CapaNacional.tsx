@@ -6,13 +6,16 @@ import { useEffect, useState } from "react";
 import { capaBrasil, maioresFluxos, type CapaBrasil } from "../db/queries";
 import type { Fluxo } from "../lib/types";
 import { num, num1 } from "../lib/format";
+import { rotuloRecorte } from "../lib/paletas";
 import { useStore } from "../state/store";
 
 interface Props {
   aoSelecionarFluxo: (o: string, d: string) => void;
+  /** chave do recorte ativo (ex.: "renda__mais_de_2_sm"), ou null */
+  recorte?: string | null;
 }
 
-export function CapaNacional({ aoSelecionarFluxo }: Props) {
+export function CapaNacional({ aoSelecionarFluxo, recorte = null }: Props) {
   const [capa, setCapa] = useState<CapaBrasil | null>(null);
   const [top5, setTop5] = useState<Fluxo[]>([]);
   const irPara = useStore((s) => s.irPara);
@@ -20,9 +23,14 @@ export function CapaNacional({ aoSelecionarFluxo }: Props) {
   useEffect(() => {
     let vivo = true;
     capaBrasil().then((c) => { if (vivo) setCapa(c); }).catch(() => {});
-    maioresFluxos(5).then((f) => { if (vivo) setTop5(f); }).catch(() => {});
     return () => { vivo = false; };
   }, []);
+
+  useEffect(() => {
+    let vivo = true;
+    maioresFluxos(5, recorte).then((f) => { if (vivo) setTop5(f); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [recorte]);
 
   const milhoes = capa ? capa.total_migrantes / 1_000_000 : null;
 
@@ -52,6 +60,11 @@ export function CapaNacional({ aoSelecionarFluxo }: Props) {
       {top5.length > 0 && (
         <section className="secao">
           <h3>Maiores fluxos do país</h3>
+          {recorte && (
+            <p className="muted-pequeno explicacao">
+              Recorte: <strong>{rotuloRecorte(recorte)}</strong> -- volume só desse subgrupo de migrantes.
+            </p>
+          )}
           <ul className="capa-nacional-lista">
             {top5.map((f) => (
               <li key={`${f.origem}-${f.destino}`}>

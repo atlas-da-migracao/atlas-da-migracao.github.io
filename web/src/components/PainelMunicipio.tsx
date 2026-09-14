@@ -5,14 +5,7 @@ import { perfilDoMunicipio } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { PiramideIdadeSexo } from "./PiramideIdadeSexo";
-import { DIMENSOES, type NomeDimensao } from "../lib/paletas";
-import { exportarFluxos } from "../lib/exportar";
-
-/** Nome legível de um recorte, a partir da chave "dimensao__categoria". */
-function rotuloRecorte(chave: string): string {
-  const [dim, cat] = chave.split("__") as [NomeDimensao, string];
-  return DIMENSOES[dim]?.categorias.find((c) => c.chave === cat)?.rotulo ?? chave;
-}
+import { DIMENSOES, rotuloRecorte, type NomeDimensao } from "../lib/paletas";
 
 interface Props {
   municipio: Municipio | null;
@@ -182,11 +175,6 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
           <TabelaFluxos titulo="Principais destinos" cor="var(--arc-out)" fluxos={saidas}
                         campo="nm_destino" campoUf="uf_destino" aoClicar={aoSelecionarFluxo} />
           <PerfilDoMunicipio cd={m.cd_mun} nome={m.nm_mun} escuro={escuro} recorte={recorte} />
-          {fluxos.length > 0 && (
-            <button className="exportar" onClick={() => exportarFluxos(m, fluxos, recorte)}>
-              Baixar estes fluxos em CSV
-            </button>
-          )}
         </>
       )}
     </aside>

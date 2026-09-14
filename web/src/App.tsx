@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { feature } from "topojson-client";
-import type { FeatureCollection } from "geojson";
-import type { Topology } from "topojson-specification";
+import { feature, merge } from "topojson-client";
+import type { Feature, FeatureCollection, MultiPolygon } from "geojson";
+import type { GeometryCollection, MultiPolygon as TopoMultiPolygon, Polygon as TopoPolygon, Topology } from "topojson-specification";
 import { MapaAtlas, type ValorMapa } from "./map/MapaAtlas";
 import { PainelMunicipio } from "./components/PainelMunicipio";
 import { PainelFluxo } from "./components/PainelFluxo";
@@ -67,6 +67,11 @@ const CORES_TIPOLOGIA = new Map<string, [number, number, number]>(
 
 export default function App() {
   const [malha, setMalha] = useState<FeatureCollection | null>(null);
+  const [topoMun, setTopoMun] = useState<Topology | null>(null);
+  // filtro cruzado mapa <-> diagrama de acordes (nível UF)
+  const [ufSobMapa, setUfSobMapa] = useState<string | null>(null);
+  const [ufsRealcadas, setUfsRealcadas] = useState<Set<string> | null>(null);
+  const aoRealcarUFs = useCallback((cds: string[] | null) => setUfsRealcadas(cds ? new Set(cds) : null), []);
   const [municipios, setMunicipios] = useState<Municipio[]>([]);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [arcos, setArcos] = useState<(Fluxo & { direcao?: string; cruza?: boolean; corRgb?: [number, number, number] })[]>([]);
@@ -82,6 +87,7 @@ export default function App() {
   // F6: níveis de agregação. `rm` sempre implica município (modo RM não existe nos demais
   // níveis); fora do modo RM, o nível efetivo é o escolhido pelo usuário.
   const nivelEfetivo: Nivel = rm ? "mun" : nivel;
+  useEffect(() => { setUfSobMapa(null); setUfsRealcadas(null); }, [nivelEfetivo]);
   const [malhaNivel, setMalhaNivel] = useState<Partial<Record<NivelAgregado, FeatureCollection>>>({});
   const [unidadesNivel, setUnidadesNivel] = useState<Partial<Record<NivelAgregado, UnidadeAgregada[]>>>({});
   const [avisoNivel, setAvisoNivel] = useState<string | null>(null);
@@ -175,6 +181,7 @@ export default function App() {
         ]);
         const chave = Object.keys(topo.objects)[0];
         setMalha(feature(topo, topo.objects[chave]) as unknown as FeatureCollection);
+        setTopoMun(topo);
         setMeta(m);
         // pinta o coroplético imediatamente; o DuckDB completa os campos depois
         setMunicipios(mapa.linhas.map(([cd, nm, uf, pop, imig, emig, saldo, tlm, iem, cv]) => ({
@@ -277,6 +284,16 @@ export default function App() {
     return () => { vivo = false; };
   }, [rm]);
 
+  // perímetro da RM: municípios dissolvidos na topologia (arcos compartilhados somem)
+  const rmPerimetro = useMemo<Feature<MultiPolygon> | null>(() => {
+    if (!topoMun || !rmDestacar || rmDestacar.size === 0) return null;
+    const objeto = topoMun.objects[Object.keys(topoMun.objects)[0]] as GeometryCollection<Record<string, string>>;
+    const geoms = objeto.geometries.filter((g): g is TopoPolygon | TopoMultiPolygon =>
+      (g.type === "Polygon" || g.type === "MultiPolygon") && !!g.properties && rmDestacar.has(g.properties.CD_MUN));
+    if (geoms.length === 0) return null;
+    return { type: "Feature", properties: {}, geometry: merge(topoMun, geoms) };
+  }, [topoMun, rmDestacar]);
+
   // fluxos exibidos no mapa: nacionais (modo Brasil) ou da RM ativa (modo metropolitano)
   const topNStore = topN;
   useEffect(() => {
@@ -316,7 +333,7 @@ export default function App() {
       return;
     }
     if (!municipio) {
-      if (municipios.length) maioresFluxos(150).then(setArcos).catch(() => {});
+      if (municipios.length) maioresFluxos(150, filtro).then(setArcos).catch(() => {});
       return;
     }
     setCarregandoFluxos(true);
@@ -448,7 +465,8 @@ export default function App() {
         <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} fluxos={arcos}
                       carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
                       aoFechar={() => selecionarUnidade(null)}
-                      fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel.uf} escuro={escuro} />
+                      fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel.uf} escuro={escuro}
+                      ufSobMapa={ufSobMapa} aoSelecionarUF={selecionarUnidade} aoRealcarUFs={aoRealcarUFs} />
       )}
     </Suspense>
   ) : origem && destino ? (
@@ -461,7 +479,7 @@ export default function App() {
                      aoSelecionarFluxo={aoSelecionarFluxo}
                      aoFechar={() => selecionarMunicipio(null)} />
   ) : (
-    <CapaNacional aoSelecionarFluxo={aoSelecionarFluxo} />
+    <CapaNacional aoSelecionarFluxo={aoSelecionarFluxo} recorte={filtro} />
   );
 
   // F6: itens de busca e rótulo do campo, de acordo com o nível ativo
@@ -573,8 +591,9 @@ export default function App() {
             arcos={arcos} selecionado={codigoSelecionado} escuro={escuro}
             aoSelecionar={aoSelecionarNoMapa} aoSelecionarFluxo={aoSelecionarFluxo}
             foco={foco} zoomMaximo={zoomMaximo} rotuloReenquadrar={rotuloReenquadrar}
-            destacar={rmDestacar} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
+            destacar={rmDestacar ?? (nivelEfetivo === "uf" ? ufsRealcadas : null)} perimetro={rmPerimetro} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
             descricaoAcessivel={descricaoMapa}
+            aoPassarFeicao={nivelEfetivo === "uf" ? setUfSobMapa : undefined}
           />
           {porCodigoAtivo.size > 0 && !rm && (
             <Legenda metrica={metrica} quebras={quebras} escuro={escuro}

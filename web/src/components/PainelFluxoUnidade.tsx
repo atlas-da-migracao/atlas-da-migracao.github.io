@@ -4,7 +4,6 @@
 import { useEffect, useState } from "react";
 import { detalheFluxoUnidade, type DetalheFluxoUnidade, type NivelAgregado } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
-import { baixarCsv } from "../lib/exportar";
 import { num, rotuloPrecisao, sinal } from "../lib/format";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
@@ -89,16 +88,6 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar }: Props) 
         Nível agregado: sem erro-padrão publicado.
       </div>
 
-      <button className="exportar" onClick={() => baixarCsv(
-        `fluxo_${rotuloNivel.toLowerCase().replace(/\s+/g, "_")}_${ida.nm_origem}_${ida.nm_destino}`
-          .toLowerCase().replace(/\s+/g, "_"),
-        ["direcao", "origem", "destino", "migrantes", "obs_amostra", "precisao"],
-        [["ida", ida.nm_origem, ida.nm_destino, ida.total, ida.n_faixa, ida.precisao],
-         ...(volta ? [["volta", volta.nm_origem, volta.nm_destino, volta.total, volta.n_faixa, volta.precisao]] : [])],
-        [`Par (${rotuloNivel}): ${ida.nm_origem} → ${ida.nm_destino}.`, "Nível agregado: sem erro-padrão próprio."],
-      )}>
-        Baixar este fluxo em CSV
-      </button>
     </aside>
   );
 }

@@ -158,10 +158,16 @@
   position: absolute; z-index: 5; left: 12px; bottom: 12px; padding: 10px 12px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius);
   font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.10);
+  max-width: min(300px, calc(100vw - 24px));
+}
+.legenda-chip {
+  position: absolute; z-index: 5; left: 12px; bottom: 12px;
+  padding: 6px 12px; font-size: 12.5px; background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0,0,0,.10); color: var(--ink);
 }
 .legenda-titulo { font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.legenda-fechar-mobile { display: none; font-size: 16px; padding: 0 2px; }
-@media (max-width: 700px) { .legenda-fechar-mobile { display: inline-flex; } }
+.legenda-fechar { display: inline-flex; font-size: 16px; padding: 0 2px; flex: none; }
 .legenda ul { list-style: none; margin: 0; padding: 0; }
 .legenda li { display: flex; align-items: center; gap: 7px; line-height: 1.7; color: var(--ink-secondary); }
 .amostra { display: inline-block; width: 14px; height: 12px; border-radius: 2px;
@@ -278,11 +284,6 @@
 .carregando-recorte { margin: 14px 0; padding: 12px; text-align: center; background: var(--plane);
                       border: 1px dashed var(--border); border-radius: var(--radius); font-size: 12.5px; }
 
-.exportar { margin-top: 20px; width: 100%; padding: 7px 12px; cursor: pointer; font-size: 12.5px;
-            background: var(--surface-raised); border: 1px solid var(--border);
-            border-radius: var(--radius); color: var(--ink-secondary); }
-.exportar:hover { background: var(--plane); color: var(--ink); }
-
 .legenda-espessura { display: flex; align-items: center; gap: 4px; margin-top: 5px; }
 .legenda-espessura span { display: inline-block; width: 16px; border-radius: 2px; background: var(--ink-muted); }
 .legenda-espessura em { font-style: normal; margin-left: 4px; }
@@ -373,6 +374,10 @@
 .acordes-figura { margin-top: 6px; }
 .acordes-figura svg { width: 100%; height: auto; }
 .acorde-arco { cursor: default; }
+.acorde-arco.clicavel { cursor: pointer; }
+.acorde-arco.selecionado { stroke: var(--ink); stroke-width: 1.5px; }
+.acorde-arco:focus, .acorde-corda:focus { outline: none; }
+.acorde-arco:focus-visible, .acorde-corda:focus-visible { stroke: var(--ink); stroke-width: 2px; }
 .acorde-corda { cursor: pointer; transition: opacity .12s ease; }
 .acorde-rotulo { font-size: 9.5px; fill: var(--ink-secondary); }
 
@@ -433,23 +438,12 @@
     background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--ink);
   }
 
-  .legenda { display: none; }
-  .legenda.mostrar { display: block; max-width: calc(100vw - 24px); }
-  .legenda-chip {
-    display: inline-flex; position: absolute; z-index: 5; left: 12px; bottom: 12px;
-    padding: 6px 12px; font-size: 12.5px; background: var(--surface-raised);
-    border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
-    box-shadow: 0 2px 10px rgba(0,0,0,.10); color: var(--ink);
-  }
-
   .mapa { min-height: 42vh; }
   .conteudo { flex-direction: column; }
   .painel { width: auto; flex: 1; min-height: 0; border-left: 0; border-top: 1px solid var(--hairline); }
 }
 
 @media (min-width: 701px) {
-  .legenda-chip { display: none; }
-  .legenda { display: block !important; }
   .filtros-backdrop { display: none !important; }
   .grupo-filtros { position: static !important; display: flex !important; }
   .filtros-fechar { display: none !important; }

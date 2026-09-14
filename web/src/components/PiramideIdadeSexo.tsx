@@ -24,6 +24,11 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
   const ref = valoresReferencia ? prepararPiramide(valoresReferencia) : null;
   if (grupo.total <= 0) return null;
 
+  // convenção usual da pirâmide etária: faixa mais velha no topo, mais nova embaixo
+  // (prepararPiramide devolve as faixas em ordem crescente; invertemos só na exibição).
+  const pontosExibidos = [...grupo.pontos].reverse();
+  const refExibidos = ref ? [...ref.pontos].reverse() : null;
+
   const maiorPct = Math.max(
     ...grupo.pontos.map((p) => Math.max(p.pctHomens, p.pctMulheres)),
     ...(ref?.pontos.map((p) => Math.max(p.pctHomens, p.pctMulheres)) ?? [0]),
@@ -36,10 +41,10 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
 
   const rotuloAria = [
     `${titulo}. ${rotuloGrupo}:`,
-    ...grupo.pontos.map((p) =>
+    ...pontosExibidos.map((p) =>
       `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`),
     ref && rotuloReferencia ? `Referência (${rotuloReferencia}):` : "",
-    ...(ref?.pontos.map((p) =>
+    ...(refExibidos?.map((p) =>
       `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`) ?? []),
   ].filter(Boolean).join(" ");
 
@@ -47,8 +52,8 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
     <section className="perfil">
       <h4>{titulo}</h4>
       <div className="piramide" role="img" aria-label={rotuloAria}>
-        {grupo.pontos.map((p, i) => {
-          const r = ref?.pontos[i];
+        {pontosExibidos.map((p, i) => {
+          const r = refExibidos?.[i];
           return (
             <div className="piramide-linha" key={p.chave}>
               <div className="piramide-barra homens">

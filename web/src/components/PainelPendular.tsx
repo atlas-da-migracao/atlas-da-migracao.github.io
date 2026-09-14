@@ -4,7 +4,6 @@
 import { useEffect, useState } from "react";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { detalhePendular, dimensoesPendular, type DetalhePendular } from "../db/queries";
-import { exportarPendular } from "../lib/exportar";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { DIMENSOES_PENDULAR, type NomeDimensaoPendular } from "../lib/paletas";
 import { agruparOcupacao, agruparTempo } from "../lib/rm";
@@ -133,10 +132,6 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
         {ida.cv != null && <> (coeficiente de variação {num1(ida.cv)}%)</>} ·{" "}
         {ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações na amostra
       </div>
-
-      <button className="exportar" onClick={() => exportarPendular(ida, volta, tipo)}>
-        Baixar este fluxo em CSV
-      </button>
 
       {!ida.tem_detalhe ? (
         <p className="aviso">

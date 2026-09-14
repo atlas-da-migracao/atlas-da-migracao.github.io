@@ -31,12 +31,18 @@ export const fluxosDoMunicipio = (cd: string, topN: number) =>
     JOIN cent cd_ ON cd_.cd_mun = u.destino
     ORDER BY u.total DESC`);
 
-/** Maiores fluxos do país, para a primeira pintura do mapa. */
-export const maioresFluxos = (limite = 400) =>
+/** Maiores fluxos do país, para a primeira pintura do mapa. Com `coluna` (recorte
+ *  "dimensao__categoria"), ordena e dimensiona pelo volume daquele subgrupo. */
+export const maioresFluxos = (limite = 400, coluna: string | null = null) =>
   consultar<Fluxo>(`
     WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
-    t AS (SELECT * FROM fluxos ORDER BY total DESC LIMIT ${limite})
-    SELECT t.origem, t.destino, t.total, t.se, t.cv, t.n_faixa, t.precisao,
+    t AS (
+      SELECT *, ${coluna ? `"${coluna}"` : "total"} AS volume FROM fluxos
+      ${coluna ? `WHERE "${coluna}" > 0` : ""}
+      ORDER BY volume DESC LIMIT ${limite}
+    )
+    SELECT t.origem, t.destino, t.volume AS total,
+           ${coluna ? "NULL AS se, NULL AS cv, NULL AS n_faixa, NULL AS precisao" : "t.se, t.cv, t.n_faixa, t.precisao"},
            ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
            rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
            co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
@@ -44,7 +50,8 @@ export const maioresFluxos = (limite = 400) =>
     JOIN municipios_ref ro ON ro.cd_mun = t.origem
     JOIN municipios_ref rd ON rd.cd_mun = t.destino
     JOIN cent co ON co.cd_mun = t.origem
-    JOIN cent cd_ ON cd_.cd_mun = t.destino`);
+    JOIN cent cd_ ON cd_.cd_mun = t.destino
+    ORDER BY t.volume DESC`);
 
 /** Perfil de um município por dimensão (imigrantes, emigrantes e residentes). */
 export const perfilDoMunicipio = (cd: string, dimensao: string) =>
@@ -89,15 +96,18 @@ export const referenciasDoPerfil = (origem: string, destino: string) =>
 
 /** Fluxos filtrados por uma categoria de característica, para mapa e tabelas.
  *  A coluna larga correspondente vira o volume: assim o mapa responde ao filtro
- *  sem precisar de outra tabela. */
+ *  sem precisar de outra tabela. se/cv/precisão publicados são do fluxo total, não do
+ *  subgrupo, por isso saem nulos. */
 export const fluxosPorCategoria = (cd: string, coluna: string, topN: number) =>
   consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
     WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
     entradas AS (
-      SELECT 'entrada' AS direcao, origem, destino, "${coluna}" AS total, se, cv, n_faixa, precisao
+      SELECT 'entrada' AS direcao, origem, destino, "${coluna}" AS total,
+             NULL AS se, NULL AS cv, NULL AS n_faixa, NULL AS precisao
       FROM fluxos WHERE destino = ${lit(cd)} AND "${coluna}" > 0 ORDER BY "${coluna}" DESC LIMIT ${topN}
     ), saidas AS (
-      SELECT 'saida' AS direcao, origem, destino, "${coluna}" AS total, se, cv, n_faixa, precisao
+      SELECT 'saida' AS direcao, origem, destino, "${coluna}" AS total,
+             NULL AS se, NULL AS cv, NULL AS n_faixa, NULL AS precisao
       FROM fluxos WHERE origem = ${lit(cd)} AND "${coluna}" > 0 ORDER BY "${coluna}" DESC LIMIT ${topN}
     ), u AS (SELECT * FROM entradas UNION ALL SELECT * FROM saidas)
     SELECT u.*, ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,

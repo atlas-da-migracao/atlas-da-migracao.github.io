@@ -6,8 +6,9 @@
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 blocked=$(printf '%s\n' "$staged" | grep -E '^(data/raw/|data/interim/|data/geo/raw/)|\.(csv|CSV)$|(^|/)\.env(\.|$)|\.(pem|key|p12|pfx)$|credentials.*\.json$' \
           | grep -v '^pipeline/rm_nucleo\.csv$' || true)
-# docs/termos: tudo bloqueado, exceto o README
-termos=$(printf '%s\n' "$staged" | grep -E '^docs/termos/' | grep -v '^docs/termos/README\.md$' || true)
+# docs/termos e docs/ibge (termos assinados, documentação técnica e correspondência com o IBGE,
+# que contêm dados pessoais do titular): tudo bloqueado, exceto o README de cada pasta
+termos=$(printf '%s\n' "$staged" | grep -E '^docs/(termos|ibge)/|^Documentacao_Tecnica_.*\.pdf$' | grep -vE '^docs/(termos|ibge)/README\.md$' || true)
 blocked="$blocked
 $termos"
 blocked=$(printf '%s\n' "$blocked" | sed '/^$/d')

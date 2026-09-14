@@ -5,7 +5,6 @@
 import type { Fluxo } from "../lib/types";
 import type { NivelAgregado, UnidadeAgregada } from "../db/queries";
 import { num, num2, sinal } from "../lib/format";
-import { exportarFluxosUnidade } from "../lib/exportar";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { DiagramaAcordes } from "./DiagramaAcordes";
 import type { FluxoUF, UnidadeUF } from "../lib/acordes";
@@ -63,10 +62,20 @@ interface Props {
   fluxosUF?: FluxoUF[];
   unidadesUF?: UnidadeUF[];
   escuro?: boolean;
+  /** filtro cruzado com o mapa (nível "uf"): UF sob o cursor no mapa, seleção e realce devolvido ao mapa */
+  ufSobMapa?: string | null;
+  aoSelecionarUF?: (cd: string | null) => void;
+  aoRealcarUFs?: (cds: string[] | null) => void;
 }
 
 export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionarFluxo, aoFechar,
-                                fluxosUF, unidadesUF, escuro = false }: Props) {
+                                fluxosUF, unidadesUF, escuro = false, ufSobMapa = null,
+                                aoSelecionarUF, aoRealcarUFs }: Props) {
+  const acordes = fluxosUF && unidadesUF && (
+    <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
+                     aoSelecionarPar={aoSelecionarFluxo} selecionado={unidade?.codigo ?? null}
+                     realceExterno={ufSobMapa} aoSelecionarUF={aoSelecionarUF} aoRealcar={aoRealcarUFs} />
+  );
   const pronto = usarDuckDBPronto();
   const rotuloNivel = ROTULO_NIVEL[nivel];
 
@@ -85,11 +94,10 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
             (ver a página de Metodologia).
           </p>
         </div>
-        {nivel === "uf" && fluxosUF && unidadesUF && (
+        {nivel === "uf" && acordes && (
           <section className="secao">
             <h3>Fluxos migratórios entre UFs</h3>
-            <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
-                             aoSelecionarPar={aoSelecionarFluxo} />
+            {acordes}
           </section>
         )}
       </aside>
@@ -140,11 +148,10 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
         </div>
       )}
 
-      {nivel === "uf" && fluxosUF && unidadesUF && (
+      {nivel === "uf" && acordes && (
         <section className="secao">
           <h3>Fluxos migratórios entre UFs</h3>
-          <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
-                           aoSelecionarPar={aoSelecionarFluxo} />
+          {acordes}
         </section>
       )}
 
@@ -156,11 +163,6 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
                         campo="nm_origem" campoUf="uf_origem" aoClicar={aoSelecionarFluxo} />
           <TabelaFluxos titulo="Principais destinos" cor="var(--arc-out)" fluxos={saidas}
                         campo="nm_destino" campoUf="uf_destino" aoClicar={aoSelecionarFluxo} />
-          {fluxos.length > 0 && (
-            <button className="exportar" onClick={() => exportarFluxosUnidade(rotuloNivel, unidade.nome, fluxos)}>
-              Baixar estes fluxos em CSV
-            </button>
-          )}
         </>
       )}
     </aside>

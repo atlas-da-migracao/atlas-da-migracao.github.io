@@ -43,6 +43,8 @@ interface Props {
   rotuloReenquadrar?: string;
   /** municípios a destacar (modo RM); os demais recebem alpha reduzido */
   destacar?: Set<string> | null;
+  /** contorno externo da RM ativa (municípios dissolvidos) */
+  perimetro?: Feature | null;
   /** código do núcleo da RM ativa, para contorno mais grosso */
   nucleo?: string | null;
   /** F6: nome da propriedade que identifica a feição na malha ativa (CD_MUN por padrão;
@@ -54,6 +56,8 @@ interface Props {
   /** F6 leva 2: descrição da vista atual, para quem usa leitor de tela (o canvas do deck.gl
    *  não expõe conteúdo textual por si só; os mesmos dados estão nas tabelas do painel). */
   descricaoAcessivel?: string;
+  /** avisado quando a feição sob o cursor muda (código, ou null fora da malha) */
+  aoPassarFeicao?: (cd: string | null) => void;
 }
 
 const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | null => {
@@ -69,10 +73,22 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
 
 export function MapaAtlas({
   malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
-  foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, nucleo = null,
-  campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel,
+  foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
+  campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
+  const feicaoSobCursor = useRef<string | null>(null);
+  const aoHover = (info: PickingInfo) => {
+    setHover(info);
+    if (!aoPassarFeicao) return;
+    const cd = info.layer?.id === "municipios"
+      ? (info.object as Feature<Geometry, Record<string, string>> | undefined)?.properties?.[campoId] ?? null
+      : null;
+    if (cd !== feicaoSobCursor.current) {
+      feicaoSobCursor.current = cd;
+      aoPassarFeicao(cd);
+    }
+  };
   // vista controlada: garante que a carga da página sempre comece enquadrando o Brasil
   const [vista, setVista] = useState<MapViewState>(VISTA_BRASIL);
   const [moveu, setMoveu] = useState(false);
@@ -178,6 +194,19 @@ export function MapaAtlas({
       },
     });
 
+    const contornoRM = perimetro && new GeoJsonLayer({
+      id: "perimetro-rm",
+      data: [perimetro],
+      pickable: false,
+      stroked: true,
+      filled: false,
+      lineWidthUnits: "pixels",
+      lineJointRounded: true,
+      getLineWidth: 2.5,
+      getLineColor: escuro ? [255, 255, 255, 235] : [11, 11, 11, 235],
+      updateTriggers: { getLineColor: [escuro] },
+    });
+
     const fluxos = new ArcLayer({
       id: "arcos",
       data: arcos,
@@ -208,10 +237,10 @@ export function MapaAtlas({
       updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
     });
 
-    return [municipios, fluxos];
+    return [municipios, contornoRM, fluxos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo, maiorVolume,
-      destacar, nucleo, campoId]);
+      destacar, perimetro, nucleo, campoId]);
 
   const dica = hover?.object as
     | (Feature<Geometry, Record<string, string>> & Fluxo)
@@ -245,7 +274,7 @@ export function MapaAtlas({
         }}
         controller={{ dragRotate: false }}
         layers={camadas}
-        onHover={setHover}
+        onHover={aoHover}
         getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}
         style={{ background: escuro ? "#0d0d0d" : "#f9f9f7" }}
       />

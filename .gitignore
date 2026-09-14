@@ -43,3 +43,9 @@ web/public/duckdb/
 *.pfx
 credentials*.json
 service-account*.json
+
+# correspondência e documentação técnica enviadas ao IBGE: contêm dados pessoais do titular
+# (CPF, protocolo). Nunca versionar; só o README de docs/ibge/ é rastreado.
+docs/ibge/*
+!docs/ibge/README.md
+Documentacao_Tecnica_*.pdf

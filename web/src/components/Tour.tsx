@@ -34,7 +34,7 @@ const PASSOS: Passo[] = [
     alvo: ".painel",
     titulo: "Painel de detalhes",
     texto: "Ao selecionar um município ou um fluxo, este painel mostra os indicadores, os principais " +
-      "fluxos e o perfil dos migrantes -- com opção de baixar em CSV.",
+      "fluxos e o perfil dos migrantes.",
   },
   {
     alvo: '[data-tour="modo-rm"]',

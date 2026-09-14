@@ -2,7 +2,7 @@
  *  UFs, arcos coloridos pela grande região, cordas com opacidade baixa e destaque ao
  *  passar o mouse/focar. Desenho em SVG próprio (como o Sankey), sem lib de renderização --
  *  só o layout vem de d3-chord/d3-shape. */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { chord, ribbon } from "d3-chord";
 import { arc as arcShape } from "d3-shape";
 import { prepararMatrizAcordes, type FluxoUF, type UnidadeUF } from "../lib/acordes";
@@ -17,16 +17,46 @@ interface Props {
   unidades: UnidadeUF[];
   escuro: boolean;
   aoSelecionarPar: (o: string, d: string) => void;
+  /** UF selecionada no mapa: fica em destaque quando não há hover */
+  selecionado?: string | null;
+  /** UF sob o cursor no mapa */
+  realceExterno?: string | null;
+  /** clique no arco de uma UF (null = desmarcar) */
+  aoSelecionarUF?: (cd: string | null) => void;
+  /** UFs em foco no diagrama, para o mapa esmaecer as demais (null = nenhuma) */
+  aoRealcar?: (cds: string[] | null) => void;
 }
 
 const TAMANHO = 560;
 const RAIO_EXTERNO = TAMANHO / 2 - 60;
 const RAIO_INTERNO = RAIO_EXTERNO - 14;
 
-export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar }: Props) {
-  const [ativo, setAtivo] = useState<number | null>(null);
+export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, selecionado = null,
+                                  realceExterno = null, aoSelecionarUF, aoRealcar }: Props) {
+  const [hover, setHover] = useState<number | null>(null);
 
   const dados = useMemo(() => prepararMatrizAcordes(fluxos, unidades), [fluxos, unidades]);
+  const indiceDe = (cd: string | null) => {
+    const i = cd == null ? -1 : dados.codigos.indexOf(cd);
+    return i < 0 ? null : i;
+  };
+  const iSelecionado = indiceDe(selecionado);
+  const ativo = hover ?? indiceDe(realceExterno) ?? iSelecionado;
+
+  const realcarRef = useRef(aoRealcar);
+  realcarRef.current = aoRealcar;
+  useEffect(() => () => realcarRef.current?.(null), []);
+
+  const entrar = (i: number, par?: number) => {
+    setHover(i);
+    aoRealcar?.(par == null ? [dados.codigos[i]] : [dados.codigos[i], dados.codigos[par]]);
+  };
+  const sair = () => {
+    setHover(null);
+    aoRealcar?.(null);
+  };
+  const alternarUF = (i: number) =>
+    aoSelecionarUF?.(i === iSelecionado ? null : dados.codigos[i]);
   const nomePorCodigo = useMemo(
     () => new Map(unidades.map((u) => [u.codigo, u.uf_sigla ?? u.nome])), [unidades]);
 
@@ -59,8 +89,10 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar }: P
             return (
               <path key={i} d={gerRibbon(c) ?? undefined} className="acorde-corda"
                     fill={cIni} opacity={emFoco ? 0.55 : 0.06}
-                    onMouseEnter={() => setAtivo(c.source.index)}
-                    onMouseLeave={() => setAtivo(null)}
+                    onMouseEnter={() => entrar(c.source.index, c.target.index)}
+                    onMouseLeave={sair}
+                    onFocus={() => entrar(c.source.index, c.target.index)}
+                    onBlur={sair}
                     onClick={() => aoSelecionarPar(dados.codigos[c.source.index], dados.codigos[c.target.index])}
                     tabIndex={0}
                     role="button"
@@ -82,10 +114,20 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar }: P
             const y = -Math.cos(angulo) * raioRotulo;
             return (
               <g key={i}>
-                <path d={gerArc(g) ?? undefined} className="acorde-arco"
+                <path d={gerArc(g) ?? undefined}
+                      className={`acorde-arco${aoSelecionarUF ? " clicavel" : ""}${i === iSelecionado ? " selecionado" : ""}`}
                       fill={corDeCategoria(CORES_REGIAO[dados.regiaoIdx[i]], escuro)}
                       opacity={emFoco ? 1 : 0.3}
-                      onMouseEnter={() => setAtivo(i)} onMouseLeave={() => setAtivo(null)} />
+                      onMouseEnter={() => entrar(i)} onMouseLeave={sair}
+                      {...(aoSelecionarUF ? {
+                        role: "button", tabIndex: 0, "aria-pressed": i === iSelecionado,
+                        "aria-label": `${dados.siglas[i]}: ${i === iSelecionado ? "desmarcar" : "selecionar"} no mapa`,
+                        onClick: () => alternarUF(i),
+                        onFocus: () => entrar(i), onBlur: sair,
+                        onKeyDown: (e: React.KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); alternarUF(i); }
+                        },
+                      } : {})} />
                 <text x={x} y={y} textAnchor="middle" dominantBaseline="middle"
                       className="acorde-rotulo" opacity={emFoco ? 1 : 0.4}>
                   {dados.siglas[i]}
