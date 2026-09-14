@@ -1,6 +1,8 @@
-/** Diagrama aluvial de 3 colunas: morava em (2017) -> mora em (2022) -> trabalha em (2022).
- *  Camada visual fina sobre d3-sankey (só o layout; a marcação é SVG simples, sem
- *  biblioteca de desenho, como as demais barras do atlas). */
+/** Diagrama aluvial de 3 colunas: morava em (anoOrigem) -> mora em (anoDestino) -> trabalha
+ *  em (anoDestino) -- os anos variam por edição do Censo (2022: 2017/2022; 2010: 2005/2010),
+ *  recebidos como prop de quem chama (PainelRM.tsx). Camada visual fina sobre d3-sankey (só
+ *  o layout; a marcação é SVG simples, sem biblioteca de desenho, como as demais barras do
+ *  atlas). */
 import { useMemo } from "react";
 import { sankey, sankeyLinkHorizontal } from "d3-sankey";
 import type { SankeyGraph, SankeyLink, SankeyNode } from "d3-sankey";
@@ -15,6 +17,10 @@ type Link = SankeyLink<NoDatum, LinkDatum>;
 interface Props {
   dados: DadosSankey;
   escuro: boolean;
+  /** ano de referência da coluna "origem" (morava em), ex.: "2017" (2022) ou "2005" (2010) */
+  anoOrigem: string;
+  /** ano de referência das colunas "residência"/"trabalho" (mora em / trabalha em) */
+  anoDestino: string;
   largura?: number;
   altura?: number;
 }
@@ -27,7 +33,7 @@ function corDoLink(classe: string, escuro: boolean): string {
   return c ? cor(c.cor, escuro) : cor(CINZA_RESIDENCIA, escuro);
 }
 
-export function Sankey({ dados, escuro, largura = 340, altura = 340 }: Props) {
+export function Sankey({ dados, escuro, anoOrigem, anoDestino, largura = 340, altura = 340 }: Props) {
   const layout = useMemo(() => {
     if (dados.nodes.length === 0 || dados.links.length === 0) return null;
     const grafo: SankeyGraph<NoDatum, LinkDatum> = {
@@ -49,7 +55,7 @@ export function Sankey({ dados, escuro, largura = 340, altura = 340 }: Props) {
 
   return (
     <svg viewBox={`0 0 ${largura} ${altura}`} width="100%" height={altura} role="img"
-         aria-label="Diagrama de fluxo: onde os migrantes moravam em 2017, passaram a morar e trabalham em 2022">
+         aria-label={`Diagrama de fluxo: onde os migrantes moravam em ${anoOrigem}, passaram a morar e trabalham em ${anoDestino}`}>
       <g>
         {(layout.links as Link[]).map((l, i) => (
           <path key={i} d={path(l) ?? undefined} fill="none"

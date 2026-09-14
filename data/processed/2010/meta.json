@@ -1,0 +1,115 @@
+{
+  "edicao": "2010",
+  "versao_dados": "2026-09-14",
+  "gerado_em": "2026-09-14T15:24:48",
+  "fonte": "IBGE, Censo Demográfico 2010, microdados da amostra (acesso controlado)",
+  "periodo_referencia": {
+    "de": "2005-07-31",
+    "ate": "2010-07-31"
+  },
+  "salario_minimo_referencia": 510.0,
+  "revelacao": {
+    "min_pessoas": 5,
+    "min_domicilios": 3,
+    "min_pessoas_detalhe": 20,
+    "arredondamento": 5,
+    "cv_boa": 15.0,
+    "cv_cautela": 30.0
+  },
+  "rotulos": {
+    "status": {
+      "retorno_natal": "Retorno ao município natal",
+      "primeira_saida": "Primeira saída do município natal",
+      "etapas_multiplas": "Migração de etapas múltiplas",
+      "nao_natural": "Não nasceu no município nem no exterior",
+      "nascido_exterior": "Nascido no exterior, migrante interno",
+      "internacional_brasileiro": "Retorno do exterior (brasileiro)",
+      "internacional_estrangeiro": "Imigração internacional (estrangeiro)",
+      "origem_nao_informada": "Origem não informada",
+      "outros": "Outros / suprimido"
+    },
+    "edu": {
+      "sem_instr_fund_incompleto": "Sem instrução ou fundamental incompleto",
+      "fund_completo_medio_incompleto": "Fundamental completo, médio incompleto",
+      "medio_completo_superior_incompleto": "Médio completo, superior incompleto",
+      "superior_completo": "Superior completo",
+      "nao_determinado": "Não determinado",
+      "outros": "Outros / suprimido"
+    },
+    "renda": {
+      "ate_1_4_sm": "Até 1/4 de salário mínimo",
+      "de_1_4_a_1_2_sm": "De 1/4 a 1/2 salário mínimo",
+      "de_1_2_a_1_sm": "De 1/2 a 1 salário mínimo",
+      "de_1_a_2_sm": "De 1 a 2 salários mínimos",
+      "mais_de_2_sm": "Mais de 2 salários mínimos",
+      "nao_aplicavel": "Não aplicável (domicílio coletivo)",
+      "outros": "Outros / suprimido"
+    },
+    "idade_sexo": {
+      "05_14_M": "5 a 14 anos, masculino",
+      "05_14_F": "5 a 14 anos, feminino",
+      "15_24_M": "15 a 24 anos, masculino",
+      "15_24_F": "15 a 24 anos, feminino",
+      "25_39_M": "25 a 39 anos, masculino",
+      "25_39_F": "25 a 39 anos, feminino",
+      "40_59_M": "40 a 59 anos, masculino",
+      "40_59_F": "40 a 59 anos, feminino",
+      "60_mais_M": "60 anos ou mais, masculino",
+      "60_mais_F": "60 anos ou mais, feminino",
+      "outros": "Outros / suprimido"
+    },
+    "frequencia": {
+      "retorno_diario": "Retorna diariamente",
+      "semanal_longa": "Não retorna diariamente"
+    },
+    "posicao": {
+      "empregado_com_carteira": "Empregado com carteira",
+      "empregado_sem_carteira": "Empregado sem carteira",
+      "militar_estatutario": "Militar ou estatutário",
+      "empregador": "Empregador",
+      "conta_propria_familiar": "Conta própria ou familiar"
+    },
+    "setor": {
+      "agropecuaria": "Agropecuária",
+      "industria": "Indústria",
+      "construcao": "Construção",
+      "comercio": "Comércio",
+      "transporte_logistica": "Transporte e logística",
+      "servicos_empresariais": "Serviços empresariais",
+      "admin_educacao_saude": "Administração, educação e saúde",
+      "outros_servicos": "Outros serviços"
+    },
+    "renda_trab": {
+      "sem_declaracao": "Sem declaração",
+      "ate_1_sm": "Até 1 salário mínimo",
+      "de_1_a_2_sm": "De 1 a 2 salários mínimos",
+      "de_2_a_3_sm": "De 2 a 3 salários mínimos",
+      "de_3_a_5_sm": "De 3 a 5 salários mínimos",
+      "mais_de_5_sm": "Mais de 5 salários mínimos"
+    },
+    "nivel": {
+      "infantil_fundamental": "Infantil ou fundamental",
+      "medio": "Médio",
+      "graduacao": "Graduação",
+      "pos_graduacao": "Pós-graduação"
+    },
+    "tempo": {
+      "ate_5min": "Até 5 min",
+      "de_6_a_30min": "6 a 30 min",
+      "de_31min_a_1h": "31 min a 1 h",
+      "de_1_a_2h": "1 a 2 h",
+      "mais_de_2h": "Mais de 2 h",
+      "nao_se_aplica": "Não retorna diariamente"
+    }
+  },
+  "citacao": {
+    "autor": "Daniel Pessini",
+    "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
+    "doi_conceito": "10.5281/zenodo.22469791",
+    "doi_versao": "10.5281/zenodo.22469792",
+    "licenca": "CC BY 4.0",
+    "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
+    "texto": "Daniel Pessini. Atlas da migração interna no Brasil. Dados do Censo Demográfico 2010 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
+  },
+  "aviso": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 2010 (IBGE, acesso controlado), sujeitas a erro amostral e a controle estatístico de revelação; podem divergir das tabulações oficiais do IBGE (SIDRA)."
+}

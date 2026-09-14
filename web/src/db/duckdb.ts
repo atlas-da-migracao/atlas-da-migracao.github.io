@@ -1,4 +1,4 @@
-/** DuckDB-WASM em worker.
+/** DuckDB-WASM em worker -- uma instância (worker + banco + views) por edição do Censo.
  *
  *  O runtime (worker + .wasm) é servido de /duckdb como arquivo estático, copiado do
  *  node_modules por scripts/copy-duckdb.sh -- e não baixado do CDN jsDelivr. Assim o
@@ -8,17 +8,26 @@
  *
  *  Os Parquet publicados são registrados por URL e lidos com range requests, então só as
  *  partes necessárias de cada arquivo trafegam: a matriz de fluxos nunca é baixada inteira.
+ *
+ *  Multi-edição (F4): cada `Censo` tem seu próprio `AsyncDuckDB` (worker isolado, registrado
+ *  a partir de `basePath(censo)`) -- os nomes de view são os mesmos em todas as edições
+ *  (`municipios`, `fluxos`, ...), então `queries.ts` não precisa saber qual edição está
+ *  ativa: toda consulta é dirigida à conexão certa por `consultar()`, que por padrão usa a
+ *  edição ativa no estado global (`useStore.getState().censo`) quando nenhuma é passada.
  */
 import { useEffect, useState } from "react";
 import * as duckdb from "@duckdb/duckdb-wasm";
+import { basePath, CENSO_PADRAO, edicao, type Censo } from "../lib/edicoes";
+import { useStore } from "../state/store";
 
-let conexao: Promise<duckdb.AsyncDuckDBConnection> | null = null;
-
-/** Tabelas publicadas em /data, registradas como views. */
-const TABELAS = [
+/** Tabelas publicadas em todas as edições. */
+const TABELAS_BASE = [
   "municipios", "municipios_dim", "municipios_ref", "municipios_pendular",
   "fluxos", "fluxos_rgi", "fluxos_rgint", "fluxos_uf",
   "pendular_trab", "pendular_trab_dim", "pendular_estudo", "pendular_estudo_dim",
+] as const;
+/** Módulo metropolitano (F5b): só existe em edições com `recursos.rm` (ver lib/edicoes.ts). */
+const TABELAS_RM = [
   "rm", "rm_resumo", "rm_fluxos_intra", "rm_mig_pendular", "rm_mig_pendular_resumo",
   "rm_mig_estudo",
 ] as const;
@@ -33,34 +42,42 @@ const ARQUIVOS_GEO = [
 // A primeira pintura do mapa usa só municipios_mapa.json (~1s); tudo que depende do DuckDB
 // (arcos, painéis) só fica pronto depois de baixar o motor (~1-2 MB de wasm) e registrar as
 // views -- historicamente 5-6s sem nenhum sinal visual. Este pequeno emissor deixa a interface
-// (componente EstadoDados) mostrar em que etapa a carga está.
+// (componente EstadoDados) mostrar em que etapa a carga está. Por edição: trocar de censo tem
+// sua própria carga a frio na primeira vez (conexões não são reaproveitadas entre edições).
 export type EstagioCarga = "baixando" | "iniciando" | "registrando" | "pronto" | "erro";
 export interface ProgressoDuckDB { estagio: EstagioCarga; mensagem: string; erro?: string }
 
 type Ouvinte = (p: ProgressoDuckDB) => void;
-const ouvintes = new Set<Ouvinte>();
-let ultimoProgresso: ProgressoDuckDB = { estagio: "baixando", mensagem: "baixando o motor…" };
+const ouvintesPorEdicao = new Map<Censo, Set<Ouvinte>>();
+const progressoPorEdicao = new Map<Censo, ProgressoDuckDB>();
 
-function emitir(p: ProgressoDuckDB) {
-  ultimoProgresso = p;
-  for (const o of ouvintes) o(p);
+function progressoDe(censo: Censo): ProgressoDuckDB {
+  return progressoPorEdicao.get(censo) ?? { estagio: "baixando", mensagem: "baixando o motor…" };
 }
 
-/** Estado mais recente, para quem se inscreve depois do início da carga. */
-export const progressoAtual = (): ProgressoDuckDB => ultimoProgresso;
+function emitir(censo: Censo, p: ProgressoDuckDB) {
+  progressoPorEdicao.set(censo, p);
+  for (const o of ouvintesPorEdicao.get(censo) ?? []) o(p);
+}
 
-/** Inscreve-se nas mudanças de estágio; chama `fn` já com o estado atual. Devolve o cancelamento. */
-export function ouvirProgresso(fn: Ouvinte): () => void {
-  ouvintes.add(fn);
-  fn(ultimoProgresso);
-  return () => { ouvintes.delete(fn); };
+/** Estado mais recente de uma edição, para quem se inscreve depois do início da carga. */
+export const progressoAtual = (censo: Censo = CENSO_PADRAO): ProgressoDuckDB => progressoDe(censo);
+
+/** Inscreve-se nas mudanças de estágio de uma edição; chama `fn` já com o estado atual.
+ *  Devolve o cancelamento. */
+export function ouvirProgresso(fn: Ouvinte, censo: Censo = CENSO_PADRAO): () => void {
+  let s = ouvintesPorEdicao.get(censo);
+  if (!s) { s = new Set(); ouvintesPorEdicao.set(censo, s); }
+  s.add(fn);
+  fn(progressoDe(censo));
+  return () => s!.delete(fn);
 }
 
 /** O worker do DuckDB resolve o .wasm contra a própria base. Servir os dois como
  *  arquivos estáticos em /duckdb (copiados por scripts/copy-duckdb.sh) mantém tudo
  *  same-origin e com URL absoluta, sem depender de como o empacotador trata workers. */
-async function iniciar(): Promise<duckdb.AsyncDuckDBConnection> {
-  emitir({ estagio: "baixando", mensagem: "baixando o motor de consulta…" });
+async function iniciar(censo: Censo): Promise<duckdb.AsyncDuckDBConnection> {
+  emitir(censo, { estagio: "baixando", mensagem: "baixando o motor de consulta…" });
   const raiz = new URL("duckdb/", document.baseURI).href;
   // Só o build "eh" (exception handling) é distribuído: o build "mvp" pesa 41 MB e só
   // serviria a navegadores antigos, que de todo modo não rodam o WebGL2 exigido pelo mapa.
@@ -70,16 +87,17 @@ async function iniciar(): Promise<duckdb.AsyncDuckDBConnection> {
     pthreadWorker: null,
   };
   const worker = new Worker(bundle.mainWorker);
-  worker.addEventListener("error", (e) => console.error("[duckdb] erro no worker", e.message));
+  worker.addEventListener("error", (e) => console.error(`[duckdb:${censo}] erro no worker`, e.message));
   const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING), worker);
 
-  emitir({ estagio: "iniciando", mensagem: "iniciando o banco…" });
+  emitir(censo, { estagio: "iniciando", mensagem: "iniciando o banco…" });
   await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
   const con = await db.connect();
 
-  const base = new URL("data/", document.baseURI).href;
-  for (const [i, t] of TABELAS.entries()) {
-    emitir({ estagio: "registrando", mensagem: `registrando tabelas ${i + 1}/${TABELAS.length}` });
+  const base = new URL(basePath(censo), document.baseURI).href;
+  const tabelas = edicao(censo).recursos.rm ? [...TABELAS_BASE, ...TABELAS_RM] : TABELAS_BASE;
+  for (const [i, t] of tabelas.entries()) {
+    emitir(censo, { estagio: "registrando", mensagem: `registrando tabelas ${i + 1}/${tabelas.length}` });
     await db.registerFileURL(`${t}.parquet`, `${base}${t}.parquet`, duckdb.DuckDBDataProtocol.HTTP, false);
     await con.query(`CREATE OR REPLACE VIEW ${t} AS SELECT * FROM read_parquet('${t}.parquet')`);
   }
@@ -87,25 +105,33 @@ async function iniciar(): Promise<duckdb.AsyncDuckDBConnection> {
   for (const arq of ARQUIVOS_GEO) {
     await db.registerFileURL(arq, `${base}${arq}`, duckdb.DuckDBDataProtocol.HTTP, false);
   }
-  emitir({ estagio: "pronto", mensagem: "pronto" });
+  emitir(censo, { estagio: "pronto", mensagem: "pronto" });
   return con;
 }
 
-export function conectar(): Promise<duckdb.AsyncDuckDBConnection> {
-  if (!conexao) {
-    conexao = iniciar().catch((e: unknown) => {
+const conexoes = new Map<Censo, Promise<duckdb.AsyncDuckDBConnection>>();
+
+export function conectar(censo: Censo = CENSO_PADRAO): Promise<duckdb.AsyncDuckDBConnection> {
+  let p = conexoes.get(censo);
+  if (!p) {
+    p = iniciar(censo).catch((e: unknown) => {
       // permite tentar de novo: a próxima chamada a conectar() reinicia a carga
-      conexao = null;
-      emitir({ estagio: "erro", mensagem: "falha ao preparar os dados", erro: (e as Error).message });
+      conexoes.delete(censo);
+      emitir(censo, { estagio: "erro", mensagem: "falha ao preparar os dados", erro: (e as Error).message });
       throw e;
     });
+    conexoes.set(censo, p);
   }
-  return conexao;
+  return p;
 }
 
-/** Executa SQL e devolve as linhas como objetos. */
-export async function consultar<T = Record<string, unknown>>(sql: string): Promise<T[]> {
-  const con = await conectar();
+/** Executa SQL e devolve as linhas como objetos, na conexão da edição ativa (ou de `censo`,
+ *  se passado explicitamente). `queries.ts` nunca precisa passar `censo`: como os nomes de
+ *  view são os mesmos em todas as edições, a mesma string SQL funciona em qualquer uma. */
+export async function consultar<T = Record<string, unknown>>(
+  sql: string, censo: Censo = useStore.getState().censo,
+): Promise<T[]> {
+  const con = await conectar(censo);
   const res = await con.query(sql);
   return res.toArray().map((linha) => {
     const obj = linha.toJSON() as Record<string, unknown>;
@@ -118,10 +144,15 @@ export async function consultar<T = Record<string, unknown>>(sql: string): Promi
 /** Escapa um literal de texto para interpolação segura em SQL. */
 export const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
-/** true enquanto o motor não estiver pronto -- painéis usam para trocar "carregando
- *  fluxos…" por "preparando os dados…" durante a carga a frio. */
+/** true enquanto o motor da edição ATIVA não estiver pronto -- painéis usam para trocar
+ *  "carregando fluxos…" por "preparando os dados…" durante a carga a frio. Acompanha a
+ *  edição ativa automaticamente (troca de censo tem sua própria carga a frio). */
 export function usarDuckDBPronto(): boolean {
-  const [pronto, setPronto] = useState(ultimoProgresso.estagio === "pronto");
-  useEffect(() => ouvirProgresso((p) => setPronto(p.estagio === "pronto")), []);
+  const censo = useStore((s) => s.censo);
+  const [pronto, setPronto] = useState(() => progressoDe(censo).estagio === "pronto");
+  useEffect(() => {
+    setPronto(progressoDe(censo).estagio === "pronto");
+    return ouvirProgresso((p) => setPronto(p.estagio === "pronto"), censo);
+  }, [censo]);
   return pronto;
 }

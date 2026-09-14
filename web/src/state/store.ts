@@ -2,16 +2,23 @@
 import { create } from "zustand";
 import type { Metrica } from "../lib/types";
 import { DIMENSOES } from "../lib/paletas";
+import { CENSOS, CENSO_PADRAO, edicao, type Censo } from "../lib/edicoes";
 
 export type AbaRM = "mig" | "trab" | "estudo";
 /** F6: nível de agregação do mapa/painéis. "mun" (ausente na URL) é o padrão. */
 export type Nivel = "mun" | "rgi" | "rgint" | "uf";
 const NIVEIS: Nivel[] = ["mun", "rgi", "rgint", "uf"];
-// o recorte vira nome de coluna no SQL: só aceita pares dimensão__categoria conhecidos
+// o recorte vira nome de coluna no SQL: só aceita pares dimensão__categoria conhecidos (a
+// validação por edição -- ex.: "status__primeira_saida" não existe em 2010 -- fica a cargo de
+// quem monta as opções do seletor (Filtro.tsx), não daqui; aqui só garante que é um par
+// dimensão__categoria conhecido em ALGUMA edição, evitando SQL arbitrário vindo da URL)
 const RECORTES = new Set(Object.entries(DIMENSOES).flatMap(([dim, d]) =>
   d.categorias.map((c) => `${dim}__${c.chave}`)));
 
 interface Estado {
+  /** edição do Censo ativa; trocar reseta toda seleção (ver setCenso) -- os dados das duas
+   *  edições nunca se cruzam (cada uma tem sua própria conexão DuckDB, ver db/duckdb.ts). */
+  censo: Censo;
   municipio: string | null;      // município selecionado (nivel "mun")
   /** unidade selecionada nos níveis agregados (rgi/rgint/uf); município usa `municipio`, não este campo */
   selecao: string | null;
@@ -29,6 +36,8 @@ interface Estado {
   rm: string | null;
   aba: AbaRM;
   cruzar: boolean;
+  /** troca de edição do Censo; reseta toda seleção (município/unidade/fluxo/RM/recorte/nível) */
+  setCenso: (censo: Censo) => void;
   selecionarMunicipio: (cd: string | null) => void;
   selecionarUnidade: (cd: string | null) => void;
   selecionarFluxo: (o: string | null, d: string | null) => void;
@@ -54,7 +63,10 @@ function daUrl() {
   const m = p.get("m") as Metrica | null;
   const aba = p.get("aba") as AbaRM | null;
   const n = p.get("n") as Nivel | null;
+  const censoUrl = p.get("censo") as Censo | null;
+  const censo = (censoUrl && CENSOS.includes(censoUrl) ? censoUrl : CENSO_PADRAO) as Censo;
   return {
+    censo,
     municipio: p.get("mun"),
     selecao: p.get("sel"),
     nivel: (n && NIVEIS.includes(n) ? n : "mun") as Nivel,
@@ -63,15 +75,19 @@ function daUrl() {
     filtro: RECORTES.has(p.get("f") ?? "") ? p.get("f") : null,
     metrica: (m && ["saldo", "tlm", "imig", "emig", "iem"].includes(m) ? m : "tlm") as Metrica,
     topN: Number(p.get("top") ?? 15),
-    rm: p.get("rm"),
+    // módulo metropolitano: ignora ?rm= vindo de um link para uma edição sem esse recurso
+    // (ver lib/edicoes.ts) -- nunca chega a chamar as consultas de RM, que dariam erro de
+    // "tabela não encontrada" na conexão DuckDB dessa edição (ver db/duckdb.ts).
+    rm: edicao(censo).recursos.rm ? p.get("rm") : null,
     aba: (aba && ["mig", "trab", "estudo"].includes(aba) ? aba : "mig") as AbaRM,
     cruzar: p.get("cruzar") === "1",
   };
 }
 
 function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | "destino" | "metrica" | "topN"
-                              | "filtro" | "rm" | "aba" | "cruzar">) {
+                              | "filtro" | "rm" | "aba" | "cruzar" | "censo">) {
   const p = new URLSearchParams();
+  if (e.censo !== CENSO_PADRAO) p.set("censo", e.censo);
   if (e.rm) {
     p.set("rm", e.rm);
     if (e.aba !== "mig") p.set("aba", e.aba);
@@ -94,6 +110,14 @@ export const useStore = create<Estado>((set, get) => ({
   ...inicial,
   tema: (localStorage.getItem("tema") as Estado["tema"]) ?? "sistema",
 
+  setCenso: (censo) => {
+    const patch = {
+      censo, nivel: "mun" as Nivel, municipio: null, selecao: null, origem: null,
+      destino: null, rm: null, filtro: null,
+    };
+    set(patch);
+    paraUrl({ ...get(), ...patch });
+  },
   selecionarMunicipio: (cd) => {
     set({ municipio: cd, selecao: null, origem: null, destino: null });
     paraUrl({ ...get(), municipio: cd, selecao: null, origem: null, destino: null });

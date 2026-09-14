@@ -15,6 +15,8 @@ import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { Sankey } from "./Sankey";
 import { ComparativoRM } from "./ComparativoRM";
 import { num, num1, sinal } from "../lib/format";
+import { edicao } from "../lib/edicoes";
+import { useStore } from "../state/store";
 
 interface Props {
   cdRm: string;
@@ -92,6 +94,11 @@ function RankingDivergente({ itens, rotuloValor }: {
 export function PainelRM({
   cdRm, aba, cruzar, topN, escuro, aoMudarAba, aoMudarCruzar, aoSair, aoEscolherRM, aoSelecionarFluxo,
 }: Props) {
+  const censo = useStore((s) => s.censo);
+  const ed = edicao(censo);
+  const recursos = ed.recursos;
+  const anoOrigem = ed.periodo.de.slice(0, 4);
+  const anoDestino = ed.periodo.ate.slice(0, 4);
   const [resumo, setResumo] = useState<ResumoRM | null>(null);
   const [rms, setRms] = useState<ResumoRM[]>([]);
   const [fluxosIntra, setFluxosIntra] = useState<(Fluxo & { tipologia: string })[]>([]);
@@ -283,12 +290,13 @@ export function PainelRM({
             </div>
           )}
           <p className="muted-pequeno explicacao">
-            Morava em (2017) → mora em (2022) → trabalha em (2022), para os 12 maiores caminhos da RM
-            com destino de trabalho conhecido; o restante aparece agregado em "Outros municípios".
+            Morava em ({anoOrigem}) → mora em ({anoDestino}) → trabalha em ({anoDestino}), para os 12
+            maiores caminhos da RM com destino de trabalho conhecido; o restante aparece agregado em
+            "Outros municípios".
           </p>
           {sankeyDados && sankeyDados.links.length > 0 ? (
             <>
-              <Sankey dados={sankeyDados} escuro={escuro} />
+              <Sankey dados={sankeyDados} escuro={escuro} anoOrigem={anoOrigem} anoDestino={anoDestino} />
               <ul className="perfil-legenda">
                 {(["origem", "nucleo", "outro"] as const).map((k) => (
                   <li key={k}>
@@ -301,7 +309,8 @@ export function PainelRM({
                 <summary>Ver como tabela</summary>
                 <table className="tabela-fluxos">
                   <thead>
-                    <tr><th>Origem (2017)</th><th>Residência (2022)</th><th>Trabalho (2022)</th>
+                    <tr><th>Origem ({anoOrigem})</th><th>Residência ({anoDestino})</th>
+                        <th>Trabalho ({anoDestino})</th>
                         <th>Classe</th><th>Total</th><th>Faixa de n</th></tr>
                   </thead>
                   <tbody>
@@ -331,9 +340,14 @@ export function PainelRM({
             <Kpi rotulo="Ocupados" valor={num(resumo.ocupados)} />
             <Kpi rotulo="Pendulares" valor={num(resumo.pendulares)}
                  detalhe={resumo.pct_pendular != null ? `${num1(resumo.pct_pendular)}% dos ocupados` : undefined} />
-            <Kpi rotulo="Tempo mediano" valor={resumo.tempo_mediano != null ? `${num(resumo.tempo_mediano)} min` : "—"} />
-            <Kpi rotulo="Retorno diário" valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"} />
-            <Kpi rotulo="Transporte coletivo" valor={resumo.pct_coletivo != null ? `${num1(resumo.pct_coletivo)}%` : "—"} />
+            {recursos.tempoMinutos && (
+              <Kpi rotulo="Tempo mediano" valor={resumo.tempo_mediano != null ? `${num(resumo.tempo_mediano)} min` : "—"} />
+            )}
+            <Kpi rotulo="Retorno diário" valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"}
+                 detalhe={ed.rotuloRetorno} />
+            {recursos.modo && (
+              <Kpi rotulo="Transporte coletivo" valor={resumo.pct_coletivo != null ? `${num1(resumo.pct_coletivo)}%` : "—"} />
+            )}
           </div>
 
           <h3 className="secao-titulo">Maior taxa de saída pendular</h3>
@@ -401,7 +415,7 @@ export function PainelRM({
       <details className="comparativo-toggle" open={mostrarComparativo}
                 onToggle={(e) => setMostrarComparativo((e.target as HTMLDetailsElement).open)}>
         <summary>Comparativo entre as 20 maiores regiões metropolitanas</summary>
-        {mostrarComparativo && <ComparativoRM rms={rms} ativa={cdRm} aoEscolher={aoEscolherRM} />}
+        {mostrarComparativo && <ComparativoRM rms={rms} ativa={cdRm} censo={censo} aoEscolher={aoEscolherRM} />}
       </details>
     </aside>
   );

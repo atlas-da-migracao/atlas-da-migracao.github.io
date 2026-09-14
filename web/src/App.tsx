@@ -22,6 +22,7 @@ import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, type Bbox } from "./
 import type { FluxoUF } from "./lib/acordes";
 import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
+import { basePath, CENSOS, edicao } from "./lib/edicoes";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
 
 // F6 leva 2: módulos fora do caminho crítico da primeira pintura viram chunks separados --
@@ -78,9 +79,10 @@ export default function App() {
   const [carregandoFluxos, setCarregandoFluxos] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const { municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
-          selecionarMunicipio, selecionarUnidade, selecionarFluxo, setNivel, setMetrica, setFiltro, setTema,
-          entrarModoRM, sairModoRM, setAba, setCruzar } = useStore();
+  const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
+          setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo, setNivel, setMetrica, setFiltro,
+          setTema, entrarModoRM, sairModoRM, setAba, setCruzar } = useStore();
+  const recursos = edicao(censo).recursos;
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
 
@@ -99,25 +101,36 @@ export default function App() {
     fluxosEntreUFs().then(setFluxosUF).catch(() => {});
   }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // F4: trocar de edição invalida os caches por nível/UF -- vêm de uma conexão DuckDB e de
+  // caminhos data/ diferentes; sem isto, trocar 2010<->2022 e mudar de nível reusaria a malha
+  // ou as unidades da edição anterior (setCenso já volta o nível a "mun", então o efeito
+  // abaixo dele não dispara sozinho de novo -- é preciso limpar os caches explicitamente).
+  useEffect(() => { setMalhaNivel({}); setUnidadesNivel({}); setFluxosUF(null); }, [censo]);
+
   // F6 leva 2: folha de filtros (busca/recorte/métrica) no mobile -- abre como bottom sheet
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   useEffect(() => {
     if (nivelEfetivo === "mun" || malhaNivel[nivelEfetivo]) return;
     const n = nivelEfetivo;
-    fetch(`data/geo/${n}.topojson`).then((r) => r.json() as Promise<Topology>).then((topo) => {
+    let vivo = true;
+    fetch(`${basePath(censo)}geo/${n}.topojson`).then((r) => r.json() as Promise<Topology>).then((topo) => {
+      if (!vivo) return;
       const chave = Object.keys(topo.objects)[0];
       const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
       setMalhaNivel((m) => ({ ...m, [n]: fc }));
-    }).catch((e) => setErro(`Falha ao carregar a malha (${n}): ${(e as Error).message}`));
-  }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
+    }).catch((e) => { if (vivo) setErro(`Falha ao carregar a malha (${n}): ${(e as Error).message}`); });
+    return () => { vivo = false; };
+  }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (nivelEfetivo === "mun" || unidadesNivel[nivelEfetivo]) return;
     const n = nivelEfetivo;
-    carregarUnidades(n).then((u) => setUnidadesNivel((m) => ({ ...m, [n]: u })))
-      .catch((e) => setErro(`Falha ao consultar as unidades (${n}): ${(e as Error).message}`));
-  }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
+    let vivo = true;
+    carregarUnidades(n).then((u) => { if (vivo) setUnidadesNivel((m) => ({ ...m, [n]: u })); })
+      .catch((e) => { if (vivo) setErro(`Falha ao consultar as unidades (${n}): ${(e as Error).message}`); });
+    return () => { vivo = false; };
+  }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aoMudarNivel = (n: Nivel) => {
     const limpou = setNivel(n);
@@ -127,9 +140,16 @@ export default function App() {
     }
   };
 
-  // lista de RMs para o seletor do cabeçalho, carregada uma vez
+  // lista de RMs para o seletor do cabeçalho -- só em edições com módulo metropolitano
+  // (rm_resumo não é registrada na conexão DuckDB de uma edição sem esse recurso, ver
+  // db/duckdb.ts; consultar mesmo assim daria erro "tabela não encontrada")
   const [rmsCabecalho, setRmsCabecalho] = useState<ResumoRM[]>([]);
-  useEffect(() => { listarRMs().then(setRmsCabecalho).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!recursos.rm) { setRmsCabecalho([]); return; }
+    let vivo = true;
+    listarRMs().then((r) => { if (vivo) setRmsCabecalho(r); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [censo]); // eslint-disable-line react-hooks/exhaustive-deps
   // segmentado "Regiões metropolitanas" pedido, mas RM ainda não escolhida
   const [pedindoRM, setPedindoRM] = useState(false);
 
@@ -170,15 +190,19 @@ export default function App() {
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [filtrosAbertos]);
 
-  // malha e metadados: caminho crítico da primeira pintura
+  // malha e metadados: caminho crítico da primeira pintura. Reroda ao trocar de edição
+  // (censo): cada edição tem sua própria malha/meta/indicadores, servidos de basePath(censo).
   useEffect(() => {
+    let vivo = true;
     (async () => {
       try {
+        const base = basePath(censo);
         const [topo, m, mapa] = await Promise.all([
-          fetch("data/geo/municipios.topojson").then((r) => r.json() as Promise<Topology>),
-          fetch("data/meta.json").then((r) => r.json() as Promise<Meta>),
-          fetch("data/municipios_mapa.json").then((r) => r.json() as Promise<MunicipiosMapa>),
+          fetch(`${base}geo/municipios.topojson`).then((r) => r.json() as Promise<Topology>),
+          fetch(`${base}meta.json`).then((r) => r.json() as Promise<Meta>),
+          fetch(`${base}municipios_mapa.json`).then((r) => r.json() as Promise<MunicipiosMapa>),
         ]);
+        if (!vivo) return;
         const chave = Object.keys(topo.objects)[0];
         setMalha(feature(topo, topo.objects[chave]) as unknown as FeatureCollection);
         setTopoMun(topo);
@@ -193,24 +217,28 @@ export default function App() {
           n_imig_faixa: "", n_emig_faixa: "", precisao_imig: "sem_estimativa",
         })));
       } catch (e) {
-        setErro(`Falha ao carregar a malha: ${(e as Error).message}`);
+        if (vivo) setErro(`Falha ao carregar a malha: ${(e as Error).message}`);
       }
     })();
-  }, []);
+    return () => { vivo = false; };
+  }, [censo]);
 
   // indicadores municipais e os maiores fluxos do país (DuckDB, em paralelo)
   useEffect(() => {
+    let vivo = true;
     (async () => {
       try {
         // só os indicadores: quem decide os arcos é o efeito dedicado abaixo, senão
         // esta resposta sobrescreveria os fluxos do município já selecionado
-        setMunicipios(await carregarMunicipios());
+        const m = await carregarMunicipios();
+        if (vivo) setMunicipios(m);
       } catch (e) {
         console.error(e);
-        setErro(`Falha ao consultar os dados: ${(e as Error).message}`);
+        if (vivo) setErro(`Falha ao consultar os dados: ${(e as Error).message}`);
       }
     })();
-  }, []);
+    return () => { vivo = false; };
+  }, [censo]);
 
   // F8 (SEO): a home publica um SearchAction (?q=...) no JSON-LD para a busca do Google --
   // preenche e seleciona o primeiro resultado assim que os municípios carregarem, com a
@@ -504,9 +532,19 @@ export default function App() {
         <div className="cabecalho-linha1">
           <div className="marca">
             <h1>Atlas da migração interna no Brasil</h1>
-            <span className="muted"> · Censo 2022, data fixa 2017–2022</span>
+            <span className="muted"> · {edicao(censo).subtitulo}</span>
           </div>
           <div className="utilidades">
+            {CENSOS.length > 1 && (
+              <div className="segmentado segmentado-censo" role="group" aria-label="Edição do Censo">
+                {CENSOS.map((c) => (
+                  <button key={c} className={censo === c ? "ativo" : ""} aria-pressed={censo === c}
+                          onClick={() => setCenso(c)}>
+                    {edicao(c).rotulo}
+                  </button>
+                ))}
+              </div>
+            )}
             <button className="link-util" onClick={abrirMetodologia}>Metodologia</button>
             <button className="link-util" onClick={() => setMostrarTour(true)}>Como usar</button>
             <button className="tema" onClick={() => setTema(escuro ? "claro" : "escuro")}
@@ -523,12 +561,14 @@ export default function App() {
                       onClick={() => { setPedindoRM(false); sairModoRM(); }}>
                 Brasil
               </button>
-              <button className={rm ? "ativo" : ""} aria-pressed={Boolean(rm)}
-                      onClick={() => setPedindoRM(true)}>
-                Regiões metropolitanas
-              </button>
+              {recursos.rm && (
+                <button className={rm ? "ativo" : ""} aria-pressed={Boolean(rm)}
+                        onClick={() => setPedindoRM(true)}>
+                  Regiões metropolitanas
+                </button>
+              )}
             </div>
-            {(pedindoRM || rm) && (
+            {recursos.rm && (pedindoRM || rm) && (
               <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
             )}
             {!rm && (
@@ -614,7 +654,7 @@ export default function App() {
           {meta.citacao && (
             <p className="rodape-citacao">
               Como citar: {meta.citacao.autor} <em>(<a href={meta.citacao.autor_orcid}>ORCID</a>)</em>.
-              Atlas da migração interna no Brasil. Dados do Censo Demográfico 2022 (IBGE).
+              Atlas da migração interna no Brasil. Dados do Censo Demográfico {edicao(censo).nome} (IBGE).
               DOI:{" "}
               <a href={`https://doi.org/${meta.citacao.doi_conceito}`}>{meta.citacao.doi_conceito}</a>.
             </p>

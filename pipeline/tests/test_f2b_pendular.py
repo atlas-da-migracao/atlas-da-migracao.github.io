@@ -1,14 +1,30 @@
 """Testes da F2b: deslocamento pendular e módulo metropolitano.
 
 Só agregações; nenhum registro individual é lido ou impresso.
+
+Parametrizado por edição (2022 e 2010): testes estruturais (soma, identidade, coerência)
+rodamem ambas; testes de valores específicos (Guarulhos->SP, Santana/Macapá) apenas em 2022.
 """
 import pathlib
+import sys
 
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
-I = ROOT / "data/interim"
-PUB = ROOT / "data/processed"
+sys.path.insert(0, str(ROOT / "pipeline"))
+from edicoes import edicao as get_edicao  # noqa: E402
+
+EDICOES_TESTADAS = [
+    pytest.param("2022", id="2022"),
+    pytest.param("2010", id="2010"),
+]
+
+
+def _paths(edicao_nome: str):
+    ed = get_edicao(edicao_nome)
+    interim = ROOT / ed.interim
+    processed = ROOT / ed.processed
+    return interim, processed
 
 
 def _req(*paths):
@@ -17,8 +33,10 @@ def _req(*paths):
             pytest.skip(f"{p} ainda não gerado (rode o pipeline)")
 
 
-def test_identidade_pendular_trabalho(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_identidade_pendular_trabalho(con, edicao_nome):
     """Σ saídas pendulares (destino conhecido) deve igualar Σ entradas."""
+    I, PUB = _paths(edicao_nome)
     _req(I / "municipios_pendular_bruto.parquet", I / "pendular_trab_bruto.parquet")
     s, e = con.execute(
         f"SELECT SUM(saida_trab), SUM(entrada_trab) FROM read_parquet('{I}/municipios_pendular_bruto.parquet')"
@@ -28,7 +46,9 @@ def test_identidade_pendular_trabalho(con):
     assert abs(s - f) < 1
 
 
-def test_identidade_pendular_estudo(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_identidade_pendular_estudo(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(I / "municipios_pendular_bruto.parquet")
     s, e = con.execute(
         f"SELECT SUM(saida_estudo), SUM(entrada_estudo) FROM read_parquet('{I}/municipios_pendular_bruto.parquet')"
@@ -36,7 +56,9 @@ def test_identidade_pendular_estudo(con):
     assert abs(s - e) < 1
 
 
-def test_universo_pendular_restrito_a_ocupados_e_estudantes(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_universo_pendular_restrito_a_ocupados_e_estudantes(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(I / "pessoas_classificado.parquet")
     v, = con.execute(f"""
         SELECT COUNT(*) FROM read_parquet('{I}/pessoas_classificado.parquet')
@@ -51,7 +73,9 @@ def test_universo_pendular_restrito_a_ocupados_e_estudantes(con):
     assert v >= 0
 
 
-def test_sem_autoloop_pendular(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_sem_autoloop_pendular(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(I / "pendular_trab_bruto.parquet", I / "pendular_estudo_bruto.parquet")
     for arq in ("pendular_trab_bruto", "pendular_estudo_bruto"):
         v, = con.execute(f"SELECT COUNT(*) FROM read_parquet('{I}/{arq}.parquet') WHERE origem = destino").fetchone()
@@ -59,6 +83,8 @@ def test_sem_autoloop_pendular(con):
 
 
 def test_guarulhos_sao_paulo_e_o_maior_par_pendular(con):
+    """Valores específicos de 2022; não parametrizado."""
+    I, PUB = _paths("2022")
     _req(I / "pendular_trab_bruto.parquet")
     o, d = con.execute(
         f"SELECT origem, destino FROM read_parquet('{I}/pendular_trab_bruto.parquet') ORDER BY total DESC LIMIT 1"
@@ -67,6 +93,8 @@ def test_guarulhos_sao_paulo_e_o_maior_par_pendular(con):
 
 
 def test_santana_macapa_presente(con):
+    """Valores específicos de 2022; não parametrizado."""
+    I, PUB = _paths("2022")
     _req(I / "pendular_trab_bruto.parquet")
     n, = con.execute(
         f"SELECT COUNT(*) FROM read_parquet('{I}/pendular_trab_bruto.parquet') "
@@ -74,16 +102,20 @@ def test_santana_macapa_presente(con):
     assert n == 1
 
 
-def test_tripla_soma_aos_migrantes_intra_rm_ocupados(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_tripla_soma_aos_migrantes_intra_rm_ocupados(con, edicao_nome):
     """Σ (origem -> residência -> trabalho) = migrantes intra-RM ocupados."""
+    I, PUB = _paths(edicao_nome)
     _req(I / "rm_mig_pendular_bruto.parquet", I / "rm_mig_pendular_resumo_bruto.parquet")
     t, = con.execute(f"SELECT SUM(total) FROM read_parquet('{I}/rm_mig_pendular_bruto.parquet')").fetchone()
     o, = con.execute(f"SELECT SUM(mig_ocupados) FROM read_parquet('{I}/rm_mig_pendular_resumo_bruto.parquet')").fetchone()
     assert abs(t - o) < 1
 
 
-def test_classe_origem_coerente(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_classe_origem_coerente(con, edicao_nome):
     """A classe 'origem' só existe quando o município de trabalho é o de origem da migração."""
+    I, PUB = _paths(edicao_nome)
     _req(I / "rm_mig_pendular_bruto.parquet")
     v, = con.execute(f"""
         SELECT COUNT(*) FROM read_parquet('{I}/rm_mig_pendular_bruto.parquet')
@@ -91,7 +123,9 @@ def test_classe_origem_coerente(con):
     assert v == 0
 
 
-def test_cada_rm_tem_exatamente_um_nucleo(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_cada_rm_tem_exatamente_um_nucleo(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(I / "rm_bruto.parquet")
     v, = con.execute(f"""
         SELECT COUNT(*) FROM (
@@ -101,7 +135,9 @@ def test_cada_rm_tem_exatamente_um_nucleo(con):
     assert v == 0
 
 
-def test_municipio_pertence_a_no_maximo_uma_rm(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_municipio_pertence_a_no_maximo_uma_rm(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(I / "rm_bruto.parquet")
     v, = con.execute(f"""
         SELECT COUNT(*) FROM (
@@ -110,14 +146,18 @@ def test_municipio_pertence_a_no_maximo_uma_rm(con):
     assert v == 0
 
 
-def test_tipologia_intra_rm_soma_ao_total(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_tipologia_intra_rm_soma_ao_total(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(I / "rm_fluxos_intra_bruto.parquet", I / "rm_resumo_bruto.parquet")
     t, = con.execute(f"SELECT SUM(total) FROM read_parquet('{I}/rm_fluxos_intra_bruto.parquet')").fetchone()
     r, = con.execute(f"SELECT SUM(mig_intra) FROM read_parquet('{I}/rm_resumo_bruto.parquet')").fetchone()
     assert abs(t - r) < 5
 
 
-def test_publicados_f2b_respeitam_limiar(con):
+@pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
+def test_publicados_f2b_respeitam_limiar(con, edicao_nome):
+    I, PUB = _paths(edicao_nome)
     _req(PUB / "pendular_trab.parquet", I / "pessoas_classificado.parquet")
     v, = con.execute(f"""
         WITH cel AS (

@@ -6,11 +6,16 @@
  *  atual e some quando pronto; em erro, reaparece com um botão para tentar de novo. */
 import { useEffect, useState } from "react";
 import { conectar, ouvirProgresso, type ProgressoDuckDB } from "../db/duckdb";
+import { useStore } from "../state/store";
 
 export function EstadoDados() {
+  const censo = useStore((s) => s.censo);
   const [p, setP] = useState<ProgressoDuckDB | null>(null);
 
-  useEffect(() => ouvirProgresso(setP), []);
+  useEffect(() => {
+    setP(null);
+    return ouvirProgresso(setP, censo);
+  }, [censo]);
 
   if (!p || p.estagio === "pronto") return null;
 
@@ -24,7 +29,7 @@ export function EstadoDados() {
       ) : (
         <>
           <span>Não foi possível preparar os dados{p.erro ? `: ${p.erro}` : "."}</span>
-          <button onClick={() => { setP(null); conectar().catch(() => {}); }}>
+          <button onClick={() => { setP(null); conectar(censo).catch(() => {}); }}>
             tentar de novo
           </button>
         </>

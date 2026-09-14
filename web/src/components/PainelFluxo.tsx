@@ -9,6 +9,8 @@ import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { PiramideIdadeSexo } from "./PiramideIdadeSexo";
 import { CLASSE_TRAB, DIMENSOES, type NomeDimensao } from "../lib/paletas";
 import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
+import { edicao } from "../lib/edicoes";
+import { useStore } from "../state/store";
 
 interface Props {
   origem: string;
@@ -52,6 +54,7 @@ function daReferencia(refs: Refs, cd: string, direcao: string, dim: string): Rec
 }
 
 export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipio }: Props) {
+  const { periodo } = edicao(useStore((s) => s.censo));
   const [dados, setDados] = useState<Awaited<ReturnType<typeof detalheDoFluxo>> | null>(null);
   const [refs, setRefs] = useState<Refs>([]);
   const [carregando, setCarregando] = useState(true);
@@ -104,7 +107,9 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
     <aside className="painel" aria-label="Painel de detalhes">
       <header className="painel-topo">
         <div>
-          <div className="muted-pequeno">Fluxo migratório 2017–2022</div>
+          <div className="muted-pequeno">
+            Fluxo migratório {periodo.de.slice(0, 4)}–{periodo.ate.slice(0, 4)}
+          </div>
           <h2 className="titulo-fluxo">
             <button className="link-mun" onClick={() => aoAbrirMunicipio(ida.origem)}>
               {ida.nm_origem}<span className="uf">/{ida.uf_origem}</span>
@@ -196,7 +201,7 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
           <h3 className="secao-titulo">Onde trabalham os que fizeram este percurso</h3>
           <p className="muted-pequeno explicacao">
             Dos migrantes intra-RM que saíram de {ida.nm_origem} e passaram a morar em {ida.nm_destino},
-            local de trabalho declarado em 2022.
+            local de trabalho declarado em {periodo.ate.slice(0, 4)}.
           </p>
           <table className="tabela-fluxos">
             <tbody>

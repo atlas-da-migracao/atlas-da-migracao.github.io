@@ -109,6 +109,13 @@ class Verificador:
         self.processed = processed
         self.gate_ok = processed / ".gate_ok"
         self.erros: list[str] = []
+        # Subpastas com o PRÓPRIO .gate_ok (outra edição publicada dentro desta, ex.:
+        # data/processed/2010/.gate_ok dentro de data/processed/.gate_ok da edição 2022):
+        # excluídas de todas as varreduras -- não são deste gate, têm o seu próprio.
+        self.subgates = [g.parent for g in processed.rglob(".gate_ok") if g != self.gate_ok]
+
+    def _pertence_a_subgate(self, f: pathlib.Path) -> bool:
+        return any(f == sg or sg in f.parents for sg in self.subgates)
 
     def falha(self, msg: str) -> None:
         self.erros.append(msg)
@@ -120,7 +127,7 @@ class Verificador:
     def arquivos_atuais(self) -> dict[str, pathlib.Path]:
         atuais = {}
         for f in sorted(self.processed.rglob("*")):
-            if f.is_file() and f != self.gate_ok:
+            if f.is_file() and f != self.gate_ok and not self._pertence_a_subgate(f):
                 atuais[f.relative_to(self.processed).as_posix()] = f
         return atuais
 
@@ -171,8 +178,10 @@ class Verificador:
 
     def verificar_sem_csv(self) -> None:
         print("=== (c1) Nenhum CSV em data/processed ===")
-        csvs = sorted(p.relative_to(self.processed).as_posix() for p in self.processed.rglob("*.csv"))
-        csvs += sorted(p.relative_to(self.processed).as_posix() for p in self.processed.rglob("*.CSV"))
+        csvs = sorted(p.relative_to(self.processed).as_posix() for p in self.processed.rglob("*.csv")
+                      if not self._pertence_a_subgate(p))
+        csvs += sorted(p.relative_to(self.processed).as_posix() for p in self.processed.rglob("*.CSV")
+                       if not self._pertence_a_subgate(p))
         if csvs:
             self.falha(f"{len(csvs)} arquivo(s) CSV encontrados em data/processed: {csvs}")
         else:
@@ -180,7 +189,7 @@ class Verificador:
 
     def verificar_parquets_estruturais(self, con: duckdb.DuckDBPyConnection) -> None:
         print("=== (c2-c4) Estrutura dos arquivos Parquet ===")
-        parquets = sorted(self.processed.rglob("*.parquet"))
+        parquets = sorted(p for p in self.processed.rglob("*.parquet") if not self._pertence_a_subgate(p))
         if not parquets:
             self.falha("nenhum arquivo .parquet em data/processed")
             return

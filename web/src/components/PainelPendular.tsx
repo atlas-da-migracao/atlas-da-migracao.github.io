@@ -6,8 +6,10 @@ import { usarDuckDBPronto } from "../db/duckdb";
 import { detalhePendular, dimensoesPendular, type DetalhePendular } from "../db/queries";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { DIMENSOES_PENDULAR, type NomeDimensaoPendular } from "../lib/paletas";
-import { agruparOcupacao, agruparTempo } from "../lib/rm";
+import { valoresPendular, type NomeDimensaoDados } from "../lib/rm";
 import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
+import { edicao } from "../lib/edicoes";
+import { useStore } from "../state/store";
 
 interface Props {
   origem: string;
@@ -20,24 +22,33 @@ interface Props {
 
 type LinhaDim = { dimensao: string; categoria: string; valor: number; n_faixa: string };
 
-const DIMS_TRAB: NomeDimensaoPendular[] = [
+// dimensões como aparecem no dado publicado (coluna `dimensao`, fixa nas duas edições --
+// ver lib/rm.ts, valoresPendular); a escolha de PALETA por edição é feita separadamente,
+// só no momento de renderizar (ver `paletaDim` abaixo).
+const DIMS_TRAB: NomeDimensaoDados[] = [
   "frequencia", "modo", "tempo", "posicao", "setor", "ocupacao", "renda_trab", "edu",
 ];
-const DIMS_ESTUDO: NomeDimensaoPendular[] = ["nivel"];
-
-function valoresPorDimensao(linhas: LinhaDim[], dim: NomeDimensaoPendular): Record<string, number> {
-  const doDim = linhas.filter((l) => l.dimensao === dim);
-  if (dim === "tempo") return agruparTempo(doDim);
-  if (dim === "ocupacao") return agruparOcupacao(doDim);
-  const out: Record<string, number> = {};
-  for (const l of doDim) out[l.categoria] = (out[l.categoria] ?? 0) + l.valor;
-  return out;
-}
+const DIMS_ESTUDO: NomeDimensaoDados[] = ["nivel"];
 
 export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Props) {
+  const censo = useStore((s) => s.censo);
+  const ed = edicao(censo);
+  const recursos = ed.recursos;
   const tabela = tipo === "trab" ? "pendular_trab" : "pendular_estudo";
   const tabelaDim = tipo === "trab" ? "pendular_trab_dim" : "pendular_estudo_dim";
-  const dims = tipo === "trab" ? DIMS_TRAB : DIMS_ESTUDO;
+  // 2010 não tem "modo" (sem quesito de meio de transporte); frequência/tempo usam
+  // vocabulário próprio (V0661/V0662 têm definição e faixas diferentes de 2022, ver
+  // docs/METODOLOGIA.md), mas a CHAVE DE DADOS filtrada é sempre "frequencia"/"tempo" --
+  // só a paleta de exibição muda (ed.vocabulario), nunca o filtro em valoresPendular.
+  const dimsBase = tipo === "trab" ? DIMS_TRAB : DIMS_ESTUDO;
+  const dims: NomeDimensaoDados[] = dimsBase.filter((d) => recursos.modo || d !== "modo");
+  /** paleta (DIMENSOES_PENDULAR) a exibir para uma dimensão de dados: usa a variante "*2010"
+   *  só no map de exibição, nunca para filtrar os dados. */
+  const paletaDim = (d: NomeDimensaoDados): NomeDimensaoPendular => {
+    if (d === "tempo") return ed.vocabulario.tempo;
+    if (d === "frequencia") return ed.vocabulario.frequencia;
+    return d;
+  };
 
   const [dados, setDados] = useState<{ ida: DetalhePendular | null; volta: DetalhePendular | null } | null>(null);
   const [dimIda, setDimIda] = useState<LinhaDim[]>([]);
@@ -111,18 +122,23 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
         </div>
         {tipo === "trab" && (
           <>
-            <div className="kpi">
-              <div className="kpi-rotulo">Tempo mediano</div>
-              <div className="kpi-valor">{ida.tempo_mediano != null ? `${num(ida.tempo_mediano)} min` : "—"}</div>
-            </div>
+            {recursos.tempoMinutos && (
+              <div className="kpi">
+                <div className="kpi-rotulo">Tempo mediano</div>
+                <div className="kpi-valor">{ida.tempo_mediano != null ? `${num(ida.tempo_mediano)} min` : "—"}</div>
+              </div>
+            )}
             <div className="kpi">
               <div className="kpi-rotulo">Retorno diário</div>
               <div className="kpi-valor">{ida.pct_diario != null ? `${num1(ida.pct_diario)}%` : "—"}</div>
+              <div className="kpi-detalhe">{ed.rotuloRetorno}</div>
             </div>
-            <div className="kpi">
-              <div className="kpi-rotulo">Transporte coletivo</div>
-              <div className="kpi-valor">{ida.pct_coletivo != null ? `${num1(ida.pct_coletivo)}%` : "—"}</div>
-            </div>
+            {recursos.modo && (
+              <div className="kpi">
+                <div className="kpi-rotulo">Transporte coletivo</div>
+                <div className="kpi-valor">{ida.pct_coletivo != null ? `${num1(ida.pct_coletivo)}%` : "—"}</div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -145,14 +161,16 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
             comparada ao fluxo inverso quando ele também for publicável.
           </p>
           {dims.map((dim) => {
-            const valoresIda = valoresPorDimensao(dimIda, dim);
+            const agrupar = ed.vocabulario.tempo === "tempo";
+            const valoresIda = valoresPendular(dimIda, dim, agrupar);
             const series: SeriePerfil[] = [{ rotulo: "Neste fluxo", valores: valoresIda, destaque: true }];
             if (volta && dimVolta.length > 0) {
-              series.push({ rotulo: "Fluxo inverso", valores: valoresPorDimensao(dimVolta, dim) });
+              series.push({ rotulo: "Fluxo inverso", valores: valoresPendular(dimVolta, dim, agrupar) });
             }
+            const paleta = DIMENSOES_PENDULAR[paletaDim(dim)];
             return (
-              <BarraPerfil key={dim} titulo={DIMENSOES_PENDULAR[dim].titulo} nota={DIMENSOES_PENDULAR[dim].nota}
-                           categorias={DIMENSOES_PENDULAR[dim].categorias} series={series} escuro={escuro} />
+              <BarraPerfil key={dim} titulo={paleta.titulo} nota={paleta.nota}
+                           categorias={paleta.categorias} series={series} escuro={escuro} />
             );
           })}
         </>

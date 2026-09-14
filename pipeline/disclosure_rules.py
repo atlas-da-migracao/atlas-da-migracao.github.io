@@ -24,7 +24,9 @@ CV_BOA, CV_CAUTELA = 15.0, 30.0
 # R6 -- colunas jamais publicadas (identificam domicílio ou área de ponderação)
 COLUNAS_PROIBIDAS = {"controle", "cd_apond", "apond", "d0100", "p0100", "d0090", "p0090"}
 
-# Dimensões e categorias publicadas (R6: nenhum cruzamento de 3+ dimensões temáticas)
+# Dimensões e categorias publicadas (R6: nenhum cruzamento de 3+ dimensões temáticas).
+# Vocabulário-padrão (edição 2022, ver pipeline/edicoes.py); DIMENSOES continua sendo a
+# constante usada quando nenhuma edição é passada, para não quebrar chamadores existentes.
 DIMENSOES = {
     "status": ["retorno_natal", "primeira_saida", "etapas_multiplas", "nascido_exterior"],
     "edu": ["sem_instr_fund_incompleto", "fund_completo_medio_incompleto",
@@ -34,6 +36,24 @@ DIMENSOES = {
     "idade_sexo": ["05_14_M", "05_14_F", "15_24_M", "15_24_F", "25_39_M", "25_39_F",
                    "40_59_M", "40_59_F", "60_mais_M", "60_mais_F"],
 }
+
+# Vocabulário de `status` por edição: só essa dimensão varia entre 2022 e 2010 (edu/renda/
+# idade_sexo usam o mesmo vocabulário nas duas). O Censo 2010 não coleta o município de
+# nascimento, então `primeira_saida`/`etapas_multiplas` (que dependem de comparar o município
+# natal ao de residência 5 anos antes) são indistinguíveis e colapsam em `nao_natural` -- ver
+# pipeline/sql/2010/02_classify.sql e docs/METODOLOGIA.md, "Edição Censo 2010 e comparabilidade".
+STATUS_POR_EDICAO = {
+    "2022": DIMENSOES["status"],
+    "2010": ["retorno_natal", "nao_natural", "nascido_exterior"],
+}
+
+
+def dimensoes(edicao: str = "2022") -> dict[str, list[str]]:
+    """DIMENSOES publicáveis para `edicao`. Usada por publish.py/disclosure_check.py em vez da
+    constante DIMENSOES sempre que a edição não é necessariamente 2022."""
+    d = dict(DIMENSOES)
+    d["status"] = STATUS_POR_EDICAO.get(edicao, DIMENSOES["status"])
+    return d
 
 
 def faixa_n(n: int) -> str:

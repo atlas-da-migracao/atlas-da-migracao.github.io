@@ -53,6 +53,12 @@ export const DIMENSOES = {
       { chave: "primeira_saida", rotulo: "Primeira saída do natal", cor: CATEGORICO[1] },
       { chave: "etapas_multiplas", rotulo: "Etapas múltiplas", cor: CATEGORICO[2] },
       { chave: "nascido_exterior", rotulo: "Nascido no exterior", cor: CATEGORICO[3] },
+      // só na edição 2010: sem código de município de nascimento, primeira_saida e
+      // etapas_multiplas são indistinguíveis e colapsam nesta categoria (nunca aparece junto
+      // com as duas acima -- reaproveita a cor de "primeira_saida", o mais próximo semântico --
+      // fica depois de nascido_exterior de propósito, para não entrar nos 4 primeiros slots
+      // categóricos que o teste de contraste valida como simultaneamente distintos)
+      { chave: "nao_natural", rotulo: "Não natural do destino", cor: CATEGORICO[1] },
       { chave: "outros", rotulo: "Outros ou suprimido", cor: NEUTRO },
     ],
   },
@@ -70,7 +76,7 @@ export const DIMENSOES = {
   },
   renda: {
     titulo: "Renda domiciliar per capita",
-    nota: "em salários mínimos de 2022 (R$ 1.212)",
+    nota: "em salários mínimos" as string | null,
     categorias: [
       { chave: "ate_1_4_sm", rotulo: "Até ¼", cor: LARANJA(0) },
       { chave: "de_1_4_a_1_2_sm", rotulo: "De ¼ a ½", cor: LARANJA(1) },
@@ -156,6 +162,17 @@ export const DIMENSOES_PENDULAR = {
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
     ],
   },
+  /** só na edição 2010: V0661 pergunta "retorna DIARIAMENTE" (sim/não), não "3+ dias por
+   *  semana" -- definição diferente da de 2022, mesmo par de chaves (ver docs/METODOLOGIA.md) */
+  frequencia2010: {
+    titulo: "Frequência de retorno",
+    nota: null as string | null,
+    categorias: [
+      { chave: "retorno_diario", rotulo: "Retorna diariamente", cor: FREQUENCIA_8(0) },
+      { chave: "semanal_longa", rotulo: "Não retorna diariamente", cor: FREQUENCIA_8(1) },
+      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+    ],
+  },
   modo: {
     titulo: "Modo de transporte",
     nota: null as string | null,
@@ -180,6 +197,20 @@ export const DIMENSOES_PENDULAR = {
       { chave: "de_1_a_2h", rotulo: "1 a 2 h", cor: AZUL(3) },
       { chave: "mais_de_2h", rotulo: "Mais de 2 h", cor: AZUL(4) },
       { chave: "outros", rotulo: "Não se desloca / ignorado", cor: NEUTRO },
+    ],
+  },
+  /** só na edição 2010: V0662 tem 5 faixas próprias (ver 02_classify.sql), não aninhadas nas
+   *  8 de 2022 -- por isso é um vocabulário à parte, não um reagrupamento de "tempo" acima. */
+  tempo2010: {
+    titulo: "Tempo de deslocamento",
+    nota: "só quem retorna para casa diariamente" as string | null,
+    categorias: [
+      { chave: "ate_5min", rotulo: "Até 5 min", cor: AZUL(0) },
+      { chave: "de_6_a_30min", rotulo: "6 a 30 min", cor: AZUL(1) },
+      { chave: "de_31min_a_1h", rotulo: "31 min a 1 h", cor: AZUL(2) },
+      { chave: "de_1_a_2h", rotulo: "1 a 2 h", cor: AZUL(3) },
+      { chave: "mais_de_2h", rotulo: "Mais de 2 h", cor: AZUL(4) },
+      { chave: "nao_se_aplica", rotulo: "Não retorna diariamente", cor: NEUTRO },
     ],
   },
   posicao: {
@@ -226,7 +257,7 @@ export const DIMENSOES_PENDULAR = {
   },
   renda_trab: {
     titulo: "Rendimento do trabalho",
-    nota: "em salários mínimos de 2022 (R$ 1.212)",
+    nota: "em salários mínimos" as string | null,
     categorias: [
       { chave: "ate_1_sm", rotulo: "Até 1 salário mínimo", cor: LARANJA(0) },
       { chave: "de_1_a_2_sm", rotulo: "De 1 a 2 salários mínimos", cor: LARANJA(1) },

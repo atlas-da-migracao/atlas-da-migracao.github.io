@@ -1,12 +1,16 @@
-"""Aplica as regras de revelação (R1-R6) e escreve data/processed/ (arquivos publicáveis).
+"""Aplica as regras de revelação (R1-R6) e escreve <processed>/ (arquivos publicáveis).
 
-Reconstrói os fluxos a partir de data/interim/pessoas_classificado.parquet para ter a
+Reconstrói os fluxos a partir de <interim>/pessoas_classificado.parquet para ter a
 contagem amostral de CADA célula (não só do fluxo), o que permite suprimir célula a célula.
 
 Nada aqui imprime registros individuais: só contagens, somas e nomes de arquivo.
+
+--edicao (default 2022, ver pipeline/edicoes.py) troca INTERIM/PROCESSED pelos paths da
+edição; sem --edicao o comportamento é idêntico ao anterior (data/interim, data/processed).
 """
 from __future__ import annotations
 
+import argparse
 import os
 import pathlib
 import sys
@@ -16,9 +20,7 @@ import duckdb
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 import disclosure_rules as R  # noqa: E402
-
-INTERIM = ROOT / "data/interim"
-PROCESSED = ROOT / "data/processed"
+from edicoes import edicao as get_edicao  # noqa: E402
 
 # coluna de origem de cada categoria no arquivo classificado
 COL_DIM = {"status": "status", "edu": "edu_grupo", "renda": "renda_classe",
@@ -31,14 +33,14 @@ def nome_col(dim: str, cat: str) -> str:
     return f"{dim}__{cat}".lower()
 
 
-def expr_categorias(prefixo_valor: str = "peso") -> tuple[str, str]:
+def expr_categorias(dims: dict[str, list[str]], prefixo_valor: str = "peso") -> tuple[str, str]:
     """Gera as expressões SQL de valor e de contagem para todas as categorias.
 
     Cada célula só é publicada se tiver >= MIN_PESSOAS observações (R1); caso contrário
     o valor vai para a coluna residual `<dim>__outros`, preservando o total da dimensão.
     """
     valores, contagens = [], []
-    for dim, cats in R.DIMENSOES.items():
+    for dim, cats in dims.items():
         col = COL_DIM[dim]
         extra = f" AND {FILTRO_DIM[dim]}" if dim in FILTRO_DIM else ""
         publicaveis = []
@@ -58,6 +60,14 @@ def expr_categorias(prefixo_valor: str = "peso") -> tuple[str, str]:
 
 
 def main() -> None:
+    global INTERIM, PROCESSED
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--edicao", default="2022", help="Edição do censo (ver pipeline/edicoes.py).")
+    args = ap.parse_args()
+    ed = get_edicao(args.edicao)
+    INTERIM = ROOT / ed.interim
+    PROCESSED = ROOT / ed.processed
+
     os.chdir(ROOT)
     PROCESSED.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect()
@@ -65,7 +75,8 @@ def main() -> None:
     con.execute(f"CREATE OR REPLACE TEMP VIEW mig AS SELECT * FROM read_parquet('{INTERIM}/pessoas_classificado.parquet') WHERE origem_valida")
     con.execute(f"CREATE OR REPLACE TEMP VIEW fluxos_b AS SELECT * FROM read_parquet('{INTERIM}/fluxos_bruto.parquet')")
 
-    vals, cnts = expr_categorias()
+    dims = R.dimensoes(args.edicao)
+    vals, cnts = expr_categorias(dims)
 
     # ---------------- fluxos municipais ----------------
     # R1: só pares com >= 5 pessoas e >= 3 domicílios; R2: detalhe só com n >= 20;
@@ -79,7 +90,7 @@ def main() -> None:
         FROM mig GROUP BY 1, 2
     """)
     detalhe_cols = []
-    for dim, cats in R.DIMENSOES.items():
+    for dim, cats in dims.items():
         for cat in cats:
             c = nome_col(dim, cat)
             detalhe_cols.append(
@@ -221,79 +232,82 @@ def main() -> None:
         ) TO '{PROCESSED}/municipios_pendular.parquet' (FORMAT PARQUET)
     """)
 
-    # Composição das regiões metropolitanas (recorte público do IBGE + núcleo definido no projeto)
-    con.execute(f"""
-        COPY (SELECT cd_rm, nm_rm, tipo, cd_mun, nm_mun, uf_sigla, nucleo,
-                     {R.sql_arredonda('pop')} AS pop
-              FROM read_parquet('{INTERIM}/rm_bruto.parquet'))
-        TO '{PROCESSED}/rm.parquet' (FORMAT PARQUET)
-    """)
-    con.execute(f"""
-        COPY (
-            SELECT cd_rm, nm_rm, tipo, nm_nucleo, n_municipios,
-                   {R.sql_arredonda('pop')} AS pop,
-                   {R.sql_arredonda('mig_intra')} AS mig_intra,
-                   {R.sql_arredonda('nucleo_periferia')} AS nucleo_periferia,
-                   {R.sql_arredonda('periferia_nucleo')} AS periferia_nucleo,
-                   {R.sql_arredonda('periferia_periferia')} AS periferia_periferia,
-                   {R.sql_arredonda('entradas_externas')} AS entradas_externas,
-                   {R.sql_arredonda('saidas_externas')} AS saidas_externas,
-                   {R.sql_arredonda('saldo_externo')} AS saldo_externo,
-                   {R.sql_arredonda('ocupados')} AS ocupados,
-                   {R.sql_arredonda('pendulares')} AS pendulares,
-                   pct_pendular, tempo_mediano, pct_coletivo, pct_diario
-            FROM read_parquet('{INTERIM}/rm_resumo_bruto.parquet')
-        ) TO '{PROCESSED}/rm_resumo.parquet' (FORMAT PARQUET)
-    """)
+    # As tabelas do módulo metropolitano (F5b) só existem quando 08_metro.sql rodou para
+    # a edição (ver pipeline/edicoes.py, pula_scripts).
+    if (INTERIM / "rm_bruto.parquet").exists():
+        # Composição das regiões metropolitanas (recorte público do IBGE + núcleo definido no projeto)
+        con.execute(f"""
+            COPY (SELECT cd_rm, nm_rm, tipo, cd_mun, nm_mun, uf_sigla, nucleo,
+                         {R.sql_arredonda('pop')} AS pop
+                  FROM read_parquet('{INTERIM}/rm_bruto.parquet'))
+            TO '{PROCESSED}/rm.parquet' (FORMAT PARQUET)
+        """)
+        con.execute(f"""
+            COPY (
+                SELECT cd_rm, nm_rm, tipo, nm_nucleo, n_municipios,
+                       {R.sql_arredonda('pop')} AS pop,
+                       {R.sql_arredonda('mig_intra')} AS mig_intra,
+                       {R.sql_arredonda('nucleo_periferia')} AS nucleo_periferia,
+                       {R.sql_arredonda('periferia_nucleo')} AS periferia_nucleo,
+                       {R.sql_arredonda('periferia_periferia')} AS periferia_periferia,
+                       {R.sql_arredonda('entradas_externas')} AS entradas_externas,
+                       {R.sql_arredonda('saidas_externas')} AS saidas_externas,
+                       {R.sql_arredonda('saldo_externo')} AS saldo_externo,
+                       {R.sql_arredonda('ocupados')} AS ocupados,
+                       {R.sql_arredonda('pendulares')} AS pendulares,
+                       pct_pendular, tempo_mediano, pct_coletivo, pct_diario
+                FROM read_parquet('{INTERIM}/rm_resumo_bruto.parquet')
+            ) TO '{PROCESSED}/rm_resumo.parquet' (FORMAT PARQUET)
+        """)
 
-    # Fluxos migratórios intra-RM (R1 no par)
-    con.execute(f"""
-        COPY (
-            SELECT cd_rm, origem, destino, tipologia,
-                   {R.sql_arredonda('total')} AS total, ROUND(se, 1) AS se, ROUND(cv, 2) AS cv,
-                   {R.sql_faixa_n('n')} AS n_faixa
-            FROM read_parquet('{INTERIM}/rm_fluxos_intra_bruto.parquet')
-            WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
-        ) TO '{PROCESSED}/rm_fluxos_intra.parquet' (FORMAT PARQUET)
-    """)
+        # Fluxos migratórios intra-RM (R1 no par)
+        con.execute(f"""
+            COPY (
+                SELECT cd_rm, origem, destino, tipologia,
+                       {R.sql_arredonda('total')} AS total, ROUND(se, 1) AS se, ROUND(cv, 2) AS cv,
+                       {R.sql_faixa_n('n')} AS n_faixa
+                FROM read_parquet('{INTERIM}/rm_fluxos_intra_bruto.parquet')
+                WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+            ) TO '{PROCESSED}/rm_fluxos_intra.parquet' (FORMAT PARQUET)
+        """)
 
-    # Cruzamento migração intra-RM x pendularidade (tripla origem -> residência -> trabalho)
-    con.execute(f"""
-        COPY (
-            SELECT cd_rm, origem_mig, destino_mig, destino_trab, classe_trab,
-                   {R.sql_arredonda('total')} AS total,
-                   {R.sql_faixa_n('n')} AS n_faixa,
-                   ROUND(pct_diario, 1) AS pct_diario, ROUND(pct_coletivo, 1) AS pct_coletivo
-            FROM read_parquet('{INTERIM}/rm_mig_pendular_bruto.parquet')
-            WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
-        ) TO '{PROCESSED}/rm_mig_pendular.parquet' (FORMAT PARQUET)
-    """)
-    con.execute(f"""
-        COPY (
-            SELECT cd_rm, cd_mun,
-                   {R.sql_arredonda('migrantes_intra')} AS migrantes_intra,
-                   {R.sql_arredonda('mig_ocupados')} AS mig_ocupados,
-                   {R.sql_arredonda('mig_pendulares')} AS mig_pendulares,
-                   {R.sql_arredonda('pendular_para_origem')} AS pendular_para_origem,
-                   {R.sql_arredonda('pendular_para_nucleo')} AS pendular_para_nucleo,
-                   {R.sql_arredonda('pendular_para_outro')} AS pendular_para_outro,
-                   {R.sql_arredonda('trabalha_onde_mora')} AS trabalha_onde_mora,
-                   {R.sql_arredonda('mig_estudantes')} AS mig_estudantes,
-                   {R.sql_arredonda('mig_estud_pendulares')} AS mig_estud_pendulares,
-                   tempo_mediano, ROUND(pct_pendular, 1) AS pct_pendular,
-                   {R.sql_faixa_n('n_migrantes_intra')} AS n_faixa
-            FROM read_parquet('{INTERIM}/rm_mig_pendular_resumo_bruto.parquet')
-            WHERE n_migrantes_intra >= {R.MIN_PESSOAS}
-        ) TO '{PROCESSED}/rm_mig_pendular_resumo.parquet' (FORMAT PARQUET)
-    """)
-    con.execute(f"""
-        COPY (
-            SELECT cd_rm, origem_mig, destino_mig, destino_estudo, classe_estudo,
-                   {R.sql_arredonda('total')} AS total, {R.sql_faixa_n('n')} AS n_faixa
-            FROM read_parquet('{INTERIM}/rm_mig_estudo_bruto.parquet')
-            WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
-        ) TO '{PROCESSED}/rm_mig_estudo.parquet' (FORMAT PARQUET)
-    """)
+        # Cruzamento migração intra-RM x pendularidade (tripla origem -> residência -> trabalho)
+        con.execute(f"""
+            COPY (
+                SELECT cd_rm, origem_mig, destino_mig, destino_trab, classe_trab,
+                       {R.sql_arredonda('total')} AS total,
+                       {R.sql_faixa_n('n')} AS n_faixa,
+                       ROUND(pct_diario, 1) AS pct_diario, ROUND(pct_coletivo, 1) AS pct_coletivo
+                FROM read_parquet('{INTERIM}/rm_mig_pendular_bruto.parquet')
+                WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+            ) TO '{PROCESSED}/rm_mig_pendular.parquet' (FORMAT PARQUET)
+        """)
+        con.execute(f"""
+            COPY (
+                SELECT cd_rm, cd_mun,
+                       {R.sql_arredonda('migrantes_intra')} AS migrantes_intra,
+                       {R.sql_arredonda('mig_ocupados')} AS mig_ocupados,
+                       {R.sql_arredonda('mig_pendulares')} AS mig_pendulares,
+                       {R.sql_arredonda('pendular_para_origem')} AS pendular_para_origem,
+                       {R.sql_arredonda('pendular_para_nucleo')} AS pendular_para_nucleo,
+                       {R.sql_arredonda('pendular_para_outro')} AS pendular_para_outro,
+                       {R.sql_arredonda('trabalha_onde_mora')} AS trabalha_onde_mora,
+                       {R.sql_arredonda('mig_estudantes')} AS mig_estudantes,
+                       {R.sql_arredonda('mig_estud_pendulares')} AS mig_estud_pendulares,
+                       tempo_mediano, ROUND(pct_pendular, 1) AS pct_pendular,
+                       {R.sql_faixa_n('n_migrantes_intra')} AS n_faixa
+                FROM read_parquet('{INTERIM}/rm_mig_pendular_resumo_bruto.parquet')
+                WHERE n_migrantes_intra >= {R.MIN_PESSOAS}
+            ) TO '{PROCESSED}/rm_mig_pendular_resumo.parquet' (FORMAT PARQUET)
+        """)
+        con.execute(f"""
+            COPY (
+                SELECT cd_rm, origem_mig, destino_mig, destino_estudo, classe_estudo,
+                       {R.sql_arredonda('total')} AS total, {R.sql_faixa_n('n')} AS n_faixa
+                FROM read_parquet('{INTERIM}/rm_mig_estudo_bruto.parquet')
+                WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+            ) TO '{PROCESSED}/rm_mig_estudo.parquet' (FORMAT PARQUET)
+        """)
 
     # ---------------- referência territorial (dados públicos do IBGE) ----------------
     con.execute(f"""

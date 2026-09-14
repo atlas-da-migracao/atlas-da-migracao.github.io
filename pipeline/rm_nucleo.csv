@@ -14,7 +14,7 @@ cd_rm,nm_rm,cd_nucleo,nm_nucleo,uf_nucleo,n_municipios,pop_rm
 5201,Região Metropolitana do Vale do Paraíba e Litoral Norte,3549904,São José dos Campos,SP,39,2505723
 601,Região Metropolitana de Belém,1501402,Belém,PA,7,2243895
 5301,Região Metropolitana de Sorocaba,3552205,Sorocaba,SP,27,2174524
-4701,Região Metropolitana da Grande Vitória,3205002,Serra,ES,7,1880827
+4701,Região Metropolitana da Grande Vitória,3205309,Vitória,ES,7,1880827
 5001,Região Metropolitana da Baixada Santista,3548500,Santos,SP,9,1805530
 5401,Região Metropolitana de Ribeirão Preto,3543402,Ribeirão Preto,SP,34,1648110
 1101,Região Metropolitana da Grande São Luís,2111300,São Luís,MA,13,1646004
@@ -71,12 +71,12 @@ cd_rm,nm_rm,cd_nucleo,nm_nucleo,uf_nucleo,n_municipios,pop_rm
 4402,Área de Expansão Metropolitana,2926301,Riachão do Jacuípe,BA,10,179442
 2301,Região Metropolitana de Cajazeiras,2503704,Cajazeiras,PB,15,173174
 2201,Região Metropolitana de Esperança,2506004,Esperança,PB,9,137163
-2401,Região Metropolitana do Vale do Piancó,2507002,Itaporanga,PB,17,136464
+2401,Região Metropolitana do Vale do Piancó,2511301,Piancó,PB,17,136464
 2801,Região Metropolitana de Itabaiana,2506905,Itabaiana,PB,12,133563
 2601,Região Metropolitana do Vale do Mamanguape,2508901,Mamanguape,PB,9,121195
 2701,Região Metropolitana de Sousa,2516201,Sousa,PB,9,113363
 7602,Entorno Metropolitano da RM Vale do Rio Cuiabá,5106505,Poconé,MT,7,83939
-2501,Região Metropolitana de Barra de Santa Rosa,2505105,Cuité,PB,8,75892
+2501,Região Metropolitana de Barra de Santa Rosa,2501609,Barra de Santa Rosa,PB,8,75892
 2901,Região Metropolitana de Araruna,2501005,Araruna,PB,6,59551
 501,Região Metropolitana do Sul do Estado,1400472,Rorainópolis,RR,4,59475
 401,Região Metropolitana de Central,1400209,Caracaraí,RR,2,30980

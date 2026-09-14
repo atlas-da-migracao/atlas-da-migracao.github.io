@@ -119,7 +119,8 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
         <h3>Módulo metropolitano</h3>
         <p>
           O recorte de regiões metropolitanas (RMs) e RIDEs segue a divisão institucional do IBGE; o
-          <strong> núcleo</strong> de cada uma é seu município mais populoso. O modo RM soma três peças:
+          <strong> núcleo</strong> de cada uma é o município homônimo da região (por exemplo, Vitória na
+          Grande Vitória); quando não há homônimo, é o mais populoso. O modo RM soma três peças:
           migração <strong>intra-RM</strong> (fluxos entre municípios da mesma RM, incluindo a matriz
           núcleo×periferia), deslocamento <strong>pendular</strong> de trabalho e de estudo (quem mora
           num município da RM e trabalha/estuda em outro), e o <strong>cruzamento</strong> entre os dois:

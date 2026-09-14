@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agruparOcupacao, agruparTempo, bboxDeCentroides, bboxDeGeometria, calcularRankingSaldoIntraRM,
   indicadoresAgregados, prepararSankey, prioridadeFoco, uniaoDeBboxes, validarEExpandirBbox,
+  valoresPendular,
 } from "../rm";
 
 describe("indicadoresAgregados (F6: níveis RGI/RGInt/UF)", () => {
@@ -164,6 +165,69 @@ describe("agruparTempo", () => {
     expect(out.outros).toBe(3);
     const soma = Object.values(out).reduce((a, b) => a + b, 0);
     expect(soma).toBe(163);
+  });
+});
+
+describe("valoresPendular", () => {
+  it("filtra sempre pela chave de dados fixa ('tempo'/'frequencia'), nunca pela variante 2010", () => {
+    const linhas = [
+      { dimensao: "tempo", categoria: "ate_5min", valor: 10 },
+      { dimensao: "tempo", categoria: "de_6_a_15min", valor: 20 },
+      { dimensao: "frequencia", categoria: "retorno_diario", valor: 5 },
+    ];
+    // mesmo passando `agruparTempoFino=false` (como em 2010), o filtro continua usando a
+    // dimensão de dados "tempo" -- nunca "tempo2010", que não existe na coluna `dimensao`
+    const out = valoresPendular(linhas, "tempo", false);
+    const soma = Object.values(out).reduce((a, b) => a + b, 0);
+    expect(soma).toBe(30);
+  });
+
+  it("2022 (agruparTempoFino=true): agrupa as 9 categorias brutas de tempo em 5 classes", () => {
+    const linhas = [
+      { dimensao: "tempo", categoria: "ate_5min", valor: 10 },
+      { dimensao: "tempo", categoria: "de_6_a_15min", valor: 20 },
+      { dimensao: "tempo", categoria: "de_16_a_30min", valor: 30 },
+    ];
+    const out = valoresPendular(linhas, "tempo", true);
+    expect(out.ate_15min).toBe(30);
+    expect(out.de_16_a_30min).toBe(30);
+  });
+
+  it("2010 (agruparTempoFino=false): devolve as categorias de tempo2010 cruas, sem reagrupar", () => {
+    const linhas = [
+      { dimensao: "tempo", categoria: "ate_5min", valor: 10 },
+      { dimensao: "tempo", categoria: "de_6_a_30min", valor: 20 },
+      { dimensao: "tempo", categoria: "nao_se_aplica", valor: 5 },
+    ];
+    const out = valoresPendular(linhas, "tempo", false);
+    // as chaves batem com as 6 categorias de DIMENSOES_PENDULAR.tempo2010 em paletas.ts,
+    // não com as classes agrupadas de MAPA_TEMPO (ex.: "ate_15min" não deveria aparecer)
+    expect(out.ate_5min).toBe(10);
+    expect(out.de_6_a_30min).toBe(20);
+    expect(out.nao_se_aplica).toBe(5);
+    expect(out.ate_15min).toBeUndefined();
+  });
+
+  it("dimensão 'ocupacao' sempre agrupa, independente de agruparTempoFino", () => {
+    const linhas = [
+      { dimensao: "ocupacao", categoria: "01", valor: 10 },
+      { dimensao: "ocupacao", categoria: "02", valor: 10 },
+    ];
+    const out = valoresPendular(linhas, "ocupacao", false);
+    expect(out.dirigentes_profissionais).toBe(20);
+  });
+
+  it("demais dimensões (ex.: 'frequencia'): soma direta por categoria, sem agrupar", () => {
+    const linhas = [
+      { dimensao: "frequencia", categoria: "retorno_diario", valor: 7 },
+      { dimensao: "frequencia", categoria: "retorno_diario", valor: 3 },
+      { dimensao: "frequencia", categoria: "ignorado", valor: 1 },
+      { dimensao: "tempo", categoria: "ate_5min", valor: 999 }, // outra dimensão, ignorada
+    ];
+    const out = valoresPendular(linhas, "frequencia", false);
+    expect(out.retorno_diario).toBe(10);
+    expect(out.ignorado).toBe(1);
+    expect(out.ate_5min).toBeUndefined();
   });
 });
 

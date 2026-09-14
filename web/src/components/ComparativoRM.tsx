@@ -1,19 +1,23 @@
 /** Comparativo entre as 20 maiores regiões metropolitanas: mig_intra, saldo externo
  *  (barra divergente), % pendular, tempo mediano e % coletivo (barras embutidas).
- *  Ordenável por clique no cabeçalho; a RM ativa fica destacada. */
+ *  Ordenável por clique no cabeçalho; a RM ativa fica destacada. Tempo mediano e % coletivo
+ *  só aparecem em edições com esses recursos (ver lib/edicoes.ts) -- 2010 não tem quesito
+ *  de tempo em minutos nem de meio de transporte. */
 import { useMemo, useState } from "react";
 import type { ResumoRM } from "../db/queries";
+import { edicao, type Censo } from "../lib/edicoes";
 import { num, num1, sinal } from "../lib/format";
 
 interface Props {
   rms: ResumoRM[];
   ativa: string;
+  censo: Censo;
   aoEscolher: (cd_rm: string) => void;
 }
 
 type Coluna = "pop" | "mig_intra" | "saldo_externo" | "pct_pendular" | "tempo_mediano" | "pct_coletivo";
 
-const COLUNAS: { chave: Coluna; rotulo: string }[] = [
+const TODAS_COLUNAS: { chave: Coluna; rotulo: string }[] = [
   { chave: "pop", rotulo: "População" },
   { chave: "mig_intra", rotulo: "Migração intra-RM" },
   { chave: "saldo_externo", rotulo: "Saldo externo" },
@@ -22,7 +26,11 @@ const COLUNAS: { chave: Coluna; rotulo: string }[] = [
   { chave: "pct_coletivo", rotulo: "% coletivo" },
 ];
 
-export function ComparativoRM({ rms, ativa, aoEscolher }: Props) {
+export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
+  const recursos = edicao(censo).recursos;
+  const COLUNAS = TODAS_COLUNAS.filter((c) =>
+    (c.chave !== "tempo_mediano" || recursos.tempoMinutos) &&
+    (c.chave !== "pct_coletivo" || recursos.modo));
   const [ordem, setOrdem] = useState<{ col: Coluna; dir: 1 | -1 }>({ col: "pop", dir: -1 });
 
   const top20 = useMemo(() => [...rms].sort((a, b) => b.pop - a.pop).slice(0, 20), [rms]);
@@ -82,13 +90,17 @@ export function ComparativoRM({ rms, ativa, aoEscolher }: Props) {
                   </div>
                   <span className="valor-inline">{r.pct_pendular != null ? `${num1(r.pct_pendular)}%` : "—"}</span>
                 </td>
-                <td className="valor-cel">{r.tempo_mediano != null ? `${num(r.tempo_mediano)} min` : "—"}</td>
-                <td className="barra-cel-comp">
-                  <div className="barra-embutida">
-                    <span style={{ width: `${((r.pct_coletivo ?? 0) / maxColetivo) * 100}%` }} />
-                  </div>
-                  <span className="valor-inline">{r.pct_coletivo != null ? `${num1(r.pct_coletivo)}%` : "—"}</span>
-                </td>
+                {recursos.tempoMinutos && (
+                  <td className="valor-cel">{r.tempo_mediano != null ? `${num(r.tempo_mediano)} min` : "—"}</td>
+                )}
+                {recursos.modo && (
+                  <td className="barra-cel-comp">
+                    <div className="barra-embutida">
+                      <span style={{ width: `${((r.pct_coletivo ?? 0) / maxColetivo) * 100}%` }} />
+                    </div>
+                    <span className="valor-inline">{r.pct_coletivo != null ? `${num1(r.pct_coletivo)}%` : "—"}</span>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

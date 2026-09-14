@@ -259,15 +259,17 @@ export const centroidesDeMunicipios = (codigos: string[]) => {
 
 export interface CapaBrasil {
   total_migrantes: number; imig_ni: number; imig_int: number; pop5: number; n_pares: number;
+  n_municipios: number;
 }
 
 /** Números do Brasil para a capa do painel vazio: soma dos indicadores municipais
  *  (imig com origem conhecida = emig, por construção) e a contagem de pares publicados
- *  em `fluxos`. */
+ *  em `fluxos`. Por edição (F4): `consultar` já usa a conexão da edição ativa. */
 export const capaBrasil = () =>
   consultar<CapaBrasil>(`
     SELECT SUM(imig) AS total_migrantes, SUM(imig_ni) AS imig_ni, SUM(imig_int) AS imig_int,
-           SUM(pop5) AS pop5, (SELECT COUNT(*) FROM fluxos) AS n_pares
+           SUM(pop5) AS pop5, (SELECT COUNT(*) FROM fluxos) AS n_pares,
+           COUNT(*) AS n_municipios
     FROM municipios`).then((r) => r[0] ?? null);
 
 /** Maiores fluxos entre UFs, para a matriz de acordes. */

@@ -95,6 +95,36 @@ export function agruparOcupacao(linhas: { categoria: string; valor: number }[]):
   return out;
 }
 
+/** Nomes de dimensão como aparecem no dado publicado (coluna `dimensao`), sempre os mesmos
+ *  nas duas edições -- ver pipeline/sql/07_pendular.sql e pipeline/sql/2010/07_pendular.sql,
+ *  que gravam 'frequencia'/'tempo' independentemente da edição. A escolha de qual PALETA
+ *  usar para exibir cada dimensão (ed.vocabulario.tempo/frequencia, "tempo" vs. "tempo2010")
+ *  é responsabilidade de quem chama esta função, não do filtro dos dados. */
+export type NomeDimensaoDados =
+  | "frequencia" | "modo" | "tempo" | "posicao" | "setor" | "ocupacao" | "renda_trab" | "edu" | "nivel";
+
+/** Filtra as linhas de uma dimensão pendular pela chave de DADOS (sempre fixa, nunca a
+ *  variante "*2010" de paletas.ts) e aplica os agrupamentos que reduzem as categorias
+ *  brutas publicadas a classes mais legíveis:
+ *  - "ocupacao": sempre agrupa (agruparOcupacao), nas duas edições.
+ *  - "tempo": só agrupa (agruparTempo, 9 categorias -> 5 classes) quando `agruparTempoFino`
+ *    é true -- ou seja, quando a edição usa o vocabulário de 2022 (ed.vocabulario.tempo ===
+ *    "tempo"). Em 2010 (`agruparTempoFino` false) as 6 categorias de tempo2010 já vêm na
+ *    granularidade final e são devolvidas cruas, sem reagrupar.
+ *  - demais dimensões: soma direta por categoria. */
+export function valoresPendular(
+  linhas: { dimensao: string; categoria: string; valor: number }[],
+  dimDados: NomeDimensaoDados,
+  agruparTempoFino: boolean,
+): Record<string, number> {
+  const doDim = linhas.filter((l) => l.dimensao === dimDados);
+  if (dimDados === "tempo" && agruparTempoFino) return agruparTempo(doDim);
+  if (dimDados === "ocupacao") return agruparOcupacao(doDim);
+  const out: Record<string, number> = {};
+  for (const l of doDim) out[l.categoria] = (out[l.categoria] ?? 0) + l.valor;
+  return out;
+}
+
 // ================= F6: níveis de agregação (RGI, RGInt, UF) =================
 
 /** Saldo, TLM e IEM de uma unidade agregada a partir de imig/emig/pop5 -- a mesma fórmula

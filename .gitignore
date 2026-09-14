@@ -1,6 +1,9 @@
 # --- SIGILO: microdados de acesso controlado do IBGE nunca entram no repositório ---
 data/raw
 data/raw/**
+# symlink por edição (ex.: data/raw2010 -> microdados do Censo 2010); mesma regra do data/raw
+data/raw20[0-9][0-9]
+data/raw20[0-9][0-9]/**
 data/interim/
 data/geo/raw/
 *.csv

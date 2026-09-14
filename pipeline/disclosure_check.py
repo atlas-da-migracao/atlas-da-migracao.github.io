@@ -5,7 +5,12 @@ partir de data/interim/pessoas_classificado.parquet e confronta com o que foi pu
 Falha (exit 1) em qualquer violação. Em caso de sucesso, grava
 docs/relatorio_revelacao_<versao>.md e o carimbo data/processed/.gate_ok.
 
-Uso: python pipeline/disclosure_check.py [--versao v1]
+--edicao (default 2022, ver pipeline/edicoes.py) troca INTERIM/PROCESSED pelos paths da
+edição; sem --edicao o comportamento -- inclusive nomes de arquivo -- é idêntico ao
+anterior. Para outras edições, o relatório ganha o nome do arquivo com o sufixo da edição
+(`docs/relatorio_revelacao_<edicao>_<versao>.md`), para não colidir com o de 2022.
+
+Uso: python pipeline/disclosure_check.py [--versao v1] [--edicao 2010]
 """
 from __future__ import annotations
 
@@ -22,6 +27,7 @@ import duckdb
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 import disclosure_rules as R  # noqa: E402
+from edicoes import edicao as get_edicao  # noqa: E402
 from publish import COL_DIM, FILTRO_DIM, nome_col  # noqa: E402
 
 INTERIM = ROOT / "data/interim"
@@ -45,12 +51,17 @@ def sha256_arquivo(caminho: pathlib.Path) -> str:
 def hashes_publicaveis() -> dict[str, str]:
     """SHA-256 de todo arquivo publicável em data/processed (recursivo, geo/ incluído).
 
-    Caminhos relativos em POSIX (`/`), ordenados, excluindo o próprio carimbo `.gate_ok`
-    -- é o que `verify_gate.py` recomputa e confere de forma independente do resto do gate.
+    Caminhos relativos em POSIX (`/`), ordenados, excluindo o próprio carimbo `.gate_ok` --
+    é o que `verify_gate.py` recomputa e confere de forma independente do resto do gate --
+    e qualquer subpasta com o PRÓPRIO `.gate_ok` (outra edição publicada dentro desta, ex.:
+    `2010/` dentro do `data/processed` da edição 2022): tem gate próprio, não é deste.
     """
+    subgates = [g.parent for g in PROCESSED.rglob(".gate_ok") if g != GATE_OK]
     hashes = {}
     for f in sorted(PROCESSED.rglob("*")):
         if not f.is_file() or f == GATE_OK:
+            continue
+        if any(f == sg or sg in f.parents for sg in subgates):
             continue
         rel = f.relative_to(PROCESSED).as_posix()
         hashes[rel] = sha256_arquivo(f)
@@ -68,9 +79,15 @@ def ok(regra: str, msg: str) -> None:
 
 
 def main() -> int:
+    global INTERIM, PROCESSED, GATE_OK
     ap = argparse.ArgumentParser()
     ap.add_argument("--versao", default=dt.date.today().isoformat())
+    ap.add_argument("--edicao", default="2022", help="Edição do censo (ver pipeline/edicoes.py).")
     args = ap.parse_args()
+    ed = get_edicao(args.edicao)
+    INTERIM = ROOT / ed.interim
+    PROCESSED = ROOT / ed.processed
+    GATE_OK = PROCESSED / ".gate_ok"
     os.chdir(ROOT)
 
     con = duckdb.connect()
@@ -110,9 +127,11 @@ def main() -> int:
         n_pub = con.execute(f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet')").fetchone()[0]
         ok("R1", f"{n_pub:,} fluxos publicados, todos com n>={R.MIN_PESSOAS} e domicílios>={R.MIN_DOMICILIOS}")
 
+    dims = R.dimensoes(ed.nome)
+
     # ---- R1 célula a célula: cada categoria publicada dentro de um fluxo ----
     total_cel, cel_violadas = 0, 0
-    for dim, cats in R.DIMENSOES.items():
+    for dim, cats in dims.items():
         col, extra = COL_DIM[dim], (f" AND {FILTRO_DIM[dim]}" if dim in FILTRO_DIM else "")
         sel = ", ".join(
             f"COUNT(*) FILTER (WHERE {col} = '{cat}'{extra}) AS n_{nome_col(dim, cat)}" for cat in cats)
@@ -135,7 +154,7 @@ def main() -> int:
         ok("R1", f"{total_cel} categorias de fluxo verificadas célula a célula, nenhuma abaixo do limiar")
 
     # ---- R2: detalhe só em fluxos com n >= 20 ----
-    alguma = " OR ".join(f"{nome_col(d, c)} IS NOT NULL" for d, cs in R.DIMENSOES.items() for c in cs)
+    alguma = " OR ".join(f"{nome_col(d, c)} IS NOT NULL" for d, cs in dims.items() for c in cs)
     v = con.execute(f"""
         SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet') p
         JOIN cel c ON c.origem = p.origem AND c.destino = p.destino
@@ -230,7 +249,11 @@ def main() -> int:
                  ("rm_mig_pendular.parquet", "total"), ("rm_resumo.parquet", "mig_intra"),
                  ("municipios_pendular.parquet", "saida_trab")]
     ruins = []
+    checadas = 0
     for arq, col in checagens:
+        if not (PROCESSED / arq).exists():
+            continue  # tabelas do módulo metropolitano: não existem em edições sem 08_metro.sql
+        checadas += 1
         v = con.execute(
             f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/{arq}') "
             f"WHERE {col} IS NOT NULL AND ABS({col} - ROUND({col}/{R.ARREDONDAMENTO}.0)*{R.ARREDONDAMENTO}) > 1e-6"
@@ -240,13 +263,15 @@ def main() -> int:
     if ruins:
         falha("R4", "valores fora de múltiplos de 5: " + ", ".join(ruins))
     else:
-        ok("R4", f"{len(checagens)} colunas de estimativa verificadas, todas em múltiplos de {R.ARREDONDAMENTO}")
+        ok("R4", f"{checadas} colunas de estimativa verificadas, todas em múltiplos de {R.ARREDONDAMENTO}")
 
     # ---- R5: n só em faixas, nunca exato ----
     faixas_validas = {rot for _, _, rot in R.FAIXAS_N} | {"<5"}
     for arq in ("fluxos.parquet", "fluxos_uf.parquet", "municipios_dim.parquet",
                 "pendular_trab.parquet", "pendular_trab_dim.parquet", "pendular_estudo.parquet",
                 "rm_fluxos_intra.parquet", "rm_mig_pendular.parquet"):
+        if not (PROCESSED / arq).exists():
+            continue  # módulo metropolitano: não existe em edições sem 08_metro.sql
         cols = {c.lower() for c in con.execute(f"SELECT * FROM read_parquet('{PROCESSED}/{arq}') LIMIT 0").df().columns}
         numericas = [c for c in cols if c == "n" or c.startswith("n_") and not c.endswith("_faixa")]
         if numericas:
@@ -271,7 +296,7 @@ def main() -> int:
               "",
               f"- Versão dos dados: **{args.versao}**",
               f"- Gerado em: {dt.datetime.now():%Y-%m-%d %H:%M} (fuso local)",
-              "- Fonte: IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado).",
+              f"- Fonte: IBGE, Censo Demográfico {ed.nome}, microdados da amostra (acesso controlado).",
               "",
               "## Regras aplicadas",
               "",
@@ -302,7 +327,8 @@ def main() -> int:
         f"- Os {tot_pares-pub:,} pares suprimidos permanecem contabilizados nos totais municipais "
         "de `municipios.parquet`, de modo que nenhum volume é perdido — apenas a identificação do par.",
     ]
-    dest = ROOT / f"docs/relatorio_revelacao_{args.versao}.md"
+    sufixo_edicao = "" if ed.nome == "2022" else f"_{ed.nome}"
+    dest = ROOT / f"docs/relatorio_revelacao{sufixo_edicao}_{args.versao}.md"
     dest.write_text("\n".join(linhas) + "\n", encoding="utf-8")
 
     carimbo = {

@@ -6,6 +6,8 @@ import { usarDuckDBPronto } from "../db/duckdb";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { PiramideIdadeSexo } from "./PiramideIdadeSexo";
 import { DIMENSOES, rotuloRecorte, type NomeDimensao } from "../lib/paletas";
+import { edicao } from "../lib/edicoes";
+import { useStore } from "../state/store";
 
 interface Props {
   municipio: Municipio | null;
@@ -94,6 +96,7 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
   // hooks (contagem de hooks diferente entre renders da mesma fibra), o que o React 19 acusa
   // como "Expected static flag was missing" em vez do aviso de dev mais usual.
   const duckdbPronto = usarDuckDBPronto();
+  const { periodo, nome: censoNome } = edicao(useStore((s) => s.censo));
 
   if (!m) {
     return (
@@ -101,8 +104,9 @@ export function PainelMunicipio({ municipio: m, fluxos, carregando, escuro, reco
         <div className="vazio">
           <h2>Atlas da migração interna</h2>
           <p>
-            Fluxos migratórios entre os 5.570 municípios brasileiros no quinquênio 2017–2022,
-            a partir do quesito de data fixa do Censo Demográfico 2022.
+            Fluxos migratórios entre municípios brasileiros no quinquênio{" "}
+            {periodo.de.slice(0, 4)}–{periodo.ate.slice(0, 4)}, a partir do quesito de data
+            fixa do Censo Demográfico {censoNome}.
           </p>
           <p className="muted">
             Clique em um município no mapa para ver seu saldo, os principais fluxos de entrada

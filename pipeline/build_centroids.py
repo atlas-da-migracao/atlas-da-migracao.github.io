@@ -13,28 +13,32 @@ mas evita depender de leitura de TopoJSON pela extensão espacial do DuckDB (que
 esse formato) e de um passo extra de exportação/limpeza de GeoJSON temporário -- e para
 arcos de fluxo, ancorar no centro de massa populacional é, se algo, mais representativo
 que o centro geométrico da área. Documentado aqui e no relatório de QA da F6.
+
+Por edição (ver pipeline/edicoes.py): a malha bruta é lida de
+<geo_raw>/BR_Municipios_<edicao>.shp e os centroides são escritos em <processed>/geo/.
 """
+import argparse
 import pathlib
+import sys
 
 import duckdb
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-RAW = ROOT / "data/geo/raw/BR_Municipios_2022.shp"
-GEO = ROOT / "data/processed/geo"
-MUNICIPIOS = ROOT / "data/processed/municipios.parquet"
+sys.path.insert(0, str(ROOT / "pipeline"))
+from edicoes import edicao as get_edicao  # noqa: E402
 
 EXCLUIDOS = ("8888888", "9999999", "4300001", "4300002")  # placeholders e corpos d'água
 
 
-def build_municipios(con: duckdb.DuckDBPyConnection) -> None:
-    dest = GEO / "centroides.parquet"
+def build_municipios(con: duckdb.DuckDBPyConnection, raw: pathlib.Path, geo: pathlib.Path) -> None:
+    dest = geo / "centroides.parquet"
     excl = ", ".join(f"'{c}'" for c in EXCLUIDOS)
     con.execute(f"""
         COPY (
             SELECT CD_MUN AS cd_mun,
                    ST_X(ST_Centroid(geom)) AS lon,
                    ST_Y(ST_Centroid(geom)) AS lat
-            FROM ST_Read('{RAW}')
+            FROM ST_Read('{raw}')
             WHERE CD_MUN NOT IN ({excl})
         ) TO '{dest}' (FORMAT PARQUET)
     """)
@@ -44,16 +48,17 @@ def build_municipios(con: duckdb.DuckDBPyConnection) -> None:
     print(f"  bounding box: lon [{bounds[0]:.2f}, {bounds[1]:.2f}]  lat [{bounds[2]:.2f}, {bounds[3]:.2f}]")
 
 
-def build_agregado(con: duckdb.DuckDBPyConnection, campo_cd: str, nome_arquivo: str) -> None:
+def build_agregado(con: duckdb.DuckDBPyConnection, campo_cd: str, nome_arquivo: str,
+                    geo: pathlib.Path, municipios: pathlib.Path) -> None:
     """Centroide de um nível agregado = média dos centroides municipais, ponderada por pop5."""
-    dest = GEO / nome_arquivo
+    dest = geo / nome_arquivo
     con.execute(f"""
         COPY (
             SELECT m.{campo_cd} AS cd,
                    SUM(c.lon * m.pop5) / NULLIF(SUM(m.pop5), 0) AS lon,
                    SUM(c.lat * m.pop5) / NULLIF(SUM(m.pop5), 0) AS lat
-            FROM read_parquet('{MUNICIPIOS}') m
-            JOIN read_parquet('{GEO}/centroides.parquet') c USING (cd_mun)
+            FROM read_parquet('{municipios}') m
+            JOIN read_parquet('{geo}/centroides.parquet') c USING (cd_mun)
             WHERE m.{campo_cd} IS NOT NULL
             GROUP BY m.{campo_cd}
         ) TO '{dest}' (FORMAT PARQUET)
@@ -63,12 +68,22 @@ def build_agregado(con: duckdb.DuckDBPyConnection, campo_cd: str, nome_arquivo: 
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--edicao", default="2022", help="Edição do censo (ver pipeline/edicoes.py).")
+    args = ap.parse_args()
+    ed = get_edicao(args.edicao)
+
+    raw = ROOT / ed.geo_raw / f"BR_Municipios_{ed.nome}.shp"
+    geo = ROOT / ed.processed / "geo"
+    municipios = ROOT / ed.processed / "municipios.parquet"
+    geo.mkdir(parents=True, exist_ok=True)
+
     con = duckdb.connect()
     con.execute("INSTALL spatial; LOAD spatial;")
-    build_municipios(con)
-    build_agregado(con, "cd_rgi", "centroides_rgi.parquet")
-    build_agregado(con, "cd_rgint", "centroides_rgint.parquet")
-    build_agregado(con, "uf", "centroides_uf.parquet")
+    build_municipios(con, raw, geo)
+    build_agregado(con, "cd_rgi", "centroides_rgi.parquet", geo, municipios)
+    build_agregado(con, "cd_rgint", "centroides_rgint.parquet", geo, municipios)
+    build_agregado(con, "uf", "centroides_uf.parquet", geo, municipios)
 
 
 if __name__ == "__main__":

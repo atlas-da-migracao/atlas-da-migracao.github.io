@@ -2,6 +2,8 @@
 
 Convenções para qualquer sessão Claude Code neste projeto. Ler antes de começar a trabalhar.
 Plano completo: `PLANO_Atlas_Migracao_Censo2022.pdf` (raiz) e `~/.claude/plans/atue-como-um-dem-grafo-polished-crescent.md`.
+Plano da edição Censo 2010 (segunda edição do atlas, em andamento no branch `censo-2010`): `~/.claude/plans/eager-puzzling-wren.md`.
+Convenções para trabalhar com múltiplas edições/censos (layout por edição, overrides de SQL, recortes retroativos, vocabulários) e guia para incluir uma edição nova: `docs/EDICOES.md`.
 
 ## Regras de sigilo (não negociáveis)
 
@@ -44,7 +46,23 @@ python pipeline/build_paginas.py [--producao] [--out DIR]    # gerador de págin
 
 ## Orquestração de modelos
 
-Ver plano, seção "Orquestração de modelos Claude": Sonnet 5 para implementação (F0/F1/F3/componentes de F4-F5-F5b/F7); Opus 5 para metodologia, SQL de classificação/variância, arquitetura e crítica de design (F2/F2b/F6); Fable 5.1 só nos pontos mais difíceis; Haiku 4.5 via subagente para tarefas mecânicas (labels, testes a partir de spec, relatórios).
+Duas convenções convivem no repo:
+
+- **Plano original (Censo 2022, F0–F7)**: troca manual do modelo da sessão (`/model`) por fase —
+  ver plano, seção "Orquestração de modelos Claude". Sonnet 5 para implementação; Opus 5 para
+  metodologia, SQL de classificação/variância, arquitetura e crítica de design; Fable 5.1 só nos
+  pontos mais difíceis; Haiku 4.5 via subagente para tarefas mecânicas.
+- **A partir da edição Censo 2010**: alternância **automática** via subagentes de modelo fixo em
+  `.claude/agents/` — a sessão principal roda em Sonnet 5 e despacha para:
+  - `metodologo` (Opus 5) — decisões metodológicas: classificação de migração/pendular no SQL,
+    comparabilidade entre censos, regras de revelação, texto de `docs/METODOLOGIA.md`.
+  - `implementador` (Sonnet 5) — código com especificação já definida: parametrização do
+    pipeline por edição, geo, componentes React/TypeScript, CI.
+  - `mecanico` (Haiku 4.5) — tarefas mecânicas bem especificadas: parsear planilhas de
+    labels/layout, testes a partir de spec, comparação de layouts, substituições de texto.
+  - `auditor` (Fable 5.1) — só nos checkpoints de maior risco: coerência estatística de uma
+    extração/classificação nova, ou crítica final de UX/design/texto.
+  Use esses agentes (Agent tool, `subagent_type`) em vez de trocar `/model` manualmente.
 
 ## Convenções de código
 

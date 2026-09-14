@@ -1,6 +1,7 @@
 {
-  "versao_dados": "2026-09-06",
-  "gerado_em": "2026-09-06T02:45:40",
+  "edicao": "2022",
+  "versao_dados": "2026-09-14",
+  "gerado_em": "2026-09-14T15:25:30",
   "fonte": "IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado)",
   "periodo_referencia": {
     "de": "2017-07-31",
@@ -20,6 +21,7 @@
       "retorno_natal": "Retorno ao município natal",
       "primeira_saida": "Primeira saída do município natal",
       "etapas_multiplas": "Migração de etapas múltiplas",
+      "nao_natural": "Não nasceu no município nem no exterior",
       "nascido_exterior": "Nascido no exterior, migrante interno",
       "internacional_brasileiro": "Retorno do exterior (brasileiro)",
       "internacional_estrangeiro": "Imigração internacional (estrangeiro)",

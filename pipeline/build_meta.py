@@ -1,8 +1,11 @@
-"""Gera data/processed/meta.json: rótulos, cortes, limiares e versão dos dados.
+"""Gera <processed>/meta.json: rótulos, cortes, limiares e versão dos dados.
 
 Consolida as constantes usadas no pipeline (disclosure_rules.py) para que o front-end
-não precise duplicá-las.
+não precise duplicá-las. Salário mínimo e período de referência variam por edição (ver
+pipeline/edicoes.py, fonte única dessas constantes) -- --edicao 2022 é o default e
+reproduz exatamente o comportamento anterior.
 """
+import argparse
 import datetime as dt
 import json
 import pathlib
@@ -11,8 +14,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 import disclosure_rules as R  # noqa: E402
-
-SALARIO_MINIMO_2022 = 1212.00
+from edicoes import edicao as get_edicao  # noqa: E402
 
 # DOI emitido pelo Zenodo ao publicar a release v1.0.0 (integração GitHub -> Zenodo).
 # Única fonte destas constantes para o front-end interativo; as páginas estáticas de SEO
@@ -27,6 +29,9 @@ ROTULOS = {
         "retorno_natal": "Retorno ao município natal",
         "primeira_saida": "Primeira saída do município natal",
         "etapas_multiplas": "Migração de etapas múltiplas",
+        # só na edição 2010 (sem código de município de nascimento, primeira_saida/
+        # etapas_multiplas colapsam nesta categoria -- ver docs/METODOLOGIA.md)
+        "nao_natural": "Não nasceu no município nem no exterior",
         "nascido_exterior": "Nascido no exterior, migrante interno",
         "internacional_brasileiro": "Retorno do exterior (brasileiro)",
         "internacional_estrangeiro": "Imigração internacional (estrangeiro)",
@@ -88,12 +93,35 @@ ROTULOS = {
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--edicao", default="2022", help="Edição do censo (ver pipeline/edicoes.py).")
+    args = ap.parse_args()
+    ed = get_edicao(args.edicao)
+
+    # Rótulos parametrizados por edição
+    rotulos = dict(ROTULOS)  # cópia rasa
+    if ed.nome == "2010":
+        rotulos["frequencia"] = {
+            "retorno_diario": "Retorna diariamente",
+            "semanal_longa": "Não retorna diariamente"
+        }
+        rotulos.pop("modo", None)  # remove modo (não existe em 2010)
+        rotulos["tempo"] = {
+            "ate_5min": "Até 5 min",
+            "de_6_a_30min": "6 a 30 min",
+            "de_31min_a_1h": "31 min a 1 h",
+            "de_1_a_2h": "1 a 2 h",
+            "mais_de_2h": "Mais de 2 h",
+            "nao_se_aplica": "Não retorna diariamente",
+        }
+
     meta = {
+        "edicao": ed.nome,
         "versao_dados": dt.date.today().isoformat(),
         "gerado_em": dt.datetime.now().isoformat(timespec="seconds"),
-        "fonte": "IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado)",
-        "periodo_referencia": {"de": "2017-07-31", "ate": "2022-07-31"},
-        "salario_minimo_referencia": SALARIO_MINIMO_2022,
+        "fonte": f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra (acesso controlado)",
+        "periodo_referencia": dict(ed.periodo_referencia),
+        "salario_minimo_referencia": ed.salario_minimo,
         "revelacao": {
             "min_pessoas": R.MIN_PESSOAS,
             "min_domicilios": R.MIN_DOMICILIOS,
@@ -102,7 +130,7 @@ def main() -> None:
             "cv_boa": R.CV_BOA,
             "cv_cautela": R.CV_CAUTELA,
         },
-        "rotulos": ROTULOS,
+        "rotulos": rotulos,
         "citacao": {
             "autor": AUTOR_NOME,
             "autor_orcid": AUTOR_ORCID,
@@ -112,17 +140,18 @@ def main() -> None:
             "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
             "texto": (
                 f"{AUTOR_NOME}. Atlas da migração interna no Brasil. Dados do Censo "
-                "Demográfico 2022 (IBGE). DOI: https://doi.org/" + DOI_CONCEITO + "."
+                f"Demográfico {ed.nome} (IBGE). DOI: https://doi.org/" + DOI_CONCEITO + "."
             ),
         },
         "aviso": (
             "Estimativas elaboradas pelo autor a partir dos microdados da amostra do "
-            "Censo Demográfico 2022 (IBGE, acesso controlado), sujeitas a erro amostral "
+            f"Censo Demográfico {ed.nome} (IBGE, acesso controlado), sujeitas a erro amostral "
             "e a controle estatístico de revelação; podem divergir das tabulações "
             "oficiais do IBGE (SIDRA)."
         ),
     }
-    dest = pathlib.Path("data/processed/meta.json")
+    dest = ROOT / ed.processed / "meta.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"meta.json: {dest.stat().st_size} bytes")
 

@@ -1135,7 +1135,7 @@ como fonte primária. Metadados estruturados em
             ("Deslocamento pendular", "Trabalhar ou estudar em um município diferente do de residência, "
              "sem mudar de domicílio -- captado à parte da migração propriamente dita."),
             ("Região metropolitana", "Agrupamento institucional de municípios em torno de um núcleo "
-             "(o mais populoso), definido por lei estadual ou federal (RIDE); usado para estudar migração e pendularidade intrametropolitanas."),
+             "(o homônimo da região; sem homônimo, o mais populoso), definido por lei estadual ou federal (RIDE); usado para estudar migração e pendularidade intrametropolitanas."),
             ("Área de ponderação", "Unidade geográfica mínima de disseminação dos microdados do "
              "Censo, usada aqui como estrato no cálculo do erro amostral."),
             ("Coeficiente de variação (CV)", "Erro-padrão dividido pela estimativa, em percentual -- "
