@@ -71,8 +71,8 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
           fundamental completo/médio incompleto, médio completo/superior incompleto, superior
           completo), sempre restrita à população de 25 anos ou mais — idade em que a maior parte
           já concluiu (ou não) sua trajetória escolar. A renda domiciliar per capita é expressa em
-          múltiplos do salário mínimo vigente na referência do Censo
-          {sm ? ` (R$ ${sm.toLocaleString("pt-BR")})` : ""}, para não perder o sentido com a inflação.
+          múltiplos do salário mínimo de referência de cada Censo
+          {sm ? ` (${sm.toLocaleString("pt-BR")})` : ""}, para não perder o sentido com a inflação.
         </p>
       </section>
 

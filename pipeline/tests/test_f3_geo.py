@@ -20,6 +20,7 @@ EDICOES_TESTADAS = [
     pytest.param("2022", 5570, 510, 133, 27, id="2022"),
     pytest.param("2010", 5565, 510, 133, 27, id="2010"),
     pytest.param("2000", 5507, 510, 133, 27, id="2000"),
+    pytest.param("1991", 4491, 510, 133, 27, id="1991"),
 ]
 
 

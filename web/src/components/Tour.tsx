@@ -39,8 +39,8 @@ const PASSOS: Passo[] = [
   {
     alvo: '[data-tour="modo-rm"]',
     titulo: "Regiões metropolitanas",
-    texto: "Este modo troca o recorte para dentro de uma região metropolitana: migração intra-RM e " +
-      "deslocamento pendular de trabalho e estudo.",
+    texto: "Este modo troca o recorte para dentro de uma região metropolitana: migração intra-RM e, " +
+      "conforme o censo selecionado, deslocamento pendular de trabalho e estudo.",
   },
 ];
 

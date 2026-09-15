@@ -42,4 +42,24 @@ describe("edicoes", () => {
   it("EDICOES tem exatamente as chaves de CENSOS", () => {
     expect(Object.keys(EDICOES).sort()).toEqual([...CENSOS].sort());
   });
+
+  it("1991 tem módulo metropolitano mas nenhum deslocamento pendular", () => {
+    expect(edicao("1991").recursos.rm).toBe(true);
+    expect(edicao("1991").recursos.pendular).toBe(false);
+    expect(edicao("1991").recursos.modo).toBe(false);
+    expect(edicao("1991").recursos.tempoMinutos).toBe(false);
+    expect(edicao("1991").vocabulario).toEqual({});
+    expect(edicao("1991").rotuloRetorno).toBeNull();
+  });
+
+  it("edições sem deslocamento pendular não publicam vocabulário de dimensão pendular", () => {
+    // tempo/frequencia (paletas.ts) só existem como recorte de deslocamento pendular --
+    // ver 07_pendular.sql; uma edição com recursos.pendular === false não deveria ter chave
+    // nenhuma nesse vocabulário.
+    for (const c of CENSOS) {
+      if (!edicao(c).recursos.pendular) {
+        expect(Object.keys(edicao(c).vocabulario)).toEqual([]);
+      }
+    }
+  });
 });

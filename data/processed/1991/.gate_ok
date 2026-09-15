@@ -1,0 +1,28 @@
+{
+  "arquivos": {
+    "fluxos.parquet": "3240808eacaaea28a10522456cf2e5cf0634e436a1e6eba23ce1bb68ddababd0",
+    "fluxos_rgi.parquet": "66519b9d8f047da3e706241a0ba2fea730f02c058d733a49b20b1c5d6230e00e",
+    "fluxos_rgint.parquet": "7baf0da2361018947c320ecfaa5e350672834220002c16df09ffe1dc2856844d",
+    "fluxos_uf.parquet": "a5d0c92eb35dececc2dacdf020c4e1639e2bd42e6e17c4ae362fb073dd3138cd",
+    "geo/centroides.parquet": "505a337043b905090347ee440857f7832c625d5abb4296e0b55bf75028fc12f1",
+    "geo/centroides_rgi.parquet": "754a923891d4dbda47969fe12d3c35f0bb6558139a40a584dd314584778d8a2e",
+    "geo/centroides_rgint.parquet": "b106e5ab72c6cbf6aa6f774fdbdde4cf168d43429a13bf14e54fb186ccd8d7bd",
+    "geo/centroides_uf.parquet": "6a09ad98282631dbc59b8676f66c13d9c924d50fa36889f375f4a3d3bc111d37",
+    "geo/municipios.topojson": "90558a1051b6ed511fe9ea411cc17dfa0f52b21e5fd07c88a78e0f2d13d3491d",
+    "geo/recortes.json": "e43bc7abf8c19e7a20c89ea10afce08babc75f8f28aabb7cc6fcb22758a4a089",
+    "geo/rgi.topojson": "12bb2388601374b291611f12cd7fb722e89eadbfeb3dbbf97ca52c8c4c698b9f",
+    "geo/rgint.topojson": "ed177f11b9fa05613c8571b7b2dd2fe1745d4f3e9733a508432393666e9ef50a",
+    "geo/uf.topojson": "b7d1e75e895f208f8b3e0b42c6ab5fc5b240af16208f40f1906de098c83d4b9d",
+    "meta.json": "699fd330dd0f44237a7f2fdcbd543956de549f8568c7c348083f62ae1b49dcc4",
+    "municipios.parquet": "2bcee5432f7fb35cf36b58ddbc116a570d6f66436506d5e3fe1f04640616212a",
+    "municipios_dim.parquet": "7445abedb44182e7f573f7d43fb095d66993efc1acc11457d2c967310388cb6f",
+    "municipios_mapa.json": "52a73771bf6f7ec60b83ed8989a125265b41145c461a5ab92b633a5c523103d9",
+    "municipios_ref.parquet": "541522dbe9825fea78077637825d4a20d88f355d05382b66a2e5af8eb64040d6",
+    "rm.parquet": "22328ff14dfc6bb066f785c98531885a5f92a8e7dfe83dc6c27663b18ea19b6a",
+    "rm_fluxos_intra.parquet": "135f26bac47e7a8f14ca784bd17f3915642c2094d604693b03dec633ece112bc",
+    "rm_resumo.parquet": "cf4f056fe3a10f7b6a8c99f7ed3edd785ac2db3f16c857ac626c70cf23b4225f"
+  },
+  "formato_versao": 1,
+  "timestamp": "2026-09-15T19:56:37.442428",
+  "versao_dados": "1.0.0-1991"
+}

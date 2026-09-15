@@ -74,14 +74,14 @@ jobs:
           set -euo pipefail
           ARQUIVOS=$(git log --all --name-only --pretty=format: | sort -u | sed '/^$/d')
           SUSPEITOS=$(printf '%s\n' "$ARQUIVOS" \
-            | grep -E '^(data/raw/|data/raw20[0-9][0-9]/|data/interim/)|\.(csv|CSV)$' \
+            | grep -E '^(data/raw/|data/raw(19|20)[0-9][0-9]/|data/interim/)|\.(csv|CSV)$' \
             | grep -v '^pipeline/rm_nucleo\.csv$' || true)
           if [ -n "$SUSPEITOS" ]; then
             echo "ERRO: arquivos de dados brutos/intermediários ou CSV encontrados no histórico do git:" >&2
             printf '%s\n' "$SUSPEITOS" | sed 's/^/  - /' >&2
             exit 1
           fi
-          echo "Histórico limpo: nenhum arquivo em data/raw(20NN), data/interim ou *.csv (exceto pipeline/rm_nucleo.csv)."
+          echo "Histórico limpo: nenhum arquivo em data/raw(19NN|20NN), data/interim ou *.csv (exceto pipeline/rm_nucleo.csv)."
 
   construir:
     name: Construir o site (Vite + páginas estáticas)

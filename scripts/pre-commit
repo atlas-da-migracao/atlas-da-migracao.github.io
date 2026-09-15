@@ -4,7 +4,7 @@
 # Instalado a partir de scripts/pre-commit -- ver README.md ("Como rodar") para reinstalar
 # depois de um clone novo (hooks não viajam com o git clone).
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
-blocked=$(printf '%s\n' "$staged" | grep -E '^(data/raw/|data/raw20[0-9][0-9]/|data/interim/|data/geo/raw/)|\.(csv|CSV)$|(^|/)\.env(\.|$)|\.(pem|key|p12|pfx)$|credentials.*\.json$' \
+blocked=$(printf '%s\n' "$staged" | grep -E '^(data/raw/|data/raw(19|20)[0-9][0-9]/|data/interim/|data/geo/raw/)|\.(csv|CSV)$|(^|/)\.env(\.|$)|\.(pem|key|p12|pfx)$|credentials.*\.json$' \
           | grep -v '^pipeline/rm_nucleo\.csv$' || true)
 # docs/termos e docs/ibge (termos assinados, documentação técnica e correspondência com o IBGE,
 # que contêm dados pessoais do titular): tudo bloqueado, exceto o README de cada pasta

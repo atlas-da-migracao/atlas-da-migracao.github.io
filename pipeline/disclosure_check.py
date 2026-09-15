@@ -27,7 +27,7 @@ import duckdb
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 import disclosure_rules as R  # noqa: E402
-from edicoes import edicao as get_edicao  # noqa: E402
+from edicoes import ACESSO_DESCRICAO, edicao as get_edicao  # noqa: E402
 from publish import COL_DIM, FILTRO_DIM, nome_col  # noqa: E402
 
 INTERIM = ROOT / "data/interim"
@@ -296,7 +296,7 @@ def main() -> int:
               "",
               f"- Versão dos dados: **{args.versao}**",
               f"- Gerado em: {dt.datetime.now():%Y-%m-%d %H:%M} (fuso local)",
-              f"- Fonte: IBGE, Censo Demográfico {ed.nome}, microdados da amostra (acesso controlado).",
+              f"- Fonte: IBGE, Censo Demográfico {ed.nome}, microdados da amostra ({ACESSO_DESCRICAO[ed.acesso]}).",
               "",
               "## Regras aplicadas",
               "",

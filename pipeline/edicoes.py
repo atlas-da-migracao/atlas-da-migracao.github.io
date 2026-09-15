@@ -44,6 +44,13 @@ class Edicao:
     # diretório com overrides de pipeline/sql/NN_nome.sql específicos da edição; None quando
     # a edição reaproveita 100% dos scripts de pipeline/sql/.
     sql_override_dir: str | None = None
+    # False quando o questionário da edição não tem quesito de deslocamento pendular (ex.:
+    # Censo 1991) -- nesse caso a edição não publica nenhuma tabela/coluna de pendular nem o
+    # módulo RM pendular (pipeline/publish.py, F2b, e o submódulo pendular de RM). Distinto de
+    # `rotulos_pendular`, que só cobre as dimensões frequencia/modo/tempo *dentro* do módulo
+    # pendular quando ele existe -- `pendular=False` remove o módulo inteiro (inclusive
+    # posicao/setor/renda_trab/nivel).
+    pendular: bool = True
 
 
 EDICOES: dict[str, Edicao] = {
@@ -69,6 +76,7 @@ EDICOES: dict[str, Edicao] = {
         },
         pula_scripts=[],
         sql_override_dir=None,
+        pendular=True,
     ),
     "2010": Edicao(
         nome="2010",
@@ -96,6 +104,7 @@ EDICOES: dict[str, Edicao] = {
         },
         pula_scripts=[],
         sql_override_dir="pipeline/sql/2010",
+        pendular=True,
     ),
     "2000": Edicao(
         nome="2000",
@@ -113,6 +122,31 @@ EDICOES: dict[str, Edicao] = {
         },
         pula_scripts=[],
         sql_override_dir="pipeline/sql/2000",
+        pendular=True,
+    ),
+    "1991": Edicao(
+        nome="1991",
+        raw="data/raw1991",
+        interim="data/interim/1991",
+        processed="data/processed/1991",
+        geo_raw="data/geo/raw/1991",
+        # Cr$ 36.161,60 -- NÃO é o salário mínimo legal vigente em 01/09/1991 (data de referência
+        # do Censo): o Ipeadata confirma que o mínimo legal era Cr$ 17.000 até 31/08/1991 e
+        # Cr$ 42.000 a partir de 01/09/1991. É, em vez disso, um valor de REFERÊNCIA IMPLÍCITO nas
+        # próprias faixas de rendimento do questionário do Censo 1991 (RPRINCIF, 13 faixas de
+        # rendimento da ocupação principal, e RDONOMIF, 11 faixas de rendimento domiciliar): o
+        # valor foi recuperado por reconciliação, testando candidatos contra os limites dessas
+        # faixas. Placar: 36.161,60 reproduz 13/13 e 11/11 faixas; 17.000 e 42.000 reproduzem 1/13
+        # cada. 1991 é a primeira edição em que a renda NÃO vem pronta em SM -- ver explicação
+        # completa em docs/METODOLOGIA.md, seção "Edição Censo 1991 e comparabilidade", item 7, e
+        # em pipeline/sql/1991/MAPEAMENTO_02_classify.md §7.
+        salario_minimo=36161.60,
+        periodo_referencia={"de": "1986-09-01", "ate": "1991-09-01"},
+        acesso="publico",
+        rotulos_pendular={"frequencia": None, "modo": None, "tempo": None},
+        pula_scripts=["07"],
+        sql_override_dir="pipeline/sql/1991",
+        pendular=False,  # ver docstring do campo em Edicao -- sem deslocamento pendular nesta edição
     ),
 }
 

@@ -79,7 +79,11 @@ function daUrl() {
     // (ver lib/edicoes.ts) -- nunca chega a chamar as consultas de RM, que dariam erro de
     // "tabela não encontrada" na conexão DuckDB dessa edição (ver db/duckdb.ts).
     rm: edicao(censo).recursos.rm ? p.get("rm") : null,
-    aba: (aba && ["mig", "trab", "estudo"].includes(aba) ? aba : "mig") as AbaRM,
+    // como ?rm=, ignora ?aba=trab|estudo vindo de um link para uma edição sem deslocamento
+    // pendular (ver lib/edicoes.ts) -- nunca chega a chamar as consultas pendulares, que
+    // dariam erro de "tabela não encontrada" na conexão DuckDB dessa edição (ver db/duckdb.ts).
+    aba: (edicao(censo).recursos.pendular && aba && ["mig", "trab", "estudo"].includes(aba)
+      ? aba : "mig") as AbaRM,
     cruzar: p.get("cruzar") === "1",
   };
 }
@@ -113,7 +117,7 @@ export const useStore = create<Estado>((set, get) => ({
   setCenso: (censo) => {
     const patch = {
       censo, nivel: "mun" as Nivel, municipio: null, selecao: null, origem: null,
-      destino: null, rm: null, filtro: null,
+      destino: null, rm: null, filtro: null, aba: "mig" as AbaRM,
     };
     set(patch);
     paraUrl({ ...get(), ...patch });

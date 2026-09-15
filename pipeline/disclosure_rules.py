@@ -48,6 +48,9 @@ STATUS_POR_EDICAO = {
     # Censo 2000 não coleta o município de nascimento (só UF/país, V4210), mesma ausência de
     # 2010 -- ver pipeline/sql/2000/02_classify.sql e docs/METODOLOGIA.md.
     "2000": ["retorno_natal", "nao_natural", "nascido_exterior"],
+    # Censo 1991: mesmo vocabulário reduzido de 2010/2000 (sem distinguir primeira_saida/
+    # etapas_multiplas) -- ver pipeline/sql/1991/02_classify.sql e docs/METODOLOGIA.md.
+    "1991": ["retorno_natal", "nao_natural", "nascido_exterior"],
 }
 
 

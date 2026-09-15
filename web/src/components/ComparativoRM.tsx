@@ -29,6 +29,7 @@ const TODAS_COLUNAS: { chave: Coluna; rotulo: string }[] = [
 export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
   const recursos = edicao(censo).recursos;
   const COLUNAS = TODAS_COLUNAS.filter((c) =>
+    (c.chave !== "pct_pendular" || recursos.pendular) &&
     (c.chave !== "tempo_mediano" || recursos.tempoMinutos) &&
     (c.chave !== "pct_coletivo" || recursos.modo));
   const [ordem, setOrdem] = useState<{ col: Coluna; dir: 1 | -1 }>({ col: "pop", dir: -1 });
@@ -84,12 +85,14 @@ export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
                   </div>
                   <span className="valor-inline">{sinal(r.saldo_externo)}</span>
                 </td>
-                <td className="barra-cel-comp">
-                  <div className="barra-embutida">
-                    <span style={{ width: `${((r.pct_pendular ?? 0) / maxPendular) * 100}%` }} />
-                  </div>
-                  <span className="valor-inline">{r.pct_pendular != null ? `${num1(r.pct_pendular)}%` : "—"}</span>
-                </td>
+                {recursos.pendular && (
+                  <td className="barra-cel-comp">
+                    <div className="barra-embutida">
+                      <span style={{ width: `${((r.pct_pendular ?? 0) / maxPendular) * 100}%` }} />
+                    </div>
+                    <span className="valor-inline">{r.pct_pendular != null ? `${num1(r.pct_pendular)}%` : "—"}</span>
+                  </td>
+                )}
                 {recursos.tempoMinutos && (
                   <td className="valor-cel">{r.tempo_mediano != null ? `${num(r.tempo_mediano)} min` : "—"}</td>
                 )}

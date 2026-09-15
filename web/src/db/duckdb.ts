@@ -20,16 +20,22 @@ import * as duckdb from "@duckdb/duckdb-wasm";
 import { basePath, CENSO_PADRAO, edicao, type Censo } from "../lib/edicoes";
 import { useStore } from "../state/store";
 
-/** Tabelas publicadas em todas as edições. */
+/** Tabelas de migração publicadas em todas as edições, mesmo sem deslocamento pendular. */
 const TABELAS_BASE = [
-  "municipios", "municipios_dim", "municipios_ref", "municipios_pendular",
+  "municipios", "municipios_dim", "municipios_ref",
   "fluxos", "fluxos_rgi", "fluxos_rgint", "fluxos_uf",
-  "pendular_trab", "pendular_trab_dim", "pendular_estudo", "pendular_estudo_dim",
+] as const;
+/** Deslocamento pendular (trabalho/estudo): só existe em edições com `recursos.pendular`
+ *  (ver lib/edicoes.ts) -- ausente em 1991. */
+const TABELAS_PENDULAR = [
+  "municipios_pendular", "pendular_trab", "pendular_trab_dim", "pendular_estudo",
+  "pendular_estudo_dim",
 ] as const;
 /** Módulo metropolitano (F5b): só existe em edições com `recursos.rm` (ver lib/edicoes.ts). */
-const TABELAS_RM = [
-  "rm", "rm_resumo", "rm_fluxos_intra", "rm_mig_pendular", "rm_mig_pendular_resumo",
-  "rm_mig_estudo",
+const TABELAS_RM = ["rm", "rm_resumo", "rm_fluxos_intra"] as const;
+/** Cruzamento RM x deslocamento pendular: exige `recursos.rm && recursos.pendular`. */
+const TABELAS_RM_PENDULAR = [
+  "rm_mig_pendular", "rm_mig_pendular_resumo", "rm_mig_estudo",
 ] as const;
 
 /** Arquivos geográficos (fora das views acima -- lidos por caminho, via read_parquet). */
@@ -95,7 +101,13 @@ async function iniciar(censo: Censo): Promise<duckdb.AsyncDuckDBConnection> {
   const con = await db.connect();
 
   const base = new URL(basePath(censo), document.baseURI).href;
-  const tabelas = edicao(censo).recursos.rm ? [...TABELAS_BASE, ...TABELAS_RM] : TABELAS_BASE;
+  const recursos = edicao(censo).recursos;
+  const tabelas: readonly string[] = [
+    ...TABELAS_BASE,
+    ...(recursos.pendular ? TABELAS_PENDULAR : []),
+    ...(recursos.rm ? TABELAS_RM : []),
+    ...(recursos.rm && recursos.pendular ? TABELAS_RM_PENDULAR : []),
+  ];
   for (const [i, t] of tabelas.entries()) {
     emitir(censo, { estagio: "registrando", mensagem: `registrando tabelas ${i + 1}/${tabelas.length}` });
     await db.registerFileURL(`${t}.parquet`, `${base}${t}.parquet`, duckdb.DuckDBDataProtocol.HTTP, false);

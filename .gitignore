@@ -1,7 +1,11 @@
 # --- SIGILO: microdados de acesso controlado do IBGE nunca entram no repositório ---
 data/raw
 data/raw/**
-# symlink por edição (ex.: data/raw2010 -> microdados do Censo 2010); mesma regra do data/raw
+# symlink por edição (ex.: data/raw2010, data/raw2000, data/raw1991 -> microdados de cada
+# censo); mesma regra do data/raw. Gitignore não suporta alternância {19,20}, então duas
+# linhas: uma para décadas 19xx (Censo 1991 em diante) e outra para 20xx.
+data/raw19[0-9][0-9]
+data/raw19[0-9][0-9]/**
 data/raw20[0-9][0-9]
 data/raw20[0-9][0-9]/**
 data/interim/

@@ -107,6 +107,15 @@ def main() -> None:
         else:
             rotulos[chave] = valor
 
+    # Edições sem deslocamento pendular (ed.pendular=False) não publicam o módulo inteiro
+    # (pipeline/publish.py, F2b): além das chaves de frequencia/modo/tempo já tratadas acima
+    # via rotulos_pendular, remove também as demais dimensões que só existem dentro do módulo
+    # pendular (posição na ocupação, setor de atividade, renda do trabalho e nível de ensino
+    # do local de estudo).
+    if not ed.pendular:
+        for chave in ("posicao", "setor", "renda_trab", "nivel"):
+            rotulos.pop(chave, None)
+
     acesso_desc = ACESSO_DESCRICAO[ed.acesso]
     meta = {
         "edicao": ed.nome,

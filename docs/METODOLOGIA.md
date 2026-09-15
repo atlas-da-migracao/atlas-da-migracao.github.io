@@ -487,6 +487,333 @@ regras de revelação. A lista de checagens acordada antes da extração está e
   dentro do conjunto de faixas permitido) e todas as contagens ponderadas em múltiplos de 5.
   Relatório: `docs/relatorio_revelacao_2000_1.0.0-2000.md`.
 
+## Edição Censo 1991 e comparabilidade com 2022, 2010 e 2000
+
+A edição 1991 é a quarta do atlas e a primeira que exigiu **reconstruir o insumo antes de
+processá-lo**. Os microdados da amostra do Censo Demográfico 1991 são públicos, mas chegam em 27
+arquivos **DBF** (dBase III, um por Unidade da Federação), não nos TXT de largura fixa das edições
+posteriores: o pipeline converte cada DBF para texto de largura fixa (492 bytes de dados por
+registro, descartando os registros marcados como excluídos no próprio DBF) antes de qualquer SQL,
+em `scripts/prep_1991.py`. A referência de data fixa é **01/09/1986 → 01/09/1991**, um quinquênio
+exato como nas outras três edições, e o universo é o mesmo — pessoas de 5 anos ou mais. As
+divergências de conteúdo estão registradas no cabeçalho de `pipeline/sql/1991/02_classify.sql` e,
+coluna a coluna, em `pipeline/sql/1991/MAPEAMENTO_02_classify.md`.
+
+Duas características do arquivo de 1991 não têm paralelo nas edições mais novas e condicionam tudo
+o que vem depois. A primeira é que **há um único arquivo por UF, com as variáveis de domicílio
+replicadas em cada linha de pessoa** — não existe o par pessoas/domicílios de 2000, 2010 e 2022, e
+tampouco existe **chave de domicílio**: o DBF não traz identificador, apenas `PESSOAN`, o número de
+ordem da pessoa dentro do domicílio. A chave é reconstruída como um contador que avança a cada
+`PESSOAN = 1` e é verificável contra a documentação pública: o `LEIA_ME.DOC` do DVD declara, UF a
+UF, quantos domicílios e quantas pessoas cada arquivo contém, e a contagem reconstruída bate (em
+Roraima, 5.486 domicílios e 23.102 pessoas). Nacionalmente ela produz **4.024.553 domicílios** para
+**17.045.712 pessoas** — 4,24 pessoas por domicílio —, número que fecha por uma segunda via
+independente: 4.024.553 = 3.971.593 chefes (`PARENDOM = 1`) + 52.960 moradores "individual"
+(`PARENDOM = 20`). Essa chave é a unidade primária de amostragem do estimador de variância e o
+denominador da renda per capita; sem ela, nenhum dos dois existe.
+
+A segunda é que **a edição 1991 não tem deslocamento pendular**. O questionário da amostra não
+pergunta em que município a pessoa trabalha ou estuda — o quesito que sustenta todo o módulo
+pendular em 2000, 2010 e 2022 simplesmente não foi feito. A edição publica os módulos de migração
+(indicadores municipais, matriz de fluxos, recortes territoriais, migração intrametropolitana) e
+**não publica nenhuma tabela pendular nem o cruzamento migração × pendularidade** do módulo
+metropolitano. Isso está declarado em `pipeline/edicoes.py` pela flag `pendular = False` — que
+remove o módulo inteiro, e é distinta de `rotulos_pendular`, que só apaga dimensões *dentro* de um
+módulo pendular existente — e no front-end, que esconde os recursos ausentes em vez de exibir
+tabela vazia. Uma armadilha a registrar: `LOCTRAB` ("local de trabalho") **não é** o município de
+trabalho — é o *tipo* de local (no domicílio, via pública, propriedade agropecuária, empresa,
+casa do cliente, outro) — e não deve ser usado como proxy de pendularidade em nenhuma
+circunstância.
+
+1. **O Censo 1991 tem o município de origem da migração de data fixa — correção de um registro
+   anterior deste projeto.** Até esta edição, `docs/EDICOES.md` (aviso 2) e o plano do atlas
+   registravam, por antecipação, que o Censo 1991 perguntaria "apenas a UF ou o país" de residência
+   cinco anos antes, e que isso "inviabiliza a matriz origem→destino municipal como ela existe hoje
+   e pode restringir a edição aos níveis UF/RGInt". **A premissa estava errada e fica corrigida
+   aqui e em `docs/EDICOES.md`.** O Censo 1991 coleta o par completo — `MIMO86UF` (a UF, o país ou
+   "neste município" de residência em 01/09/1986) e `MIMO86MU` (o município, dentro daquela UF),
+   sob a pergunta "onde morava em 01/09/1986" —, de modo que a **matriz origem→destino municipal de
+   1991 é publicável** e a edição tem os mesmos níveis de agregação das outras três. Duas
+   particularidades de leitura: o código de origem é `MIMO86UF ‖ MIMO86MU` (o município é referido
+   à UF de 1986, nunca à de residência), e o quesito só foi feito a quem **não** respondeu "sempre
+   morou neste município" e só a partir de 5 anos de idade — o **branco é o salto do questionário,
+   não uma não-resposta**, o que foi confirmado num cruzamento nacional exaustivo entre data fixa,
+   naturalidade e idade (nenhum registro com data fixa em branco, 5 anos ou mais e naturalidade
+   diferente de "sempre morou"; nenhum registro com "sempre morou" e data fixa preenchida). Há
+   ainda a armadilha já conhecida das outras edições: `MIANMOMU` ("anos que mora no município"),
+   `MIANMOUF` e `MIULTMUD` ("última mudança") **não** identificam o migrante de data fixa — contam
+   tempo desde a última mudança ou o último retorno, exatamente como `V0416` em 2000 e `V0624` em
+   2010.
+2. **Origem não informada é `NULL`, não código-sentinela.** "Brasil sem especificação", "ignorado"
+   e o município "sem especificação" dentro de uma UF conhecida não vivem, em 1991, no espaço de
+   códigos de município — fabricar um código de sete dígitos inexistente na malha criaria um valor
+   capaz de vazar para a matriz num `JOIN` mal guardado. Por isso, ao contrário de 2010 (`UF‖99999`)
+   e de 2000 (códigos com `SUBSTR(cod,3,4) = '0000'`), a edição 1991 grava `df_uf`/`df_mun` como
+   `NULL` e as derivadas testam `IS NOT NULL`. O tratamento a jusante é o mesmo das outras edições:
+   esses registros contam na imigração total do destino (`imig_ni`), mas ficam fora da matriz
+   origem→destino e do cômputo de emigração. Nos dados publicados são **460.890 pessoas, 3,3% dos
+   13.916.955 migrantes internos de data fixa**.
+3. **Status migratório reduzido, como em 2010 e 2000.** O Censo 1991 não coleta o município de
+   nascimento: `MINASCMU` pergunta se a pessoa nasceu no município de residência e, em caso
+   negativo, só a UF ou o país (`MIUFPAIS`). Sem o município natal é impossível separar
+   `primeira_saida` de `etapas_multiplas`, e as duas colapsam em `nao_natural` — a mesma ausência
+   de 2010 e 2000, e não uma escolha de conveniência. O vocabulário publicado é idêntico ao dessas
+   duas edições (`retorno_natal`, `nao_natural`, `nascido_exterior`, mais os internacionais e a
+   origem não informada), registrado em `pipeline/disclosure_rules.STATUS_POR_EDICAO` e no seletor
+   do front-end. Como lá, `retorno_natal` é **medido pelo próprio quesito e não inferido**: entre
+   migrantes de data fixa, "nasceu neste município" só pode vir da resposta "nasci aqui, mas já
+   morei em outro lugar". A composição publicada dos imigrantes de 1991 é `nao_natural` **90,2%**,
+   `retorno_natal` **9,4%**, `nascido_exterior` 0,3% e `outros` 0,1% (`municipios_dim.parquet`,
+   direção `imig`, sobre os 13.456.065 imigrantes com origem informada). Duas notas: a UF de
+   nascimento vem num **código sequencial de 1 a 27**, não no código do IBGE, e o dicionário do
+   próprio IBGE traz "SE" duas vezes (posições 15 e 16, quando a 16 é a Bahia) — erro corrigido na
+   tabela de conversão gerada em `pipeline/labels_1991.py`; e permanece a **subcontagem de
+   `nascido_exterior`** já descrita em 2000, porque brasileiros natos nascidos no exterior são
+   instruídos a registrar "Brasil" na pergunta de naturalidade.
+4. **Duas informações exclusivas de 1991 que não são publicadas.** A primeira é a **residência
+   imediatamente anterior** (`MIANTEUF`/`MIANTEMU`, UF e município), um conceito de "última etapa"
+   que 2000, 2010 e 2022 não têm no contrato publicado; a segunda é a **zona urbana ou rural da
+   moradia em 1986** (`MIMO86ZN`), análogo exato do `V0424` de 2000. Nenhuma das duas vira coluna
+   do contrato: publicar a última etapa criaria um eixo sem par em qualquer outra edição e deixaria
+   ambíguo qual é "a" origem de um migrante de 1991 — o atlas passaria a ter dois conceitos de
+   origem convivendo num único seletor. As duas ficam registradas como material disponível para
+   análise futura.
+5. **Raça/cor existe no microdado e não é publicada.** `RACACOR` está no arquivo de 1991 e bem
+   preenchida, mas o contrato de 49 colunas de `pessoas_classificado.parquet` **não tem dimensão de
+   raça/cor em nenhuma das três edições já publicadas**. Introduzi-la só em 1991 quebraria o
+   contrato de esquema, daria um recorte disponível numa edição e ausente nas outras e exigiria
+   calibrar as regras R1–R9 para uma dimensão nova. A decisão é de escopo, não de disponibilidade:
+   se o atlas quiser essa dimensão, ela entra por todas as edições de uma vez.
+6. **Escolaridade derivada de anos de estudo.** Como em 2000, 1991 não tem variável de nível de
+   instrução pronta, e `nivel_instr_4` é derivado de `EDANOEST` ("anos de estudo", calculada pelo
+   IBGE para toda a população), com os cortes clássicos do instituto e idênticos aos de 2000: 0–7
+   anos e **alfabetização de adultos** → sem instrução e fundamental incompleto; 8–10 →
+   fundamental completo e médio incompleto; 11–14 → médio completo e superior incompleto; 15–17 →
+   superior completo. A alfabetização de adultos vai para a primeira classe, e não para
+   `nao_determinado`, pela mesma razão de 2000 — é categoria conhecida, e mandá-la para "não
+   determinado" a misturaria com a desconhecida e criaria divergência artificial entre edições.
+   Vale a mesma aproximação já declarada lá: uma graduação de três anos totaliza 14 anos de estudo
+   e cai em "médio completo e superior incompleto", subestimando ligeiramente `superior_completo`
+   frente a 2010 e 2022. Nos dados publicados, `nao_determinado` é uma categoria praticamente
+   vazia em 1991 (255 pessoas entre os imigrantes, 0,004%) e por isso aparece **100% `NULL` em
+   `fluxos.parquet`**: em todos os pares publicados ela cai abaixo do limiar R1 e é absorvida por
+   `edu__outros` pela supressão complementar R3.
+7. **Salário mínimo de referência: Cr$ 36.161,60, recuperado por reconciliação com as faixas do
+   IBGE.** Esta é a primeira edição do atlas em que **a renda não vem pronta em número de salários
+   mínimos**: em 2010 e 2000 o IBGE divulga o rendimento já convertido; em 1991, tanto o rendimento
+   da ocupação principal (`RPRINCIV`) quanto o rendimento domiciliar (`RDOMICIV`) estão em
+   **Cruzeiros correntes**, e o atlas precisa de um divisor para manter os cortes de renda (1/4,
+   1/2, 1 e 2 SM na renda per capita) comparáveis entre edições. O valor foi obtido por
+   reconciliação com as faixas que o próprio IBGE calculou e divulgou ao lado dos valores brutos —
+   treze faixas de salário mínimo para o rendimento individual (`RPRINCIF`) e onze para o
+   domiciliar (`RDONOMIF`): **Cr$ 36.161,60 reproduz as 13 faixas individuais e as 11 domiciliares**
+   (24 limites ao cruzeiro), enquanto Cr$ 17.000,00 e Cr$ 42.000,00 reproduzem uma de treze cada.
+   Pelo lado do domicílio a reconciliação crava o centavo: a faixa que termina em Cr$ 36.161 é
+   seguida pela que começa em Cr$ 36.164. Nenhum deflator é aplicado — os cortes do atlas são
+   relativos ao salário mínimo de cada censo, e é isso que os torna comparáveis apesar do Cruzeiro,
+   do Real e da inflação do período.
+   **Ressalva de procedência, revista em F7.7 e mais forte do que a registrada antes.** O valor é
+   **derivado dos microdados**, por concordância com duas variáveis de faixa independentes
+   construídas pelo IBGE, e **não é o salário mínimo legal vigente na data de referência do censo**
+   — ao contrário do que o rascunho desta seção e o comentário de `pipeline/edicoes.py` afirmavam.
+   A conferência externa feita em F7.7 (série `MTE12_SALMIN12` do Ipeadata, convertida de Real para
+   Cruzeiro pelos divisores oficiais de 1993 e 1994) dá **Cr$ 17.000,00 de março a agosto de 1991 e
+   Cr$ 42.000,00 a partir de 1º de setembro de 1991** — nenhum dos dois é 36.161,60. A leitura
+   correta é, portanto, que Cr$ 36.161,60 é o **valor de referência implícito nas próprias faixas
+   de rendimento do Censo 1991** (plausivelmente um valor médio ou corrigido, adotado pelo IBGE ao
+   classificar os rendimentos), e não a norma salarial do mês. Para o atlas isso é o que interessa:
+   é o divisor que faz os cortes relativos da edição coincidirem com as classes de rendimento que
+   o IBGE publicou para 1991 — usar Cr$ 42.000,00 deslocaria todos os cortes em cerca de 16% e
+   descolaria a edição das tabulações oficiais. Fica registrado que a origem documental exata do
+   valor (qual norma ou qual média o IBGE aplicou) **não foi localizada**, e que a evidência que
+   sustenta a escolha é interna: 24 de 24 limites de faixa reproduzidos.
+8. **Renda domiciliar per capita: a armadilha de 2000, aqui verificada e não herdada.** Como em
+   2000, 1991 não publica rendimento domiciliar per capita, e a construção ingênua está errada —
+   mas em 1991 foi possível **demonstrá-lo**. Comparando `RDOMICIV` com a soma dos rendimentos
+   individuais dos moradores, a identidade fecha em **100% dos domicílios particulares** quando se
+   excluem da soma pensionistas, empregados domésticos residentes e parentes de empregados
+   domésticos; incluindo-os, fecha em 98,6% e, entre os domicílios que de fato têm alguma dessas
+   pessoas, em apenas 7 de 75. O numerador do IBGE exclui esses moradores, e o denominador tem de
+   excluí-los também, sob pena de subestimar a renda per capita exatamente nos domicílios de renda
+   mais alta. O denominador usado é a contagem de moradores fora daquelas três categorias, obtida
+   por agregação da chave de domicílio reconstruída. Domicílio coletivo fica nulo
+   (`nao_aplicavel`), como nas demais edições.
+9. **Estrato de variância aproximado: município × situação urbano/rural.** **O Censo 1991 não tem
+   área de ponderação** — ela é o estrato do estimador de conglomerados em último estágio que o
+   atlas usa desde 2022 e existe nas outras três edições (em 2000, 9.336 áreas, cada uma contida
+   num único município). Em 1991 o estrato adotado é **`cd_mun` × situação do setor censitário**:
+   setores urbanizados, não urbanizados e urbanizados isolados formam o estrato urbano do
+   município; aglomerados rurais e área rural, o rural. A variável de situação está sempre
+   preenchida e sempre dentro do intervalo válido, e valida de quebra o peso amostral — a proporção
+   ponderada de população urbana resultante é **75,60%**, contra os 75,59% publicados pelo IBGE para
+   1991. O resultado são **8.939 estratos**, mesma ordem de grandeza das 9.336 áreas de 2000, com
+   mediana de 877 registros por estrato e **um único** estrato com menos de cinco registros. **Isto
+   é uma aproximação declarada**: não é a partição do desenho amostral do IBGE, os pesos de 1991 não
+   foram calibrados nela, e o estrato é mais heterogêneo que uma área de ponderação real — o que
+   tende a **inflar** a variância estimada, ou seja, a errar para o lado conservador. A validação
+   empírica está na lista de validações abaixo ("Precisão"); o resultado foi **aprovar o
+   reaproveitamento do estimador**, publicando `se` e `cv` normalmente, com a ressalva de que a
+   precisão de 1991 é sistematicamente um pouco pior que a de 2000 em amostras comparáveis.
+10. **Recortes territoriais e o maior anacronismo do atlas.** O Brasil de 1991 tinha **4.491
+    municípios**; o de 2022 tem 5.572. Como nas edições anteriores, os recortes de 2022 — Regiões
+    Geográficas Imediatas, Intermediárias e o recorte metropolitano — são aplicados retroativamente
+    **por código de município**, para que os níveis de agregação da interface sejam navegáveis entre
+    censos. A relação entre as malhas é limpa num sentido e pesada no outro: **todos os 4.491
+    municípios de 1991 têm par em `labels.RECORTES`** (nenhum extinto, nenhum código alterado), mas
+    **1.082 códigos de 2022 não existem em 1991** — 1.079 municípios publicados mais três códigos
+    da malha que não são municípios —, quase todos criados por desmembramento depois de 1991.
+    Contra 6 municípios sem par em 2000 e 4 em 2010, é um salto de duas ordens de grandeza, e
+    confirma o que o aviso 1 de `docs/EDICOES.md` antecipava para 1991. **A decisão registrada é
+    manter a convenção "por código, sem áreas mínimas comparáveis"**, documentando o anacronismo em
+    vez de construir uma tabela de AMC: uma AMC mudaria a unidade de análise de todas as edições ao
+    mesmo tempo, e o custo do anacronismo é mensurável e está limitado a um nível de agregação.
+    Onde ele **não** morde: as **510 Regiões Geográficas Imediatas e as 133 Intermediárias
+    continuam todas povoadas** em 1991 — nenhuma fica vazia, nenhum município de 1991 fica sem
+    recorte —, porque cada município criado depois saiu de dentro de um município que já pertencia
+    à mesma região. Nesses dois níveis a agregação de 1991 é diretamente comparável à das outras
+    edições.
+11. **Onde o anacronismo morde: o recorte metropolitano.** As 81 regiões metropolitanas e RIDEs de
+    2022 continuam todas presentes em 1991, mas **1.132 municípios de 1991 têm RM, contra 1.382 em
+    2000, 1.384 em 2010 e 1.388 em 2022**, e **66 das 81 regiões aparecem em 1991 com menos
+    municípios do que em 2022** (2000: seis regiões; 2010: quatro), num total de **256 municípios
+    metropolitanos de 2022 ausentes da malha de 1991**. A leitura correta é que uma região
+    metropolitana de 1991 tem a **composição municipal de 1991**: o território que hoje é um
+    município autônomo da região estava, em 1991, dentro do município de origem do desmembramento —
+    quando esse município também pertence à região, o território coberto é o mesmo e só a contagem
+    muda; quando não pertence, o território da região em 1991 é efetivamente menor. A partição
+    exata entre esses dois casos **não foi calculada** (exigiria a tabela de desmembramentos que a
+    decisão do item 10 dispensou); o que se sabe é que nenhuma região ficou vazia e que as perdas se
+    concentram nas RMs de criação recente e de municípios grandes na Amazônia e no Centro-Norte —
+    as mais afetadas em proporção são Santarém/PA (1 município em 1991 contra 3 em 2022), Sudoeste
+    Maranhense (9 contra 22), Extremo Oeste/SC (23 contra 49), Sul do Estado/RR e Parnaíba/PI (2
+    contra 4 cada) e Gurupi/TO (10 contra 18). **Aviso de comparabilidade**: três regiões ficam com
+    **um único município** em 1991 — **Região Metropolitana de Porto Velho** (RO), **Região
+    Metropolitana de Santarém** (PA) e **Região Metropolitana de Central** (RR, núcleo Caracaraí).
+    Nelas, todo indicador intrametropolitano que depende de um par de municípios é estruturalmente
+    degenerado em 1991: não há migração intrametropolitana possível, e `nucleo_periferia`,
+    `periferia_nucleo` e `periferia_periferia` são zero por construção, não por medida. Não leia
+    esses zeros como queda do fluxo intrametropolitano frente a 2000/2010/2022.
+12. **Núcleo metropolitano por fallback numa região.** O núcleo de cada RM vem de
+    `pipeline/rm_nucleo.csv`, arquivo único compartilhado por todas as edições (regra: município
+    membro homônimo da região; sem homônimo, o mais populoso). Em 1991 isso encontra um caso que
+    nenhuma edição anterior encontrou: o núcleo da **Região Metropolitana do Sul do Estado** (RR)
+    é **Rorainópolis**, município instalado depois de 1991 e, portanto, **ausente da malha da
+    edição**. Sem tratamento, nenhum município da região casaria com o núcleo e todos os pares
+    intra-RM cairiam em `periferia_periferia`. A regra aplicada é **a mesma do gerador do CSV
+    quando não há homônimo — o município mais populoso entre os que existem na malha da edição** —,
+    e só se aplica às RMs cujo núcleo do CSV está ausente naquele censo. Resultado em 1991:
+    **São João da Baliza** (10.145 habitantes) passa a núcleo, à frente de São Luiz (9.105), os
+    dois únicos municípios da região presentes em 1991. A tipologia de fluxos intra-RM
+    (`rm_fluxos_intra.parquet`) e os agregados núcleo/periferia de `rm_resumo.parquet` usam esse
+    núcleo. A coluna `nm_nucleo` de `data/processed/1991/rm_resumo.parquet` é resolvida a partir do
+    núcleo efetivo da edição (o fallback de `pipeline/sql/1991/08_metro.sql`), e não do rótulo do
+    CSV compartilhado: exibe "São João da Baliza", em coerência com os cálculos de tipologia. O CSV
+    continua dizendo "Rorainópolis" porque é compartilhado com as edições em que esse município
+    existe.
+13. **Ausências declaradas: 22 colunas do contrato ficam `NULL`.** O contrato de 49 colunas de
+    `pessoas_classificado.parquet` é o mesmo das outras três edições; o que 1991 não mede fica
+    explicitamente `NULL`, nunca `0` nem `false`. São **22 colunas** — as 19 do bloco pendular e de
+    suas derivadas (`trab_local`, `trab_uf`, `trab_mun`, `estudo_local`, `estudo_uf`, `estudo_mun`,
+    `curso`, `curso_grupo`, `retorna_3dias`, `transporte`, `tempo_desloc_cat`, `tempo_desloc_min`,
+    `pendular_trab`, `pendular_estudo`, `modo_grupo`, e as de perfil do trabalho `pos_grupo`,
+    `setor_grupo`, `ocup_grupo`, `renda_trab_classe`) mais as três marcas de imputação
+    (`imp_df_local`, `imp_df_mun`, `imp_trab_mun`), que 1991 não traz. Contra **5 colunas nulas em
+    2000, 6 em 2010 e nenhuma em 2022**. `pendular_trab` e `pendular_estudo` são
+    `CAST(NULL AS BOOLEAN)` e não `FALSE`: "não medido" não é "medido e negativo".
+
+**Nota sobre o desenho amostral e o estimador de variância.** A amostra do Censo 1991 é, como nas
+edições posteriores, uma seleção de **domicílios** com fração amostral por município, e o peso é
+atribuído ao domicílio e replicado em cada morador — a estrutura que o estimador de conglomerados
+últimos do atlas assume (domicílio como UPA). O que muda, e muda de forma relevante, é o
+**estrato**: 1991 não tem área de ponderação, e o atlas usa o substituto descrito no item 9
+(município × situação urbano/rural). Por isso o reaproveitamento do estimador **não** foi presumido
+a partir de 2000. A verificação empírica está abaixo, e a conclusão é dupla: (a) o estimador é
+reaproveitável, porque a diferença de precisão frente a 2000 fica dentro da própria tendência que
+as edições mais antigas já mostravam entre si; (b) a precisão de 1991 é **moderadamente pior** que
+a de 2000 em amostras de mesmo tamanho, o que é o efeito esperado de um estrato mais heterogêneo
+que a área de ponderação real. Leia `se` e `cv` de 1991 como estimativas **conservadoras**.
+
+### Validações realizadas (F7, edição Censo 1991)
+
+Todas rodadas sobre `data/processed/1991/**` — os dados já publicados e aprovados no gate —, salvo
+onde indicado, de modo que os números abaixo são os dos arquivos que o site consome, já com o
+arredondamento das regras de revelação.
+
+- **Recortes territoriais.** **4.491 municípios**, 27 UFs, **510 regiões imediatas** e **133 regiões
+  intermediárias** em `municipios_ref.parquet` — os mesmos 510/133 de 2000, 2010 e 2022, sem nenhum
+  município de 1991 sem par em `labels.RECORTES` e **sem nenhuma região vazia**. No sentido
+  inverso, 1.082 códigos de `labels.RECORTES` (1.079 municípios publicados de 2022) não têm par em
+  1991 — o anacronismo do item 10.
+- **Recorte metropolitano.** **81 regiões** e **1.132 municípios** com RM em `rm.parquet` (2000:
+  1.382; 2010: 1.384; 2022: 1.388). Cada uma das 81 regiões tem **exatamente um núcleo** e nenhum
+  município pertence a mais de uma região. 66 regiões têm menos municípios que em 2022 (256
+  municípios a menos no total); **3 regiões ficam com um único município** (Porto Velho, Santarém e
+  Central) e **1 região usa núcleo por fallback** (Sul do Estado/RR → São João da Baliza) — itens
+  11 e 12.
+- **Fechamento da migração.** **44.407 pares publicados** em `fluxos.parquet` (2000: 52.655; 2010:
+  52.895; 2022: 53.097), **zero** deles com origem igual ao destino. Σ imigrantes = **13.456.065** e
+  Σ emigrantes = **13.456.115** em `municipios.parquet`, com Σ saldos = 60: a identidade fecha até o
+  arredondamento do gate — resíduo de 50 sobre 13,5 milhões (0,0004%), porque as regras de revelação
+  arredondam cada célula a múltiplos de 5 antes de gravar, e o mesmo resíduo aparece nas outras
+  edições (2000 fecha em +160, 2010 em −105, 2022 em +170). Fora da matriz, `imig_ni` soma 460.890
+  (origem não informada) e `imig_int`, 66.255 (imigração internacional).
+- **População e universo.** Σ `pop` = **146.815.850**, contra 146.825.475 do universo do Censo 1991:
+  **−0,007%**, dentro da divergência de expansão que o próprio IBGE declara (a soma dos pesos na
+  tabela classificada, antes do arredondamento, é 146.815.790). Σ `pop5` — o universo do atlas, 5
+  anos ou mais — = **130.282.915**. Migração de data fixa: **10,68%** dos residentes de 5 anos ou
+  mais (13.916.955 pessoas, imigrantes com origem informada mais origem não informada); 0,05% de
+  imigração internacional.
+- **Chave de domicílio e estrato.** 4.024.553 domicílios reconstruídos (4,24 pessoas por
+  domicílio), conferidos por duas vias independentes; **8.939 estratos** de variância
+  (município × situação), mediana de 877 registros e um único estrato com menos de 5 registros;
+  proporção ponderada de população urbana **75,60%** contra os 75,59% publicados pelo IBGE
+  (checagens sobre `data/interim/1991/pessoas_classificado.parquet`, agregadas).
+- **Precisão — distribuição publicada.** Em `fluxos.parquet`: 1991, n = 44.407 pares, CV
+  mín/mediana/média/máx = **2,73%/50,55%/49,67%/94,08%**; 2000, n = 52.655,
+  2,26%/48,62%/47,86%/92,76%; 2010, n = 52.895, 3,69%/47,63%/47,27%/90,98%; 2022, n = 53.097,
+  3,40%/46,18%/45,84%/94,25%.
+- **Precisão — validação estratificada por tamanho de amostra.** A comparação apenas pela mediana e
+  pela média brutas das tabelas intermediárias **não discrimina nada** e foi descartada como
+  critério: em todas as quatro edições a mediana do CV de `fluxos_bruto.parquet` é exatamente
+  100,0% e a média fica entre 85,6% e 86,5%, porque a massa de pares é dominada por células com uma
+  única observação. O teste que discrimina é estratificar por `n` (sobre `fluxos_bruto.parquet`,
+  antes da supressão):
+
+  | estrato | 1991 (mediana / média) | 2000 | 2010 | 2022 |
+  | --- | --- | --- | --- | --- |
+  | `n ≥ 5` (73.860 pares em 1991) | **64,5% / 66,2%** | 59,5% / 61,9% | 55,4% / 58,6% | 50,8% / 53,3% |
+  | `n ≥ 30` (7.635 pares) | **28,2% / 28,0%** | 25,5% / 24,9% | 24,3% / 23,9% | 22,3% / 21,8% |
+  | `n ≥ 100` (1.107 pares) | **15,0% / 14,5%** | 13,5% / 13,0% | 12,7% / 12,3% | 12,1% / 11,7% |
+
+  Lido assim, 1991 é consistentemente **5% a 20% mais impreciso que 2000** em amostras do mesmo
+  tamanho (+5,0 p.p. na mediana em `n ≥ 5`, +2,7 p.p. em `n ≥ 30`, +1,5 p.p. em `n ≥ 100`), mas o
+  degrau está **dentro da tendência já observada entre as edições**, que piora monotonicamente com a
+  idade do censo mesmo onde o estrato é o do IBGE (de 2010 para 2000 a mediana em `n ≥ 5` já sobe
+  4,1 p.p.). **Conclusão: o reaproveitamento do estimador está aprovado**, e a edição 1991 publica
+  `se` e `cv` — com a ressalva, registrada no item 9 e na nota de desenho amostral, de que o estrato
+  substituto infla moderadamente a variância e torna a precisão de 1991 conservadora, não
+  comparável ponto a ponto com a das edições que têm área de ponderação.
+- **Ausências declaradas (`NULL`, nunca zero).** As **22 colunas** do item 13 estão 100% nulas em
+  `pessoas_classificado.parquet` (2000: 5; 2010: 6; 2022: 0). Nas tabelas publicadas, isso aparece
+  como **seis colunas integralmente nulas em `rm_resumo.parquet`** — `ocupados`, `pendulares`,
+  `pct_pendular`, `tempo_mediano`, `pct_coletivo` e `pct_diario`, 0 de 81 preenchidas em cada uma,
+  contra 81 de 81 nas três primeiras em 2000 — e nenhuma tabela pendular publicada (2000, 2010 e
+  2022 publicam `municipios_pendular`, `pendular_trab`, `pendular_trab_dim` e `pendular_estudo`;
+  1991 não publica nenhuma delas). A sétima coluna nula de 1991,
+  `edu__nao_determinado` em `fluxos.parquet`, não é ausência de medida e sim efeito da supressão —
+  ver item 6.
+- **Gate de revelação.** `data/processed/1991/.gate_ok` carimba **21 arquivos** na versão
+  **`1.0.0-1991`** (12 na raiz da edição — 10 parquets, `meta.json` e `municipios_mapa.json` — mais
+  9 em `geo/`), e `python pipeline/verify_gate.py --dir data/processed/1991` **aprova sem
+  microdados**. O relatório registra: 44.407 fluxos publicados, todos com n ≥ 5 e ≥ 3 domicílios;
+  nenhum fluxo com menos de 20 observações publicando detalhe; 10 colunas de estimativa em
+  múltiplos de 5; nenhuma contagem amostral exata (só `n_faixa`); nenhuma coluna de domicílio ou de
+  área de ponderação nos 10 parquets. A supressão é mais forte que nas outras edições, como
+  esperado numa amostra menor: dos **217.689** pares origem→destino existentes na amostra, 44.407
+  (**20,4%**) são publicados, cobrindo **71,6% do volume migratório estimado**; os 173.282 pares
+  suprimidos continuam contabilizados nos totais municipais, de modo que nenhum volume se perde —
+  apenas a identificação do par. Relatório: `docs/relatorio_revelacao_1991_1.0.0-1991.md`.
+
 ## Limitações conhecidas
 
 - Estimativas de erro amostral usam um estimador conservador de conglomerados (domicílio como UPA, área de ponderação como estrato), pois o IBGE não disponibiliza estratos/UPAs formais nos microdados da amostra; cross-checado contra a Função de Variância Generalizada do IBGE.
@@ -494,3 +821,5 @@ regras de revelação. A lista de checagens acordada antes da extração está e
 - Migração de data fixa não captura movimentos múltiplos dentro do quinquênio, apenas o par (residência em 2017, residência em 2022).
 - Na edição 2000, o deslocamento pendular **para estudo** é um piso, não uma estimativa do total: o Censo 2000 tem um único quesito de trabalho/estudo, com precedência do trabalho, e por isso o fluxo de estudo cobre apenas estudantes não ocupados — e nem todos eles, já que quem trabalha no próprio município e estuda em outro assinala "neste município". O piso capta 2,3% dos estudantes de 2000, contra 6,9% em 2010 e 7,1% em 2022. Comparável em composição e direção, nunca em nível. Ver o aviso de leitura e o item 1 da seção "Edição Censo 2000 e comparabilidade".
 - Na edição 2000, a dimensão ocupacional não é comparável em nível com as de 2010 e 2022: a CBO-Domiciliar 2000 não tem o grande grupo de "ocupações elementares" da ISCO-08, e a massa correspondente reaparece distribuída entre serviços/vendedores, agropecuária e indústria/construção/operadores. Ver o item 9 da mesma seção.
+- Na edição 1991, a precisão declarada é **aproximada e conservadora**: o Censo 1991 não tem área de ponderação, e o estrato do estimador de variância é um substituto (município × situação urbano/rural), mais heterogêneo que a área real. Estratificando os fluxos por tamanho de amostra, o coeficiente de variação mediano de 1991 fica 5% a 20% acima do de 2000 em pares de mesmo `n` — dentro da tendência já observada entre as edições, mas o suficiente para que `se` e `cv` de 1991 não sejam comparáveis ponto a ponto com os das edições que têm área de ponderação. Ver o item 9 e as validações da seção "Edição Censo 1991 e comparabilidade".
+- Na edição 1991, o anacronismo territorial é bem mais acentuado que nas edições recentes: **1.082 códigos municipais de 2022 não existem na malha de 1991** (contra 6 em 2000 e 4 em 2010), e o atlas mantém a convenção de aplicar os recortes de 2022 por código, sem áreas mínimas comparáveis. Regiões imediatas e intermediárias continuam todas povoadas, mas **66 das 81 regiões metropolitanas aparecem em 1991 com menos municípios que em 2022** e **três delas ficam com um único município** (Porto Velho, Santarém e Central), o que zera por construção — não por medida — todos os indicadores intrametropolitanos dessas três. Ver os itens 10 e 11 da mesma seção.

@@ -4,8 +4,8 @@
  *  data/processed (2022 na raiz, por compatibilidade; as demais em subpasta própria) e pode
  *  não ter certos recursos -- ver docs/METODOLOGIA.md, "Edição Censo 2010 e comparabilidade".
  */
-export type Censo = "2022" | "2010" | "2000";
-export const CENSOS: Censo[] = ["2022", "2010", "2000"];
+export type Censo = "2022" | "2010" | "2000" | "1991";
+export const CENSOS: Censo[] = ["2022", "2010", "2000", "1991"];
 export const CENSO_PADRAO: Censo = "2022";
 
 export interface Edicao {
@@ -19,6 +19,10 @@ export interface Edicao {
   recursos: {
     /** módulo metropolitano (08_metro.sql roda para esta edição e publica rm*.parquet) */
     rm: boolean;
+    /** deslocamento pendular (07_pendular.sql roda para esta edição); false quando a edição
+     *  não tem nenhum quesito de deslocamento (ex.: Censo 1991, ver pipeline/edicoes.py
+     *  `pula_scripts`). */
+    pendular: boolean;
     /** dimensão "meio de transporte" do deslocamento pendular */
     modo: boolean;
     /** tempo de deslocamento em minutos (mediana); só faixas categóricas quando false */
@@ -50,7 +54,7 @@ export const EDICOES: Record<Censo, Edicao> = {
     rotulo: "Censo 2022",
     subtitulo: "Censo 2022, data fixa 2017–2022",
     periodo: { de: "2017-07-31", ate: "2022-07-31" },
-    recursos: { rm: true, modo: true, tempoMinutos: true },
+    recursos: { rm: true, pendular: true, modo: true, tempoMinutos: true },
     vocabulario: { tempo: "tempo", frequencia: "frequencia" },
     rotuloRetorno: "Retorna 3+ dias/semana",
     statusCategorias: ["retorno_natal", "primeira_saida", "etapas_multiplas", "nascido_exterior"],
@@ -60,7 +64,7 @@ export const EDICOES: Record<Censo, Edicao> = {
     rotulo: "Censo 2010",
     subtitulo: "Censo 2010, data fixa 2005–2010",
     periodo: { de: "2005-07-31", ate: "2010-07-31" },
-    recursos: { rm: true, modo: false, tempoMinutos: false },
+    recursos: { rm: true, pendular: true, modo: false, tempoMinutos: false },
     vocabulario: { tempo: "tempo2010", frequencia: "frequencia2010" },
     rotuloRetorno: "Retorna diariamente",
     statusCategorias: ["retorno_natal", "nao_natural", "nascido_exterior"],
@@ -73,12 +77,26 @@ export const EDICOES: Record<Censo, Edicao> = {
     // rm: o módulo metropolitano existe (08_metro.sql roda para 2000), só sem os
     // indicadores de deslocamento (pct_diario/pct_coletivo/tempo_mediano NULL, ver
     // pipeline/sql/2000/08_metro.sql). modo/tempoMinutos: inexistentes, como em 2010.
-    recursos: { rm: true, modo: false, tempoMinutos: false },
+    recursos: { rm: true, pendular: true, modo: false, tempoMinutos: false },
     // nem tempo nem frequência existem em 2000 (um único quesito de deslocamento, sem
     // meio de transporte, sem tempo e sem frequência de retorno) -- ver
     // docs/METODOLOGIA.md, "Edição Censo 2000 e comparabilidade".
     vocabulario: {},
     rotuloRetorno: null,
+    statusCategorias: ["retorno_natal", "nao_natural", "nascido_exterior"],
+  },
+  "1991": {
+    nome: "1991",
+    rotulo: "Censo 1991",
+    subtitulo: "Censo 1991, data fixa 1986–1991",
+    periodo: { de: "1986-09-01", ate: "1991-09-01" },
+    // sem deslocamento pendular nesta edição (LOCTRAB é tipo de local, não município) -- ver
+    // pipeline/edicoes.py `pendular=False` e `pula_scripts=["07"]`.
+    recursos: { rm: true, pendular: false, modo: false, tempoMinutos: false },
+    vocabulario: {},
+    rotuloRetorno: null,
+    // vocabulário reduzido igual ao de 2010/2000 (sem distinguir primeira_saida/
+    // etapas_multiplas) -- ver docs/METODOLOGIA.md.
     statusCategorias: ["retorno_natal", "nao_natural", "nascido_exterior"],
   },
 };

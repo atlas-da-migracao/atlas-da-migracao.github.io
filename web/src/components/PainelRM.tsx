@@ -123,9 +123,11 @@ export function PainelRM({
 
   useEffect(() => { listarRMs().then(setRms); }, []);
 
-  // aba "mig": sub-painel migrantes e trabalho
+  // aba "mig": sub-painel migrantes e trabalho -- só existe em edições com deslocamento
+  // pendular (ver lib/edicoes.ts); em 1991 as tabelas rm_mig_pendular* nem são registradas
+  // na conexão DuckDB (ver db/duckdb.ts), então a consulta nem pode ser disparada.
   useEffect(() => {
-    if (aba !== "mig") return;
+    if (aba !== "mig" || !recursos.pendular) return;
     let vivo = true;
     migPendularResumoDaRM(cdRm).then((r) => { if (vivo) setMigResumo(r); });
     caminhosPendularDaRM(cdRm).then(async (caminhos) => {
@@ -190,25 +192,27 @@ export function PainelRM({
           <h2>{resumo.nm_rm}</h2>
           <div className="muted">
             Núcleo: {resumo.nm_nucleo}{resumo.nucleo_uf && `/${resumo.nucleo_uf}`} ·{" "}
-            {resumo.n_municipios} municípios · {num(resumo.pop)} habitantes
+            {resumo.n_municipios} {resumo.n_municipios === 1 ? "município" : "municípios"} · {num(resumo.pop)} habitantes
           </div>
         </div>
         <button className="fechar" onClick={aoSair} aria-label="Sair do modo RM">×</button>
       </header>
 
-      <div className="segmentado abas-rm" role="group" aria-label="Aba do painel metropolitano">
-        <button className={aba === "mig" ? "ativo" : ""} onClick={() => aoMudarAba("mig")}>
-          Migração intra-RM
-        </button>
-        <button className={aba === "trab" ? "ativo" : ""} onClick={() => aoMudarAba("trab")}>
-          Pendular trabalho
-        </button>
-        <button className={aba === "estudo" ? "ativo" : ""} onClick={() => aoMudarAba("estudo")}>
-          Pendular estudo
-        </button>
-      </div>
+      {recursos.pendular && (
+        <div className="segmentado abas-rm" role="group" aria-label="Aba do painel metropolitano">
+          <button className={aba === "mig" ? "ativo" : ""} onClick={() => aoMudarAba("mig")}>
+            Migração intra-RM
+          </button>
+          <button className={aba === "trab" ? "ativo" : ""} onClick={() => aoMudarAba("trab")}>
+            Pendular trabalho
+          </button>
+          <button className={aba === "estudo" ? "ativo" : ""} onClick={() => aoMudarAba("estudo")}>
+            Pendular estudo
+          </button>
+        </div>
+      )}
 
-      {(aba === "trab" || aba === "estudo") && (
+      {recursos.pendular && (aba === "trab" || aba === "estudo") && (
         <label className="checkbox-cruzar">
           <input type="checkbox" checked={cruzar} onChange={(e) => aoMudarCruzar(e.target.checked)} />
           Incluir fluxos que cruzam o limite da RM
@@ -269,6 +273,8 @@ export function PainelRM({
             ))}
           </ul>
 
+          {recursos.pendular && (
+          <>
           <h3 className="secao-titulo">Migrantes e trabalho</h3>
           {migResumo && (
             <div className="kpis">
@@ -331,10 +337,12 @@ export function PainelRM({
           ) : (
             <p className="muted">Caminhos insuficientes para o diagrama nesta RM.</p>
           )}
+          </>
+          )}
         </>
       )}
 
-      {aba === "trab" && (
+      {recursos.pendular && aba === "trab" && (
         <>
           <div className="kpis">
             <Kpi rotulo="Ocupados" valor={num(resumo.ocupados)} />
@@ -374,7 +382,7 @@ export function PainelRM({
         </>
       )}
 
-      {aba === "estudo" && (
+      {recursos.pendular && aba === "estudo" && (
         <>
           <div className="kpis">
             <Kpi rotulo="Estudantes pendulares da RM" valor={num(estudoResumo?.saida_estudo ?? 0)} />

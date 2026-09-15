@@ -3,6 +3,7 @@
 Convenções para qualquer sessão Claude Code neste projeto. Ler antes de começar a trabalhar.
 Plano completo: `PLANO_Atlas_Migracao_Censo2022.pdf` (raiz) e `~/.claude/plans/atue-como-um-dem-grafo-polished-crescent.md`.
 Plano da edição Censo 2010 (segunda edição do atlas, em andamento no branch `censo-2010`): `~/.claude/plans/eager-puzzling-wren.md`.
+Plano da edição Censo 1991 (quarta edição, branch `censo-1991`): `~/.claude/plans/elabore-um-plano-para-warm-hartmanis.md`. Essa edição não tem deslocamento pendular e os microdados chegam em DBF — a conversão para largura fixa é feita por `scripts/prep_1991.py` antes do pipeline, a partir do symlink `data/raw1991`.
 Convenções para trabalhar com múltiplas edições/censos (layout por edição, overrides de SQL, recortes retroativos, vocabulários) e guia para incluir uma edição nova: `docs/EDICOES.md`.
 
 ## Regras de sigilo (não negociáveis)

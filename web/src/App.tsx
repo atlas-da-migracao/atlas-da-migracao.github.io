@@ -470,7 +470,7 @@ export default function App() {
 
   const painelDireita = rm ? (
     origem && destino ? (
-      aba === "mig"
+      aba === "mig" || !recursos.pendular
         ? <PainelFluxo origem={origem} destino={destino} escuro={escuro}
                        aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
         : <Suspense fallback={fallbackPainel}>
