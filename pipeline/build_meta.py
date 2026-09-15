@@ -14,7 +14,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 import disclosure_rules as R  # noqa: E402
-from edicoes import edicao as get_edicao  # noqa: E402
+from edicoes import ACESSO_DESCRICAO, edicao as get_edicao  # noqa: E402
 
 # DOI emitido pelo Zenodo ao publicar a release v1.0.0 (integração GitHub -> Zenodo).
 # Única fonte destas constantes para o front-end interativo; as páginas estáticas de SEO
@@ -98,28 +98,21 @@ def main() -> None:
     args = ap.parse_args()
     ed = get_edicao(args.edicao)
 
-    # Rótulos parametrizados por edição
+    # Rótulos parametrizados por edição (ver pipeline/edicoes.py, Edicao.rotulos_pendular):
+    # parte do vocabulário-padrão (ROTULOS) e sobrescreve/remove só o que a edição declara.
     rotulos = dict(ROTULOS)  # cópia rasa
-    if ed.nome == "2010":
-        rotulos["frequencia"] = {
-            "retorno_diario": "Retorna diariamente",
-            "semanal_longa": "Não retorna diariamente"
-        }
-        rotulos.pop("modo", None)  # remove modo (não existe em 2010)
-        rotulos["tempo"] = {
-            "ate_5min": "Até 5 min",
-            "de_6_a_30min": "6 a 30 min",
-            "de_31min_a_1h": "31 min a 1 h",
-            "de_1_a_2h": "1 a 2 h",
-            "mais_de_2h": "Mais de 2 h",
-            "nao_se_aplica": "Não retorna diariamente",
-        }
+    for chave, valor in ed.rotulos_pendular.items():
+        if valor is None:
+            rotulos.pop(chave, None)
+        else:
+            rotulos[chave] = valor
 
+    acesso_desc = ACESSO_DESCRICAO[ed.acesso]
     meta = {
         "edicao": ed.nome,
         "versao_dados": dt.date.today().isoformat(),
         "gerado_em": dt.datetime.now().isoformat(timespec="seconds"),
-        "fonte": f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra (acesso controlado)",
+        "fonte": f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra ({acesso_desc})",
         "periodo_referencia": dict(ed.periodo_referencia),
         "salario_minimo_referencia": ed.salario_minimo,
         "revelacao": {
@@ -145,7 +138,7 @@ def main() -> None:
         },
         "aviso": (
             "Estimativas elaboradas pelo autor a partir dos microdados da amostra do "
-            f"Censo Demográfico {ed.nome} (IBGE, acesso controlado), sujeitas a erro amostral "
+            f"Censo Demográfico {ed.nome} (IBGE, {acesso_desc}), sujeitas a erro amostral "
             "e a controle estatístico de revelação; podem divergir das tabulações "
             "oficiais do IBGE (SIDRA)."
         ),

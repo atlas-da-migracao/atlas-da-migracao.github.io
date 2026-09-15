@@ -275,6 +275,11 @@ export const DIMENSOES_PENDULAR = {
     categorias: [
       { chave: "infantil_fundamental", rotulo: "Infantil ou fundamental", cor: AZUL(0) },
       { chave: "medio", rotulo: "Médio", cor: AZUL(1) },
+      // exclusiva da edição Censo 2000 (V0430 = 11): o pré-vestibular conta como frequência
+      // à escola em 2000 e não em 2010/2022 -- ver pipeline/sql/2000/MAPEAMENTO_02_classify.md
+      // §9 e docs/METODOLOGIA.md. Cor reaproveitada de AZUL(3), não usada por nenhuma outra
+      // categoria desta dimensão.
+      { chave: "pre_vestibular", rotulo: "Pré-vestibular", cor: AZUL(3) },
       { chave: "graduacao", rotulo: "Graduação", cor: AZUL(2) },
       { chave: "pos_graduacao", rotulo: "Pós-graduação", cor: AZUL(4) },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },

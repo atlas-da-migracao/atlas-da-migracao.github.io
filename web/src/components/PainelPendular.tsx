@@ -41,12 +41,22 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
   // docs/METODOLOGIA.md), mas a CHAVE DE DADOS filtrada é sempre "frequencia"/"tempo" --
   // só a paleta de exibição muda (ed.vocabulario), nunca o filtro em valoresPendular.
   const dimsBase = tipo === "trab" ? DIMS_TRAB : DIMS_ESTUDO;
-  const dims: NomeDimensaoDados[] = dimsBase.filter((d) => recursos.modo || d !== "modo");
+  // 2000 não tem "tempo" nem "frequencia" (nenhum quesito de deslocamento além do
+  // município de trabalho/estudo, ver docs/METODOLOGIA.md): ed.vocabulario.tempo/frequencia
+  // vêm undefined nessa edição, e a dimensão correspondente nem é publicada em
+  // pendular_trab_dim_bruto.parquet (07_pendular.sql), então tem de ser filtrada aqui como
+  // "modo" já era.
+  const dims: NomeDimensaoDados[] = dimsBase.filter((d) =>
+    (recursos.modo || d !== "modo") &&
+    (ed.vocabulario.tempo != null || d !== "tempo") &&
+    (ed.vocabulario.frequencia != null || d !== "frequencia"));
   /** paleta (DIMENSOES_PENDULAR) a exibir para uma dimensão de dados: usa a variante "*2010"
-   *  só no map de exibição, nunca para filtrar os dados. */
+   *  só no map de exibição, nunca para filtrar os dados. Os fallbacks abaixo nunca são
+   *  exercitados na prática -- `dims` já filtrou "tempo"/"frequencia" quando ausentes --,
+   *  só existem para manter o tipo de retorno não opcional. */
   const paletaDim = (d: NomeDimensaoDados): NomeDimensaoPendular => {
-    if (d === "tempo") return ed.vocabulario.tempo;
-    if (d === "frequencia") return ed.vocabulario.frequencia;
+    if (d === "tempo") return ed.vocabulario.tempo ?? "tempo";
+    if (d === "frequencia") return ed.vocabulario.frequencia ?? "frequencia";
     return d;
   };
 
@@ -128,11 +138,13 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
                 <div className="kpi-valor">{ida.tempo_mediano != null ? `${num(ida.tempo_mediano)} min` : "—"}</div>
               </div>
             )}
-            <div className="kpi">
-              <div className="kpi-rotulo">Retorno diário</div>
-              <div className="kpi-valor">{ida.pct_diario != null ? `${num1(ida.pct_diario)}%` : "—"}</div>
-              <div className="kpi-detalhe">{ed.rotuloRetorno}</div>
-            </div>
+            {ed.rotuloRetorno != null && (
+              <div className="kpi">
+                <div className="kpi-rotulo">Retorno diário</div>
+                <div className="kpi-valor">{ida.pct_diario != null ? `${num1(ida.pct_diario)}%` : "—"}</div>
+                <div className="kpi-detalhe">{ed.rotuloRetorno}</div>
+              </div>
+            )}
             {recursos.modo && (
               <div className="kpi">
                 <div className="kpi-rotulo">Transporte coletivo</div>

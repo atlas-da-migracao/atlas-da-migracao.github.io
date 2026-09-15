@@ -28,8 +28,12 @@ fi
 # 4300001/4300002 = Lagoa Mirim e Lagoa dos Patos (corpos d'água sem população, incluídos
 # pelo IBGE na malha por completude cartográfica; não são municípios). Confirmado presente
 # nas duas malhas (2022 e 2010); 8888888/9999999 são placeholders só do dado tabular 2022,
-# mas o filtro os cobre de graça caso apareçam em malhas futuras.
-FILTRO='CD_MUN != "8888888" && CD_MUN != "9999999" && CD_MUN != "4300001" && CD_MUN != "4300002"'
+# mas o filtro os cobre de graça caso apareçam em malhas futuras. CD_MUN="0" é um artefato de
+# geo/fetch_2000.sh: -clean preenche gaps de topologia com um polígono sem geocódigo (herda
+# "0" do DBF), visto na malha 2000 como uma feição degenerada (~1,8e-8 grau² de área, perto da
+# Baía de Guanabara/RJ) sem correspondência em municipios_ref.parquet -- inofensivo incluir o
+# filtro nas demais edições, já que "0" nunca aparece nelas.
+FILTRO='CD_MUN != "8888888" && CD_MUN != "9999999" && CD_MUN != "4300001" && CD_MUN != "4300002" && CD_MUN != "0"'
 OUT="$PROCESSED/geo"
 mkdir -p "$OUT"
 

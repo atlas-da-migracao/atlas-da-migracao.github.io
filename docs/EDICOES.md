@@ -2,8 +2,8 @@
 
 ## Por que este documento existe
 
-O atlas já publica duas edições — Censo 2022 (primeira) e Censo 2010 (segunda) — e há intenção de
-incluir os Censos **2000, 1991 e 1980**. Quase toda decisão de engenharia tomada até aqui tem uma
+O atlas já publica três edições — Censo 2022 (primeira), Censo 2010 (segunda) e Censo 2000
+(terceira) — e há intenção de incluir os Censos **1991 e 1980**. Quase toda decisão de engenharia tomada até aqui tem uma
 consequência de comparabilidade que não é óbvia seis meses depois: onde ficam os arquivos, qual
 recorte territorial vale, o que fazer quando um questionário não pergunta algo que o outro
 pergunta. Este documento registra cada uma dessas decisões **com a alternativa que foi descartada e
@@ -24,19 +24,21 @@ ela, não a duplica.
 | Fonte única de configuração | `pipeline/edicoes.py` (paths, salário mínimo, período de referência, overrides de SQL) espelhado por `web/src/lib/edicoes.ts` (path base dos dados, recursos disponíveis, vocabulário, rótulos). | Uma única fonte compartilhada (JSON gerado, ou config lida pelo front) | Os dois lados precisam de coisas diferentes: o pipeline precisa de paths de microdado e constantes de cálculo, que **nunca** podem vazar para o bundle do site; o front precisa de rótulos e de quais recursos existem. Duas fontes paralelas e pequenas, com o comentário de cabeçalho de cada uma apontando para a outra, saiu mais seguro que uma fonte única acoplada. O preço é manter as duas sincronizadas ao adicionar uma edição. |
 | Override de SQL por edição | `pipeline/sql/<edicao>/NN_nome.sql` substitui `pipeline/sql/NN_nome.sql` **se existir** (mesmo nome de arquivo, mesma ordem de execução). Um override escreve os paths literais da própria edição; os scripts genéricos, esses sim, passam por substituição automática de prefixo (`_adaptar_sql` em `pipeline/run.py`). | Um único SQL genérico com `CASE WHEN edicao = ...` ou templating de variáveis | Os censos divergem em vocabulário de variável, não só em caminho: tentar cobrir 2010 e 2022 no mesmo arquivo produziria um SQL ilegível e frágil. Com override por nome, a diferença fica visível como diff entre dois arquivos, e o cabeçalho de cada override documenta exatamente em que pontos ele diverge do genérico. Overrides **não** passam por `_adaptar_sql` (duplicaria o prefixo da edição). |
 | Contrato de esquema de `pessoas_classificado.parquet` | Toda edição produz a tabela classificada com o **mesmo conjunto de colunas**; o que a edição não mede fica `NULL` (ex.: `modo_grupo`, `tempo_desloc_min` em 2010). | Cada edição com seu próprio esquema, e scripts a jusante adaptados | O esquema estável é o que permite reaproveitar os scripts posteriores sem mexer neles. Hoje `03_indicators.sql` roda idêntico nas duas edições (só com a troca de paths); `04`, `07` e `08` têm override **apenas** pelas divergências de vocabulário e de publicação documentadas em `docs/METODOLOGIA.md`, não por diferença de estrutura. Quanto mais o contrato for respeitado, menos overrides uma edição nova precisa. |
-| Recortes territoriais (RGI, RGInt) | A divisão de 2017 do IBGE aplicada **retroativamente** por código de município, a partir de `pipeline/labels.py` (`RECORTES`, dicionário de 2022). | Usar a divisão vigente em cada censo (mesorregião/microrregião de 2010 etc.) | Sem um recorte comum, os níveis de agregação da interface (RGI, RGInt, UF) não seriam navegáveis entre edições. O anacronismo é explícito e documentado, e o custo é conhecido: 510 RGIs e 133 RGInts em ambas as edições, nenhum município sem correspondência. |
+| Recortes territoriais (RGI, RGInt) | A divisão de 2017 do IBGE aplicada **retroativamente** por código de município, a partir de `pipeline/labels.py` (`RECORTES`, dicionário de 2022). | Usar a divisão vigente em cada censo (mesorregião/microrregião de 2010 etc.) | Sem um recorte comum, os níveis de agregação da interface (RGI, RGInt, UF) não seriam navegáveis entre edições. O anacronismo é explícito e documentado, e o custo é conhecido: 510 RGIs e 133 RGInts nas três edições (2022, 2010 e 2000), nenhum município sem correspondência. |
 | Recorte metropolitano | Idem: as **81 RMs/RIDEs do dicionário de 2022** aplicadas retroativamente por código de município (`pipeline/build_ref.py::_build_outra_edicao`). | O recorte metropolitano do próprio censo — em 2010, a variável `V1004`, com 42 unidades (36 RMs, 3 RIDEs, 3 aglomerações urbanas do RS) | Alternativa avaliada e descartada: 38 das 42 unidades de 2010 têm par nominal em 2022, mas mesmo essas têm **composição municipal diferente**, então usá-las daria RMs que mudam de recorte quando o usuário troca de censo. Custo assumido: municípios criados depois do censo antigo simplesmente não existem nele (4 casos entre 2010 e 2022 — ver `docs/METODOLOGIA.md`, item 6). |
 | `cd_rm` | Sempre o `COD_CATMETROPOL` de 2022, em todas as edições. | Código nativo de cada censo | Consequência direta do recorte retroativo: é o identificador que permite ao front trocar de edição mantendo a seleção do usuário. |
 | Núcleo metropolitano | Município **membro** homônimo (o nome do município aparece como sequência inteira de palavras no nome da região); sem homônimo, o mais populoso. Um único `pipeline/rm_nucleo.csv`, gerado por `pipeline/build_rm_nucleo.py`, compartilhado por todas as edições. | Regra "sempre o mais populoso" (a original), ou um núcleo por edição | O homônimo é a definição que corresponde ao conceito de cidade-núcleo em casos como a Grande Vitória, onde o mais populoso (Serra) não é o centro funcional. A regra foi aplicada retroativamente também a 2022 para que uma RM não troque de núcleo ao trocar de censo — mudou o núcleo de 3 das 81 regiões. `--check` no script falha se o CSV sair de sincronia. |
 | Vocabulários que mudam com o questionário | Declarados por edição: `pipeline/disclosure_rules.STATUS_POR_EDICAO` no pipeline e `recursos`/`vocabulario`/`rotuloRetorno`/`statusCategorias` em `web/src/lib/edicoes.ts`. Os componentes consultam a configuração da edição. | `if (censo === "2010")` espalhado pelos componentes e pelo SQL de publicação | Uma condicional por edição multiplica-se por edição × componente; com cinco censos, seria inviável. Declarar o vocabulário num lugar só faz a edição nova ser um registro novo na tabela, não uma varredura pelo código. Cobre: categorias de `status` migratório, frequência de retorno pendular, faixas de tempo de deslocamento e presença/ausência da dimensão "modo de transporte". |
 | `NULL` vs `0`/`false` | "Esta edição não mede isso" é sempre `NULL`, gravado explicitamente (ex.: `CAST(NULL AS DOUBLE)` em `pipeline/sql/2010/08_metro.sql`), nunca `0`, `false` ou string vazia. | Deixar o agregador convergir para `NULL` sozinho, ou preencher com zero | Zero é um valor medido; ausência não é. Gravar explicitamente documenta a ausência no próprio SQL em vez de depender de efeito colateral, e o front decide se esconde o indicador (via `recursos`) em vez de exibir "0%". |
 | Regras de revelação | R1–R9 idênticas em todas as edições, num único caminho de código (`pipeline/disclosure_rules.py` aplicado por `publish.py` e verificado por `disclosure_check.py --edicao <e>`). Só o vocabulário de `status` varia. | Limiares calibrados por edição (ex.: mais frouxos para microdados públicos como os de 2010) | Um único conjunto de regras é auditável e transferível; calibrar por edição criaria a obrigação de justificar cada limiar separadamente e abriria a porta para publicar em 2010 algo que não se publicaria em 2022. O relatório sai com sufixo de edição (`docs/relatorio_revelacao_<edicao>_<versao>.md`) para não colidir. |
-| Estimador de variância | O mesmo estimador de conglomerados em último estágio (domicílio como UPA, área de ponderação como estrato) reaproveitado sem alteração entre 2022 e 2010. | Reestimar o desenho amostral de cada censo | Os dois censos têm o mesmo desenho relevante (amostra por domicílio, calibração por área de ponderação) e o resultado foi validado: a distribuição de CV dos fluxos de 2010 é praticamente idêntica à de 2022. **Isto não se generaliza automaticamente para censos anteriores** — ver avisos abaixo. |
+| Estimador de variância | O mesmo estimador de conglomerados em último estágio (domicílio como UPA, área de ponderação como estrato) reaproveitado sem alteração entre 2022, 2010 e 2000. | Reestimar o desenho amostral de cada censo | Os três censos têm o mesmo desenho relevante (amostra sistemática por domicílio, calibração GLS por área de ponderação) e o resultado foi validado edição a edição: a distribuição de CV dos fluxos de 2010 e a de 2000 são praticamente idênticas à de 2022. **Isto não se generaliza automaticamente para 1991 e 1980** — cada edição nova refaz a verificação; ver avisos abaixo. |
 
-## Avisos específicos para 2000, 1991 e 1980
+## Avisos específicos para 1991 e 1980 (e o que a edição 2000 já resolveu)
 
 Cada item abaixo é um ponto onde a convenção da tabela acima provavelmente **não** vale, e que
-precisa de decisão nova e registrada — não de cópia.
+precisa de decisão nova e registrada — não de cópia. Os itens 3, 4 e 5 foram **revistos depois de
+implementar a edição 2000**: onde eles falavam de 2000 por antecipação, agora falam do que se
+verificou de fato, e o aviso passa a valer só para 1991 e 1980.
 
 1. **Códigos de município mudam muito mais.** Entre 2010 e 2022 o problema se resumiu a cinco
    municípios instalados em 2013, resolvidos como "ausentes do censo antigo". De 1980 para 2022 há
@@ -44,34 +46,69 @@ precisa de decisão nova e registrada — não de cópia.
    município desmembrado. Aplicar RGI/RGInt e o recorte metropolitano retroativamente por código
    passa a exigir uma tabela de **áreas mínimas comparáveis** (AMC), construída antes de qualquer
    agregação territorial, e não apenas um filtro de códigos ausentes. Decidir também se a AMC vira
-   um nível de agregação visível na interface ou só uma etapa interna.
+   um nível de agregação visível na interface ou só uma etapa interna. O Censo 2000 **ainda não
+   precisou de AMC**: os 5.507 municípios de 2000 têm todos par em `labels.RECORTES`, e o recorte
+   metropolitano perde só seis municípios (contra quatro em 2010), todos com o município de origem
+   do desmembramento na mesma RM. O salto de escala é, portanto, de 2000 para 1991, não de 2010
+   para 2000.
 2. **A variável de data fixa muda de definição.** O par (residência há 5 anos, residência atual)
    não é o mesmo quesito em todos os censos. O Censo 1991 pergunta apenas a **UF ou o país** de
    residência 5 anos antes, sem o município — o que inviabiliza a matriz origem→destino municipal
-   como ela existe hoje e pode restringir a edição aos níveis UF/RGInt. E a distinção entre
-   município de nascimento e residência anterior, que 2022 tem e 2010 já não tem, precisa ser
-   reconferida censo a censo antes de mapear as categorias de `status` (a confirmar no
-   questionário de cada edição).
-3. **Deslocamento pendular só existe a partir de 2010.** O quesito "onde trabalha/estuda" é o que
-   sustenta todo o módulo pendular e o cruzamento migração × pendularidade do módulo
-   metropolitano. O Censo 2000 tem local de trabalho, mas sem tempo nem frequência de
-   deslocamento; 1991 e 1980 provavelmente não têm nada de pendular (a confirmar nos
-   questionários). Para essas edições, `pula_scripts` em `pipeline/edicoes.py` e
-   `recursos.rm`/recursos pendulares em `web/src/lib/edicoes.ts` existem exatamente para isso — a
-   edição publica menos módulos, e o front esconde o que não existe em vez de mostrar tabela vazia.
+   como ela existe hoje e pode restringir a edição aos níveis UF/RGInt. O Censo 2000, ao contrário,
+   tem o município de residência em 31/07/1995 e até com um universo **mais largo** que o de
+   2010/2022 (sem o filtro de "menos de 6 anos no município"). E a distinção entre município de
+   nascimento e residência anterior, que 2022 tem e 2010 já não tem, precisa ser reconferida censo
+   a censo antes de mapear as categorias de `status`: conferido em 2000 — o quesito 4.21 pergunta
+   só a UF ou o país, então 2000 usa o mesmo vocabulário reduzido de 2010 (ver
+   `docs/METODOLOGIA.md`, item 3 da seção de 2000). Para 1991 e 1980, a confirmar no questionário
+   de cada edição.
+3. **O módulo pendular existe em 2000; o que muda é o detalhe do deslocamento.** *(Revisto depois
+   de implementar a edição 2000 — a redação anterior, "pendular só existe a partir de 2010",
+   estava errada.)* O quesito "em que município trabalha ou estuda" é o que sustenta todo o módulo
+   pendular e o cruzamento migração × pendularidade do módulo metropolitano, e o Censo 2000 **tem**
+   esse quesito (o 4.27, `V4276`): destino de trabalho, destino de estudo e o módulo metropolitano
+   inteiro são publicados na edição 2000. Exclusivos de 2010 e 2022 são **tempo gasto** e
+   **frequência de retorno**; **meio de transporte** é exclusivo de 2022 (2010 também não tem)
+   — daí `pct_diario`/`tempo_mediano` nulos em 2000 (`pct_coletivo` já é nulo desde 2010) e três
+   dimensões a menos (`modo`, `frequencia`, `tempo`) em `pendular_trab_dim.parquet` frente a 2022
+   (ver `docs/METODOLOGIA.md`, itens 1 e 5 da seção de 2000). A armadilha de 2000 é outra e não é de
+   cobertura, é de universo: **um único quesito cobre trabalho e estudo**, com precedência do
+   trabalho, o que faz do fluxo de estudo um piso e não uma estimativa do total — leia o aviso de
+   leitura daquela seção antes de comparar níveis entre edições. Para 1991 e 1980, que
+   provavelmente não têm nada de pendular (a confirmar nos questionários), `pula_scripts` em
+   `pipeline/edicoes.py` e `recursos.rm`/recursos pendulares em `web/src/lib/edicoes.ts` existem
+   exatamente para isso — a edição publica menos módulos, e o front esconde o que não existe em vez
+   de mostrar tabela vazia.
 4. **Peso amostral e desenho da amostra mudam de metodologia.** A calibração, a fração amostral e
    a definição de estrato variam entre censos. O reaproveitamento do estimador de variância entre
-   2022 e 2010 foi **verificado**, não presumido; para os censos anteriores é preciso refazer essa
-   verificação antes de publicar erro-padrão e coeficiente de variação, e considerar a
-   possibilidade de a edição publicar estimativas sem precisão declarada.
-5. **1980 não tem área de ponderação.** O conceito foi introduzido depois, e é o estrato do
-   estimador atual. Sem ele, ou se define outro estrato (setor censitário agregado, município,
-   microrregião — com a perda de precisão correspondente), ou a edição de 1980 publica sem erro
+   2022 e 2010 foi **verificado**, não presumido; a mesma verificação foi refeita e **passou para o
+   Censo 2000** (mesmo desenho — amostra sistemática de domicílios, calibração GLS por área de
+   ponderação —, e distribuição do CV dos fluxos praticamente idêntica à das outras duas edições).
+   Para 1991 e 1980 a verificação continua a fazer, antes de publicar erro-padrão e coeficiente de
+   variação, e continua valendo a possibilidade de a edição publicar estimativas sem precisão
+   declarada.
+5. **Área de ponderação: existe em 2000, some em algum ponto antes disso.** *(Precisado depois de
+   implementar a edição 2000.)* A área de ponderação é o estrato do estimador de variância do
+   atlas e a unidade em que os pesos são calibrados, então saber se ela existe decide se a edição
+   publica erro-padrão e CV. Situação: **2022 e 2010 têm; o Censo 2000 também tem** — 9.336 áreas
+   no país, cada uma contida em um único município e com no mínimo 400 domicílios particulares
+   ocupados na amostra, com calibração por Mínimos Quadrados Generalizados (Bankier) idêntica em
+   estrutura à das edições mais novas, o que permitiu reaproveitar o estimador sem adaptação e
+   validá-lo (ver `docs/METODOLOGIA.md`, "Validações realizadas (F6, edição Censo 2000)":
+   distribuição do CV dos fluxos praticamente idêntica à de 2010 e 2022). **1991 é o que precisa
+   ser conferido no arquivo de documentação da amostra** — não presuma nem que tem nem que não
+   tem. **1980 não tem**, e para essa edição ou se define outro estrato (setor censitário agregado,
+   município, microrregião — com a perda de precisão correspondente), ou ela publica sem erro
    amostral. Decisão metodológica, não de implementação.
 6. **Salário mínimo e renda.** A edição 2010 pôde reaproveitar os cortes relativos porque o IBGE já
-   divulga a renda **em número de salários mínimos**. Onde isso não existir, será preciso decidir
-   entre converter com o salário mínimo de referência do censo ou deflacionar — e nesse caso
-   registrar qual índice, porque isso afeta diretamente a comparabilidade dos cortes de renda.
+   divulga a renda **em número de salários mínimos**; 2000 também (`V4514`, com o SM de julho de
+   2000, R$ 151,00). Onde isso não existir, será preciso decidir entre converter com o salário
+   mínimo de referência do censo ou deflacionar — e nesse caso registrar qual índice, porque isso
+   afeta diretamente a comparabilidade dos cortes de renda. Atenção a uma armadilha que só
+   apareceu em 2000 e pode reaparecer: a **renda domiciliar per capita** pode não vir pronta, e
+   construí-la dividindo o rendimento domiciliar pelo total de moradores dá errado quando o
+   numerador do IBGE já exclui pensionistas e empregados domésticos residentes e o denominador não
+   — ver `docs/METODOLOGIA.md`, item 2 da seção de 2000.
 
 ## Checklist para incluir uma edição nova
 

@@ -21,15 +21,33 @@ fi
 
 # data/processed só é commitado com o gate de revelação verificado de forma independente
 # (verify_gate.py recomputa os SHA-256 do carimbo .gate_ok e as checagens estruturais R1-R6
-# que não dependem de microdado -- ver pipeline/verify_gate.py).
-proc=$(printf '%s\n' "$staged" | grep -E '^data/processed/' || true)
-if [ -n "$proc" ]; then
+# que não dependem de microdado -- ver pipeline/verify_gate.py). Cada edição tem seu próprio
+# gate (pipeline/edicoes.py, F7): arquivos direto em data/processed/* (parquet, .gate_ok,
+# meta.json etc. da edição 2022) usam o gate raiz, sem --dir -- comportamento original;
+# arquivos dentro de uma subpasta de edição (ex.: data/processed/2010/**) usam o gate próprio
+# dessa subpasta, verify_gate.py --dir data/processed/<edicao>.
+proc_raiz=$(printf '%s\n' "$staged" | grep -E '^data/processed/[^/]+$' || true)
+subpastas=$(printf '%s\n' "$staged" | grep -E '^data/processed/[^/]+/' \
+            | sed -E 's#^data/processed/([^/]+)/.*#\1#' | sort -u)
+if [ -n "$proc_raiz" ] || [ -n "$subpastas" ]; then
   PY=.venv/bin/python
   [ -x "$PY" ] || PY=python3
-  if ! "$PY" pipeline/verify_gate.py; then
-    echo "ERRO (revelação): pipeline/verify_gate.py reprovou -- commit bloqueado." >&2
-    echo "Rode 'python pipeline/disclosure_check.py --versao <v>' e depois 'python pipeline/verify_gate.py' antes de comitar data/processed." >&2
-    exit 1
+
+  if [ -n "$proc_raiz" ]; then
+    if ! "$PY" pipeline/verify_gate.py; then
+      echo "ERRO (revelação): pipeline/verify_gate.py reprovou -- commit bloqueado." >&2
+      echo "Rode 'python pipeline/disclosure_check.py --versao <v>' e depois 'python pipeline/verify_gate.py' antes de comitar data/processed." >&2
+      exit 1
+    fi
   fi
+
+  for sub in $subpastas; do
+    dir="data/processed/$sub"
+    if ! "$PY" pipeline/verify_gate.py --dir "$dir"; then
+      echo "ERRO (revelação): pipeline/verify_gate.py --dir $dir reprovou -- commit bloqueado." >&2
+      echo "Rode 'python pipeline/disclosure_check.py --edicao <edicao> --versao <v>' e depois 'python pipeline/verify_gate.py --dir $dir' antes de comitar $dir." >&2
+      exit 1
+    fi
+  done
 fi
 exit 0

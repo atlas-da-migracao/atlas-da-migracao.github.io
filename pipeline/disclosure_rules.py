@@ -45,14 +45,27 @@ DIMENSOES = {
 STATUS_POR_EDICAO = {
     "2022": DIMENSOES["status"],
     "2010": ["retorno_natal", "nao_natural", "nascido_exterior"],
+    # Censo 2000 não coleta o município de nascimento (só UF/país, V4210), mesma ausência de
+    # 2010 -- ver pipeline/sql/2000/02_classify.sql e docs/METODOLOGIA.md.
+    "2000": ["retorno_natal", "nao_natural", "nascido_exterior"],
 }
 
 
 def dimensoes(edicao: str = "2022") -> dict[str, list[str]]:
     """DIMENSOES publicáveis para `edicao`. Usada por publish.py/disclosure_check.py em vez da
-    constante DIMENSOES sempre que a edição não é necessariamente 2022."""
+    constante DIMENSOES sempre que a edição não é necessariamente 2022.
+
+    Falha alto (ValueError) se `edicao` não tiver vocabulário de `status` registrado em
+    STATUS_POR_EDICAO, em vez de cair silenciosamente no vocabulário de 2022: uma edição
+    nova precisa declarar explicitamente como suas categorias de status se comparam às de
+    2022 (ver docs/METODOLOGIA.md) antes de publicar dados.
+    """
+    if edicao not in STATUS_POR_EDICAO:
+        raise ValueError(
+            f"Edição {edicao!r} sem vocabulário de status registrado em STATUS_POR_EDICAO"
+        )
     d = dict(DIMENSOES)
-    d["status"] = STATUS_POR_EDICAO.get(edicao, DIMENSOES["status"])
+    d["status"] = STATUS_POR_EDICAO[edicao]
     return d
 
 

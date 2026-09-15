@@ -1,0 +1,114 @@
+-- ============================================================================================
+-- Cabeçalho para pipeline/sql/2000/02_classify.sql -- colar VERBATIM no topo do arquivo.
+-- Escrito pelo agente `metodologo`; a especificação coluna a coluna que ele acompanha está em
+-- pipeline/sql/2000/MAPEAMENTO_02_classify.md, e a justificativa em prosa em
+-- docs/METODOLOGIA.md, seção "Edição Censo 2000 e comparabilidade com 2022 e 2010".
+-- ============================================================================================
+
+-- F2 (edição Censo 2000): classificação de status migratório, escolaridade, renda e idade/sexo.
+-- Override de pipeline/sql/02_classify.sql. Produz data/interim/2000/pessoas_classificado.parquet
+-- com EXATAMENTE as mesmas 49 colunas (mesmo nome, mesma ordem, mesmo tipo) das edições 2022 e
+-- 2010, para que 03_indicators.sql, 04_flows.sql, 07_pendular.sql e 08_metro.sql sejam
+-- reaproveitados com o mínimo de override.
+--
+-- Referência de data fixa: 31/07/1995 -> 31/07/2000 (quinquênio). Salário mínimo de julho/2000:
+-- R$ 151,00 -- mas, como em 2010, a renda já chega em NÚMERO DE SALÁRIOS MÍNIMOS (V4514 no
+-- arquivo de pessoas, V7617 no de domicílios), então os cortes são aplicados diretamente em SM,
+-- sem multiplicar por 151 e sem deflator.
+--
+-- Fonte das posições/códigos: pipeline/layout_2000.py e pipeline/labels_2000.py (gerados por
+-- pipeline/gen_edicao_2000.py) e a documentação PÚBLICA do IBGE em
+-- data/raw2000/1_Documentacao_20170908/:
+--   - SAS/LE PESSOAS.sas e SAS/LE DOMIC.sas (posições, rótulos e regras de branco)
+--   - Documentacao/Documentaá∆o.doc (notas metodológicas: amostragem, pesos, definições)
+--   - Instrumentos de coleta/{Questionario da Amostra.pdf, Manual do Recenseador.pdf}
+--   - Arquivos Auxiliares/{CnaeDom-Estrutura.xls, Ocupacao-Estrutura.doc,
+--     Estrutura Migracao V4210, V4260.xls, Municipios e Pais Estrangeiro - V4276.xls}
+--
+-- O que MUDA em relação a 2022 (cada ponto está comentado no bloco correspondente):
+--   1. DESLOCAMENTO PENDULAR VEM DE UMA PERGUNTA SÓ. O quesito 4.27 ("em que município e UF, ou
+--      país estrangeiro, trabalha ou estuda?", V4276) cobre trabalho E estudo, e o Manual do
+--      Recenseador (p. 67) manda: "Caso trabalhe e estude em municípios distintos de onde mora,
+--      registre o município em que trabalha." Por isso os dois módulos continuam existindo, mas
+--      com universos DISJUNTOS: `pendular_trab` = ocupados de 10 anos ou mais; `pendular_estudo`
+--      = estudantes NÃO ocupados. Para um ocupado, estudo_local/estudo_mun chegam de
+--      01_extract já NULL -- a informação não existe, e um NULL diz isso melhor que um filtro.
+--      Consequência declarada: `saida_estudo` em 2000 é um PISO (quem trabalha no próprio
+--      município e estuda em outro assinala "neste município" e some do fluxo de estudo).
+--   2. `status` tem o vocabulário REDUZIDO de 2010: o Censo 2000 não coleta o município de
+--      nascimento (4.21 pergunta só UF ou país, V4210), então `primeira_saida` e
+--      `etapas_multiplas` são indistinguíveis e viram `nao_natural`. V0417/V0418 ("nasceu neste
+--      município"/"nasceu nesta UF") dão os mesmos 3 valores de nasc_local que 2010 tinha em
+--      V0618 -- mais quesitos, não mais categorias.
+--   3. Origem "não sabe município" é um dos 27 códigos de UF_SEM_ESPECIFICACAO_2000
+--      (1100001 RO, ..., 3500006 SP, ..., 5400007 BRASIL SEM ESPECIFICAÇÃO), que PARECEM códigos
+--      de município reais. Teste seguro: SUBSTR(cod, 3, 4) = '0000' -- verificado contra os 5.507
+--      municípios de labels_2000.MUNICIPIOS_2000, nenhuma colisão. É o análogo do UF||'99999' de
+--      2010 e do 8888888/9999999 de 2022. Na UF, a sentinela é '54' (de 5400007).
+--   4. `modo_grupo`, `transporte`, `tempo_desloc_cat`, `tempo_desloc_min` e `retorna_3dias` são
+--      SEMPRE NULL: o bloco de deslocamento de 2000 é o quesito 4.27 e mais nada -- não há meio
+--      de transporte, não há tempo (nem em minutos nem em faixas) e não há frequência de retorno.
+--      Diferença frente a 2010, que tinha faixas de tempo (V0662) e retorno diário (V0661): em
+--      2000 `pct_diario` também é NULL (ver 07_pendular.sql e 08_metro.sql desta edição).
+--   5. `nivel_instr_4` é DERIVADO de V4300 ("anos de estudo"), porque o Censo 2000 não tem
+--      variável de nível de instrução pronta (2022: P0770; 2010: V6400). Cortes-padrão do IBGE:
+--      00-07 e 30 -> '1'; 08-10 -> '2'; 11-14 -> '3'; 15-17 -> '4'; 20 -> '5'. Não se usa
+--      V0432/V0433/V0434/V4355 porque essas são BRANCAS PARA OS ESTUDANTES, o que zeraria a
+--      escolaridade justamente de quem ainda estuda aos 25+ (EJA, graduação, pós).
+--      Aproximação conhecida: graduação de 3 anos = 14 anos de estudo e cai em
+--      `medio_completo_superior_incompleto`.
+--   6. `pos_grupo` precisa de DUAS variáveis. V0447 tem 9 categorias e não separa estatutários e
+--      militares: eles foram codificados como "empregado sem carteira" (V0447 = 4) e só se
+--      distinguem por V0448 = 1 ("era empregado pelo RJU ou como militar"). Testar
+--      `militar_estatutario` ANTES de `empregado_sem_carteira`; ignorar V0448 infla a
+--      informalidade em vários pontos percentuais.
+--   7. `setor_grupo` vem da CNAE-DOMICILIAR 1.0 (V4462, classe de 5 dígitos, seções A-Q), não da
+--      CNAE-DOM 2.0 de 2010. Agrega-se por divisão (2 primeiros dígitos), com UMA exceção: a
+--      divisão 64 junta correio e telecomunicações, que em 2010/2022 estão em seções diferentes
+--      -- 64010 (correio) -> transporte_logistica; 64020 (telecomunicações) ->
+--      servicos_empresariais. Testar essas duas classes ANTES das faixas de 2 dígitos.
+--   8. `ocup_grupo` vem da CBO-DOMICILIAR 2000 (V4452, 4 dígitos), cujo grande grupo é o primeiro
+--      dígito -- mas os grandes grupos NÃO são os da ISCO-08 usada em 2010/2022. O GG 9 de 2000
+--      é "trabalhadores de reparação e manutenção", não "ocupações elementares": mapeia-se para
+--      '07' (que o front-end agrega em `industria_operadores`), e não para '09', que rotularia
+--      trabalhadores qualificados como elementares. Consequência: a categoria '09' fica
+--      ESTRUTURALMENTE VAZIA em 2000. '0000' ("ocupações mal especificadas") -> '11', testado
+--      ANTES do prefixo '0' -> '10' (forças armadas/polícia/bombeiros).
+--   9. `curso_grupo` ganha a categoria `pre_vestibular` (V0430 = 11), que não existe em 2010 nem
+--      em 2022 -- nessas edições o pré-vestibular nem sequer conta como frequência à escola.
+--      Dobrá-lo em `medio` colocaria em "médio" quem já concluiu o médio. Além disso,
+--      `pos_graduacao` em 2000 é mais estreita: mestrado e doutorado vêm num único código (13) e
+--      a especialização não conta como frequência à escola.
+--  10. `renda_pc` é CONSTRUÍDA, não lida. O Censo 2000 não tem variável de rendimento domiciliar
+--      per capita (2010: V6532; 2022: D0360). V7617 (renda domiciliar em SM) já exclui do
+--      numerador pensionistas, empregados domésticos e seus parentes, mas V7100 ("total de
+--      moradores") os INCLUI -- dividir um pelo outro subestima a renda per capita justamente
+--      nos domicílios com empregado doméstico residente. O denominador correto é a contagem de
+--      moradores com V0402 NOT IN ('09','10','11'), obtida por GROUP BY controle no arquivo de
+--      pessoas. NULL para domicílio coletivo (V0201 = 3) -> 'nao_aplicavel'.
+--  11. `ocupado` é DERIVADO da cascata V0439..V0443 (trabalho na semana de 23 a 29/07/2000):
+--      ocupado = qualquer uma delas = '1'. O Censo 2000 não tem variável derivada de condição de
+--      ocupação (2022: P0960; 2010: V6920). Universo idêntico -- as cinco são brancas para
+--      menores de 10 anos. Checagem cruzada: ocupado <=> V0447 não branco <=> V4514 não branco.
+--  12. `imp_df_local`/`imp_df_mun`/`imp_trab_mun` são PREENCHIDAS (M0424, M4250, M4276), ao
+--      contrário de 2010, que as deixava NULL por não ter as marcas. O vocabulário de marcas de
+--      2000 ('0' sem imputação, '1' NIM/IMPS, '2'-'C' estágios PRÉ-DIA/DIA/SPLUS) NÃO é
+--      comparável valor a valor com o de 2022; são colunas de QA interno, nunca publicadas.
+--  13. `df_local` = '1' (não migrante) vem de DUAS origens: V0415 = 1 ("mora neste município
+--      desde que nasceu", que salta direto de 4.15 para 4.27, deixando todo o bloco de migração
+--      em branco) e V0424 IN (1, 2) ("em 31/07/1995 residia neste município, zona urbana/rural").
+--      O segundo caso existe pelo mesmo motivo de 2010: V0416 conta os anos de moradia DESDE O
+--      ÚLTIMO RETORNO, não o tempo total. Diferente de 2022 e de 2010, o quesito de data fixa de
+--      2000 NÃO tem filtro de "menos de 6 anos no município" -- é feito a todo mundo que
+--      respondeu "não" em 4.15 --, o que torna a identificação do migrante de data fixa direta.
+--      O COALESCE segue obrigatório: branco = não migrante.
+--  14. `renda_pc` e `renda_trab` chegam em SALÁRIOS MÍNIMOS (2022: em reais correntes), como em
+--      2010. V4514 é branca exatamente para menores de 10 anos e para quem não tinha trabalho na
+--      semana de referência; trabalhador sem rendimento vem com ZERO, não com branco.
+--  15. NÃO EXISTEM em V4276 os equivalentes de P1120 = 1 ("em casa ou na propriedade") nem de
+--      P1120 = 5 ("mais de um município"): a quadrícula "1 - NESTE MUNICÍPIO" do quesito 4.27 não
+--      separa trabalho no domicílio de trabalho fora dele, e não há categoria para quem trabalha
+--      em mais de um município. `trab_local` = '1' e '5' nunca ocorrem, e `varios_municipios` sai
+--      zerado em municipios_pendular.parquet.
+PRAGMA threads = 10;
+PRAGMA memory_limit = '16GB';

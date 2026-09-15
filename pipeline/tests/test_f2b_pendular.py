@@ -2,8 +2,9 @@
 
 Só agregações; nenhum registro individual é lido ou impresso.
 
-Parametrizado por edição (2022 e 2010): testes estruturais (soma, identidade, coerência)
-rodamem ambas; testes de valores específicos (Guarulhos->SP, Santana/Macapá) apenas em 2022.
+Parametrizado por edição (2022, 2010 e 2000): testes estruturais (soma, identidade,
+coerência) rodam em todas; testes de valores específicos (Guarulhos->SP, Santana/Macapá)
+apenas em 2022.
 """
 import pathlib
 import sys
@@ -17,6 +18,7 @@ from edicoes import edicao as get_edicao  # noqa: E402
 EDICOES_TESTADAS = [
     pytest.param("2022", id="2022"),
     pytest.param("2010", id="2010"),
+    pytest.param("2000", id="2000"),
 ]
 
 

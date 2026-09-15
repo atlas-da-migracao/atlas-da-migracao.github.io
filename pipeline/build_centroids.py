@@ -27,7 +27,9 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 from edicoes import edicao as get_edicao  # noqa: E402
 
-EXCLUIDOS = ("8888888", "9999999", "4300001", "4300002")  # placeholders e corpos d'água
+# placeholders, corpos d'água e (só na malha 2000) o artefato de gap-fill "0" que
+# geo/fetch_2000.sh -clean introduz numa feição sem geocódigo (ver comentário em geo/build.sh)
+EXCLUIDOS = ("8888888", "9999999", "4300001", "4300002", "0")
 
 
 def build_municipios(con: duckdb.DuckDBPyConnection, raw: pathlib.Path, geo: pathlib.Path) -> None:

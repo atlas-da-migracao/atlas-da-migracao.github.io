@@ -343,8 +343,10 @@ export function PainelRM({
             {recursos.tempoMinutos && (
               <Kpi rotulo="Tempo mediano" valor={resumo.tempo_mediano != null ? `${num(resumo.tempo_mediano)} min` : "—"} />
             )}
-            <Kpi rotulo="Retorno diário" valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"}
-                 detalhe={ed.rotuloRetorno} />
+            {ed.rotuloRetorno != null && (
+              <Kpi rotulo="Retorno diário" valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"}
+                   detalhe={ed.rotuloRetorno} />
+            )}
             {recursos.modo && (
               <Kpi rotulo="Transporte coletivo" valor={resumo.pct_coletivo != null ? `${num1(resumo.pct_coletivo)}%` : "—"} />
             )}
@@ -378,6 +380,17 @@ export function PainelRM({
             <Kpi rotulo="Estudantes pendulares da RM" valor={num(estudoResumo?.saida_estudo ?? 0)} />
             <Kpi rotulo="Entradas por estudo" valor={num(estudoResumo?.entrada_estudo ?? 0)} />
           </div>
+
+          {/* 2000 tem um único quesito "trabalha ou estuda?", com precedência do trabalho: quem
+              trabalha no próprio município e estuda em outro só aparece no fluxo de trabalho.
+              O deslocamento por estudo é, portanto, um piso -- ver docs/METODOLOGIA.md, "Edição
+              Censo 2000 e comparabilidade". */}
+          {censo === "2000" && (
+            <p className="muted-pequeno explicacao">
+              Piso, não estimativa do total: o Censo 2000 tem um único quesito de trabalho/estudo,
+              com precedência do trabalho, e por isso este fluxo cobre só estudantes não ocupados.
+            </p>
+          )}
 
           <h3 className="secao-titulo">Principais fluxos pendulares de estudo</h3>
           <p className="muted-pequeno explicacao">Clique em uma linha para ver a caracterização do fluxo.</p>
