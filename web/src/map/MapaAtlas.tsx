@@ -11,6 +11,16 @@ import type { Fluxo, Metrica } from "../lib/types";
 import { validarEExpandirBbox, type Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal, rotuloPrecisao } from "../lib/format";
+import { hexParaRgb } from "../lib/paletas";
+
+// F3 (mapa-representação): cores dos arcos, nos dois temas -- mesmos hex de --arc-in/--arc-out
+// em styles/tokens.css (não dá para ler custom properties de dentro de uma cor do deck.gl,
+// que precisa de RGB numérico). ORIGEM_* é o cinza neutro (--axis) usado na ponta de origem de
+// um arco direcionado: o degradê de cor (não só de alfa) fica mais forte assim -- a origem
+// "esvanece" para cinza, o destino chega na cor cheia da direção.
+const ARC_IN_CLARO = hexParaRgb("#2a78d6"), ARC_IN_ESCURO = hexParaRgb("#3987e5");
+const ARC_OUT_CLARO = hexParaRgb("#eb6834"), ARC_OUT_ESCURO = hexParaRgb("#d95926");
+const ORIGEM_CLARO = hexParaRgb("#c3c2b7"), ORIGEM_ESCURO = hexParaRgb("#383835");
 
 export const VISTA_BRASIL: MapViewState = {
   longitude: -53.5, latitude: -14.5, zoom: 3.35, pitch: 0, bearing: 0,
@@ -63,6 +73,15 @@ interface Props {
   descricaoAcessivel?: string;
   /** avisado quando a feição sob o cursor muda (código, ou null fora da malha) */
   aoPassarFeicao?: (cd: string | null) => void;
+  /** F3 (mapa-representação): liga/desliga a camada de arcos (ArcLayer); default true. Os
+   *  arcos continuam calculados em `arcos` (o painel lateral não depende disto) -- só a
+   *  camada do mapa some. */
+  mostrarFluxos?: boolean;
+  /** F3: maior fluxo municipal publicado NESTA edição (meta.maior_fluxo) -- base da escala de
+   *  espessura absoluta dos arcos. Se ausente (meta ainda não carregou), cai de volta no maior
+   *  fluxo EM TELA (comportamento anterior), só para não desenhar arcos invisíveis antes da
+   *  1a resposta de `meta.json`. */
+  maiorFluxoEdicao?: number | null;
 }
 
 const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | null => {
@@ -80,6 +99,7 @@ export function MapaAtlas({
   malha, contornos = null, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
+  mostrarFluxos = true, maiorFluxoEdicao = null,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   const feicaoSobCursor = useRef<string | null>(null);
@@ -149,13 +169,17 @@ export function MapaAtlas({
   }, [focoChave, tamanho?.width, tamanho?.height, zoomMaximo]);
 
   // Espessura dos arcos: proporcional à raiz quadrada do volume (área ~ volume, leitura
-  // perceptualmente honesta), normalizada pelo maior fluxo EM TELA. Assim o maior arco de
-  // qualquer vista é sempre nitidamente grosso e os menores, finos -- a hierarquia não
-  // depende da escala absoluta do município escolhido.
-  const maiorVolume = useMemo(() => Math.max(1, ...arcos.map((a) => a.total)), [arcos]);
+  // perceptualmente honesta). F3 (mapa-representação): normalizada pelo maior fluxo
+  // MUNICIPAL PUBLICADO NESTA EDIÇÃO (meta.maior_fluxo via `maiorFluxoEdicao`), não pelo
+  // maior fluxo em tela -- escala absoluta, para que 14px signifiquem o mesmo volume em
+  // qualquer vista (Brasil, um município, um nível agregado). Antes da 1a resposta de
+  // meta.json (maiorFluxoEdicao null), cai de volta no maior valor em tela, só para não
+  // desenhar tudo invisível nesse instante inicial.
+  const maiorVolumeEmTela = useMemo(() => Math.max(1, ...arcos.map((a) => a.total)), [arcos]);
+  const maiorVolume = maiorFluxoEdicao ?? maiorVolumeEmTela;
   const LARGURA_MIN = 1.5, LARGURA_MAX = 14;
   const larguraDoArco = (total: number) =>
-    LARGURA_MIN + (LARGURA_MAX - LARGURA_MIN) * Math.sqrt(Math.max(0, total) / maiorVolume);
+    LARGURA_MIN + (LARGURA_MAX - LARGURA_MIN) * Math.sqrt(Math.min(1, Math.max(0, total) / maiorVolume));
 
   const camadas = useMemo(() => {
     if (!malha) return [];
@@ -248,21 +272,49 @@ export function MapaAtlas({
       updateTriggers: { getLineColor: [escuro] },
     });
 
+    // F3 (mapa-representação): direção legível dentro do que o ArcLayer nativo do deck.gl
+    // oferece. O ArcLayer NÃO afunila (getWidth é um escalar por arco, não por vértice --
+    // não há prop de largura variável ao longo da curva); implementamos só os outros dois
+    // recursos do plano:
+    // (2) curvatura/tilt: sinal oposto conforme o par ordenado (origem < destino ou não),
+    //     não conforme "entrada"/"saida" -- assim QUALQUER par recíproco A->B e B->A (inclusive
+    //     nos módulos sem campo `direcao`, como os fluxos intra-RM e pendulares) fica separado
+    //     visualmente, em vez de um esconder o outro exatamente na mesma curva.
+    // (3) degradê de cor mais forte: a ponta de origem vai para um cinza neutro (--axis) em
+    //     vez de só reduzir o alfa da mesma cor -- a ponta de destino chega na cor cheia da
+    //     direção (entrada/saída) ou da tipologia (RM). Sem direção real (ex.: maioresFluxos
+    //     da vista Brasil sem seleção, que não marca `direcao`), as duas pontas ficam neutras
+    //     em vez de aplicar a cor de "entrada" por padrão -- ver App.tsx.
+    const TILT = 15;
+    const arcCor = (d: Fluxo & { direcao?: string; corRgb?: RGB }) => {
+      if (d.corRgb) return d.corRgb;
+      if (d.direcao === "entrada") return escuro ? ARC_IN_ESCURO : ARC_IN_CLARO;
+      if (d.direcao === "saida") return escuro ? ARC_OUT_ESCURO : ARC_OUT_CLARO;
+      return null; // sem direção conhecida: neutro nas duas pontas
+    };
     const fluxos = new ArcLayer({
       id: "arcos",
       data: arcos,
-      pickable: true,
+      visible: mostrarFluxos,
+      pickable: mostrarFluxos,
       getSourcePosition: (d: Fluxo) => [d.lon_o!, d.lat_o!],
       getTargetPosition: (d: Fluxo) => [d.lon_d!, d.lat_d!],
       getSourceColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
-        const a = d.cruza ? 90 : 200;
-        if (d.corRgb) return [...d.corRgb, a] as [number, number, number, number];
-        return (d.direcao === "saida" ? [235, 104, 52, a] : [42, 120, 214, a]) as [number, number, number, number];
+        // ponta de origem: cinza neutro em todo arco direcionado (entrada/saída) ou sem
+        // direção conhecida; a tipologia intra-RM (corRgb) continua colorida nas duas pontas,
+        // só com alfa menor na origem -- é uma cor de CATEGORIA do fluxo, não de direção.
+        if (d.corRgb) return [...d.corRgb, d.cruza ? 90 : 200] as [number, number, number, number];
+        const origem = escuro ? ORIGEM_ESCURO : ORIGEM_CLARO;
+        return [...origem, d.cruza ? 90 : 190] as [number, number, number, number];
       },
       getTargetColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
-        const a = d.cruza ? 40 : 90;
-        if (d.corRgb) return [...d.corRgb, a] as [number, number, number, number];
-        return (d.direcao === "saida" ? [235, 104, 52, a] : [42, 120, 214, a]) as [number, number, number, number];
+        if (d.corRgb) return [...d.corRgb, d.cruza ? 40 : 90] as [number, number, number, number];
+        const cor = arcCor(d);
+        if (cor) return [...cor, d.cruza ? 90 : 230] as [number, number, number, number];
+        // sem direção conhecida (ex.: maioresFluxos da vista Brasil sem seleção): as duas
+        // pontas ficam neutras, em vez de herdar a cor de "entrada" por padrão.
+        const origem = escuro ? ORIGEM_ESCURO : ORIGEM_CLARO;
+        return [...origem, d.cruza ? 60 : 170] as [number, number, number, number];
       },
       getWidth: (d: Fluxo) => larguraDoArco(d.total),
       widthMinPixels: LARGURA_MIN,
@@ -270,6 +322,7 @@ export function MapaAtlas({
       opacity: 0.75,
       widthUnits: "pixels",
       getHeight: 0.35,
+      getTilt: (d: Fluxo) => (d.origem < d.destino ? TILT : -TILT),
       onClick: (info: PickingInfo) => {
         const f = info.object as Fluxo | undefined;
         if (f) aoSelecionarFluxo(f.origem, f.destino);
@@ -281,7 +334,7 @@ export function MapaAtlas({
     return [municipios, contornosMalha, contornoRM, contornoSelecao, fluxos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [malha, contornos, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
-      maiorVolume, destacar, perimetro, nucleo, campoId]);
+      maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos]);
 
   const dica = hover?.object as
     | (Feature<Geometry, Record<string, string>> & Fluxo)

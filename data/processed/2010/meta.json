@@ -1,13 +1,14 @@
 {
   "edicao": "2010",
   "versao_dados": "2026-09-16",
-  "gerado_em": "2026-09-16T16:31:00",
+  "gerado_em": "2026-09-16T16:48:24",
   "fonte": "IBGE, Censo Demográfico 2010, microdados da amostra (dados públicos)",
   "periodo_referencia": {
     "de": "2005-07-31",
     "ate": "2010-07-31"
   },
   "salario_minimo_referencia": 510.0,
+  "maior_fluxo": 34585,
   "revelacao": {
     "min_pessoas": 5,
     "min_domicilios": 3,

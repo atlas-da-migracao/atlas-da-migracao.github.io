@@ -1,7 +1,7 @@
 # Relatório de controle de revelação
 
 - Versão dos dados: **1.0.2-2000**
-- Gerado em: 2026-09-16 16:44 (fuso local)
+- Gerado em: 2026-09-16 16:49 (fuso local)
 - Fonte: IBGE, Censo Demográfico 2000, microdados da amostra (dados públicos).
 
 ## Regras aplicadas

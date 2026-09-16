@@ -13,7 +13,7 @@
     "geo/rgi.topojson": "8ca17c63ed4fe2c4cb214a1643a1048fd869694b0f6bc266e4216b7a08855976",
     "geo/rgint.topojson": "3f7c8e1ab22a8b400a1f73f93a529d25fae2c9e731cf7e174fb29fb434ca7436",
     "geo/uf.topojson": "3ce685203220c60b9b6a5e0dd52e2fb5ddc1ccd14711ecbaac5d57b74ba225cf",
-    "meta.json": "6233190eb70cbf59c24aabe05619405c639e24a23d736d3ff594bf02e09ee5e7",
+    "meta.json": "3672086834a70e304dde2878fe7b0ed11b596cd15071da366d5ddb9b33e3926c",
     "municipios.parquet": "2b0852c984a9772877cd011e11a3c7721f5b6a08a6340e0f07bb89f173395270",
     "municipios_dim.parquet": "9b54177538b6f8ba2b40c6c45195c53e430764633a6d8c09205f393f3c1e2ee8",
     "municipios_mapa.json": "58e26e987c4cef78221deafdfb65471318d253701e5bd504b41cfdd1cb07e7be",
@@ -31,6 +31,6 @@
     "rm_resumo.parquet": "3b70184805a1fd4a765a62b341e566a4399d125a564cdbb009578532ad297644"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-16T16:44:47.045189",
+  "timestamp": "2026-09-16T16:49:02.399603",
   "versao_dados": "1.0.2-2010"
 }

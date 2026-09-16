@@ -27,6 +27,12 @@ export interface Meta {
   versao_dados: string;
   fonte: string;
   salario_minimo_referencia: number;
+  /** F3 (mapa-representação): maior valor de `total` entre os fluxos municipais publicados
+   *  desta edição -- base da escala de espessura ABSOLUTA dos arcos (ver
+   *  pipeline/build_meta.py e web/src/map/MapaAtlas.tsx). Fixa por edição, não recalculada
+   *  a partir da seleção em tela, para que a mesma espessura em pixels sempre valer o mesmo
+   *  volume dentro de uma edição. */
+  maior_fluxo: number;
   // min_domicilios é null nas edições cuja fonte não publica identificador de domicílio
   // (Censo 1980): o piso de R1 passa a ser só de pessoas, mais alto — ver docs/METODOLOGIA.md.
   revelacao: { min_pessoas: number; min_domicilios: number | null; min_pessoas_detalhe: number;

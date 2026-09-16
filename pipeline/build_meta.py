@@ -11,10 +11,24 @@ import json
 import pathlib
 import sys
 
+import duckdb
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 import disclosure_rules as R  # noqa: E402
 from edicoes import ACESSO_DESCRICAO, edicao as get_edicao  # noqa: E402
+
+
+def _maior_fluxo(ed) -> int:
+    """Maior valor de `total` entre os fluxos municipais publicados desta edição (F3 -- mapa
+    representação): usado pelo front para uma escala de espessura ABSOLUTA por edição, em vez
+    de normalizar cada arco pelo maior fluxo em tela (o que faz a mesma espessura em pixels
+    valer volumes completamente diferentes conforme a vista). Lê só `data/processed/fluxos.parquet`
+    (agregado já publicado, não microdado) -- respeita a regra de sigilo do CLAUDE.md."""
+    caminho = ROOT / ed.processed / "fluxos.parquet"
+    with duckdb.connect() as con:
+        maior = con.execute(f"SELECT MAX(total) FROM read_parquet('{caminho.as_posix()}')").fetchone()[0]
+    return int(maior)
 
 # DOI emitido pelo Zenodo ao publicar a release v1.0.0 (integração GitHub -> Zenodo).
 # Única fonte destas constantes para o front-end interativo; as páginas estáticas de SEO
@@ -155,6 +169,9 @@ def main() -> None:
         "fonte": f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra ({acesso_desc})",
         "periodo_referencia": dict(ed.periodo_referencia),
         "salario_minimo_referencia": ed.salario_minimo,
+        # F3 (mapa-representação): maior fluxo municipal publicado desta edição -- base da
+        # escala de espessura ABSOLUTA dos arcos no mapa (ver web/src/map/MapaAtlas.tsx).
+        "maior_fluxo": _maior_fluxo(ed),
         # Limiares EFETIVOS desta edição, não as constantes-padrão: numa edição sem chave de
         # domicílio (Censo 1980) `min_domicilios` é null e os pisos de pessoas vêm elevados, e a
         # página de metodologia do site precisa dizer isso em vez de prometer um piso de

@@ -18,7 +18,7 @@ import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunic
          pendularDaRM, saldoPorCategoria,
          type NivelAgregado, type ResumoRM, type UnidadeAgregada } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
-import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, type Bbox } from "./lib/rm";
+import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, uniaoDeBboxes, type Bbox } from "./lib/rm";
 import type { FluxoUF } from "./lib/acordes";
 import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
@@ -80,8 +80,8 @@ export default function App() {
   const [erro, setErro] = useState<string | null>(null);
 
   const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
-          setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo, setNivel, setMetrica, setFiltro,
-          setTema, entrarModoRM, sairModoRM, setAba, setCruzar } = useStore();
+          mostrarFluxos, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo, setNivel, setMetrica,
+          setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos } = useStore();
   const recursos = edicao(censo).recursos;
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
@@ -322,6 +322,34 @@ export default function App() {
 
   const selecaoFoco = codigoSelecionado && !rm ? bboxPorFeicao.get(codigoSelecionado) ?? null : null;
 
+  // F3 (mapa-representação): enquadramento inclui os destinos dos arcos exibidos -- antes,
+  // selecionar um município enquadrava só o polígono selecionado e os arcos saíam cortados
+  // da tela. União do bbox do polígono com o bbox dos centroides dos arcos (origem E destino
+  // de cada um), só quando a camada de arcos está LIGADA (senão não há o que enquadrar) e não
+  // há um fluxo específico focado (fluxoFoco, que já é mais preciso e tem prioridade abaixo).
+  const bboxDosArcos = useMemo(() => {
+    if (!mostrarFluxos || !selecaoFoco || arcos.length === 0) return null;
+    // F3 (mapa-representação), ajuste pós-verificação visual: sem limite, o top-15 de um
+    // município (ex. São Paulo) inclui destinos a 2 mil+ km (Recife, Salvador) e o
+    // enquadramento afrouxava até cobrir metade do Brasil -- perde-se a leitura local que é
+    // o ponto da vista de município. Raio de corte = o maior entre 2° (~220 km, cobre uma
+    // região metropolitana) e 4x o tamanho do próprio polígono selecionado (municípios
+    // grandes, ex. no Norte, ainda enquadram seus vizinhos próximos). Arcos com a ponta fora
+    // do raio continuam desenhados (e listados no painel) -- só saem da tela, como antes desta
+    // fase; não há perda de dado, só de enquadramento automático.
+    const [minLon, minLat, maxLon, maxLat] = selecaoFoco;
+    const centro = { lon: (minLon + maxLon) / 2, lat: (minLat + maxLat) / 2 };
+    const tamanhoBase = Math.max(maxLon - minLon, maxLat - minLat);
+    const raio = Math.max(2, tamanhoBase * 4);
+    const pontos = arcos.flatMap((a) => [
+      a.lon_o != null && a.lat_o != null ? { lon: a.lon_o, lat: a.lat_o } : null,
+      a.lon_d != null && a.lat_d != null ? { lon: a.lon_d, lat: a.lat_d } : null,
+    ]).filter((p): p is { lon: number; lat: number } => p != null
+      && Math.hypot(p.lon - centro.lon, p.lat - centro.lat) <= raio);
+    return bboxDeCentroides(pontos, 0.15);
+  }, [mostrarFluxos, selecaoFoco, arcos]);
+  const selecaoComArcosFoco = uniaoDeBboxes([selecaoFoco, bboxDosArcos]);
+
   // ============ Módulo metropolitano: enquadramento do mapa (bbox, destaque, núcleo) ============
   const [rmFoco, setRmFoco] = useState<Bbox | null>(null);
   const [rmDestacar, setRmDestacar] = useState<Set<string> | null>(null);
@@ -359,7 +387,12 @@ export default function App() {
         ? fluxosIntraDaRM(rm).then((f) => f.slice(0, topNStore).map((x) => ({
             ...x, corRgb: CORES_TIPOLOGIA.get(x.tipologia),
           })))
-        : pendularDaRM(rm, aba === "trab" ? "pendular_trab" : "pendular_estudo", topNStore, cruzar);
+        // pendular tem direção real e inequívoca (residência -> trabalho/estudo), mesmo sem
+        // coluna própria de direção na consulta -- marcado como "saida" (mesma cor de quem sai
+        // do município de origem) para não cair no neutro genérico que F3 reservou para
+        // listas de maiores fluxos sem direção conhecida (ver MapaAtlas.tsx).
+        : pendularDaRM(rm, aba === "trab" ? "pendular_trab" : "pendular_estudo", topNStore, cruzar)
+            .then((f) => f.map((x) => ({ ...x, direcao: "saida" as const })));
       consulta
         .then(setArcos)
         .catch((e) => setErro(`Falha ao consultar fluxos da RM: ${(e as Error).message}`))
@@ -476,7 +509,7 @@ export default function App() {
   }, [nivelEfetivo, porCodigo, unidadesAtivas]);
 
   // F6: prioridade única de enquadramento — fluxo > seleção (município/unidade) > RM > Brasil.
-  const foco = prioridadeFoco(fluxoFoco, selecaoFoco, rmFoco);
+  const foco = prioridadeFoco(fluxoFoco, selecaoComArcosFoco, rmFoco);
   const zoomMaximo = fluxoFoco ? undefined : selecaoFoco && nivelEfetivo === "mun" ? 9 : undefined;
   const rotuloReenquadrar = fluxoFoco ? "Ver o fluxo"
     : selecaoFoco ? `Ver ${nivelEfetivo === "mun" ? "o município" : nivelEfetivo === "uf" ? "a UF" : "a região"}`
@@ -670,11 +703,18 @@ export default function App() {
             destacar={rmDestacar ?? (nivelEfetivo === "uf" ? ufsRealcadas : null)} perimetro={rmPerimetro} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
             descricaoAcessivel={descricaoMapa}
             aoPassarFeicao={nivelEfetivo === "uf" ? setUfSobMapa : undefined}
+            mostrarFluxos={mostrarFluxos} maiorFluxoEdicao={meta?.maior_fluxo ?? null}
           />
-          {porCodigoAtivo.size > 0 && !rm && (
-            <Legenda metrica={metrica} quebras={quebras} escuro={escuro}
-                     notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined} />
-          )}
+          <div className="mapa-controles-baixo">
+            <button type="button" className="botao-fluxos" aria-pressed={mostrarFluxos}
+                    onClick={() => setMostrarFluxos(!mostrarFluxos)}>
+              {mostrarFluxos ? "Fluxos: ligados" : "Fluxos: desligados"}
+            </button>
+            {porCodigoAtivo.size > 0 && !rm && (
+              <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
+                       notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined} />
+            )}
+          </div>
         </div>
         {painelDireita}
       </main>

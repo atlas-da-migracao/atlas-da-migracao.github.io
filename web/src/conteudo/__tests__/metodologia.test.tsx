@@ -25,6 +25,7 @@ function fakeMeta(censo: Censo): Meta {
     fonte: `IBGE, Censo Demográfico ${censo}, microdados da amostra `
       + `(${publico ? "dados públicos" : "acesso controlado"})`,
     salario_minimo_referencia: 1212,
+    maior_fluxo: 23425,
     revelacao: {
       min_pessoas: semChaveDomicilio ? 20 : 5,
       min_domicilios: semChaveDomicilio ? null : 3,

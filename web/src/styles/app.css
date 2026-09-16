@@ -164,14 +164,28 @@
   border-radius: var(--radius); font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.16);
 }
 
+/* F3 (mapa-representação): agrupa o botão "Fluxos" e a legenda no canto inferior esquerdo do
+   mapa -- antes, a legenda se autoposicionava com left/bottom fixos; agora o wrapper faz isso
+   para os dois controles em coluna, sem risco de sobrepor (a legenda pode variar de altura
+   entre chip/painel aberto). */
+.mapa-controles-baixo {
+  position: absolute; z-index: 5; left: 12px; bottom: 12px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  max-width: min(300px, calc(100vw - 24px));
+}
+.botao-fluxos {
+  padding: 6px 12px; font-size: 12.5px; background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--ink);
+  box-shadow: 0 2px 10px rgba(0,0,0,.10);
+}
+.botao-fluxos[aria-pressed="false"] { color: var(--ink-muted-texto); }
 .legenda {
-  position: absolute; z-index: 5; left: 12px; bottom: 12px; padding: 10px 12px;
+  padding: 10px 12px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius);
   font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.10);
   max-width: min(300px, calc(100vw - 24px));
 }
 .legenda-chip {
-  position: absolute; z-index: 5; left: 12px; bottom: 12px;
   padding: 6px 12px; font-size: 12.5px; background: var(--surface-raised);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
   box-shadow: 0 2px 10px rgba(0,0,0,.10); color: var(--ink);

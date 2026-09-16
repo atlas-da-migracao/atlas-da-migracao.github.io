@@ -1,7 +1,7 @@
 # Relatório de controle de revelação
 
 - Versão dos dados: **1.0.5-1980**
-- Gerado em: 2026-09-16 16:44 (fuso local)
+- Gerado em: 2026-09-16 16:49 (fuso local)
 - Fonte: IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos).
 
 ## Regras aplicadas

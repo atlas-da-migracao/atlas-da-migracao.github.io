@@ -36,6 +36,10 @@ interface Estado {
   rm: string | null;
   aba: AbaRM;
   cruzar: boolean;
+  /** F3 (mapa-representação): liga/desliga a camada de arcos O/D no mapa -- migração e
+   *  pendular. Default true (não aparece na URL); `?fluxos=0` desliga. Não afeta as consultas
+   *  (o painel lateral continua listando os fluxos normalmente), só a camada `ArcLayer`. */
+  mostrarFluxos: boolean;
   /** troca de edição do Censo; reseta toda seleção (município/unidade/fluxo/RM/recorte/nível) */
   setCenso: (censo: Censo) => void;
   selecionarMunicipio: (cd: string | null) => void;
@@ -51,6 +55,7 @@ interface Estado {
   sairModoRM: () => void;
   setAba: (aba: AbaRM) => void;
   setCruzar: (v: boolean) => void;
+  setMostrarFluxos: (v: boolean) => void;
   /** F6 leva 2: aplica várias peças de estado de uma vez (ex.: o link de um "achado-chave"
    *  da capa nacional, que precisa entrar em modo RM, trocar de aba E selecionar um fluxo
    *  na mesma navegação -- as ações individuais acima limpam campos umas das outras). */
@@ -89,11 +94,12 @@ function daUrl() {
     aba: (edicao(censo).recursos.pendular && aba && ["mig", "trab", "estudo"].includes(aba)
       ? aba : "mig") as AbaRM,
     cruzar: p.get("cruzar") === "1",
+    mostrarFluxos: p.get("fluxos") !== "0",
   };
 }
 
 function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | "destino" | "metrica" | "topN"
-                              | "filtro" | "rm" | "aba" | "cruzar" | "censo">) {
+                              | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos">) {
   const p = new URLSearchParams();
   if (e.censo !== CENSO_PADRAO) p.set("censo", e.censo);
   if (e.rm) {
@@ -108,6 +114,7 @@ function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | 
   if (e.metrica !== "tlm") p.set("m", e.metrica);
   if (e.topN !== 15) p.set("top", String(e.topN));
   if (e.filtro) p.set("f", e.filtro);
+  if (!e.mostrarFluxos) p.set("fluxos", "0");
   const qs = p.toString();
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
@@ -170,6 +177,7 @@ export const useStore = create<Estado>((set, get) => ({
   setAba: (aba) => { set({ aba, origem: null, destino: null });
                      paraUrl({ ...get(), aba, origem: null, destino: null }); },
   setCruzar: (cruzar) => { set({ cruzar }); paraUrl({ ...get(), cruzar }); },
+  setMostrarFluxos: (mostrarFluxos) => { set({ mostrarFluxos }); paraUrl({ ...get(), mostrarFluxos }); },
   irPara: (patch) => { set(patch); paraUrl({ ...get(), ...patch }); },
 }));
 

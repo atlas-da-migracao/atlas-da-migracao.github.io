@@ -1,13 +1,14 @@
 {
   "edicao": "1980",
   "versao_dados": "2026-09-16",
-  "gerado_em": "2026-09-16T16:31:00",
+  "gerado_em": "2026-09-16T16:48:24",
   "fonte": "IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos)",
   "periodo_referencia": {
     "de": "1975-09-01",
     "ate": "1980-09-01"
   },
   "salario_minimo_referencia": 4149.6,
+  "maior_fluxo": 67465,
   "revelacao": {
     "min_pessoas": 20,
     "min_domicilios": null,
