@@ -3,7 +3,7 @@
  *  de terceiros e mantém a leitura cartográfica limpa. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
-import { GeoJsonLayer, ArcLayer, SolidPolygonLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, ArcLayer, SolidPolygonLayer, BitmapLayer } from "@deck.gl/layers";
 import { OrthographicView, COORDINATE_SYSTEM } from "@deck.gl/core";
 import type { PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -91,6 +91,17 @@ function espigaDaMetrica(m: ValorMapa | undefined, metrica: Metrica): Omit<Ponto
  *  (`boundsNacional` prop, abaixo) -- nunca usado se a edição já carregou. */
 const LIMITES_BRASIL_FALLBACK = { x_min: -2_178_086, x_max: 2_561_841, y_min: -2_385_699, y_max: 1_902_805 };
 
+// F. mapa base de satélite: imagem raster ESTÁTICA (não tiles dinâmicos) de contexto --
+// mosaico "Blue Marble" da NASA (NASA Visible Earth, domínio público, world.topo.bathy
+// 200412.3x5400x2700), recortado e reprojetado uma única vez (fora do front, ver relatório
+// da fase) para a mesma Albers do pipeline (+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12
+// +lon_0=-54 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs). Bbox com ~8% de margem sobre
+// LIMITES_BRASIL_FALLBACK para não cortar a borda do país. Arquivo estático do próprio
+// site (web/public/satelite/) -- sem chamada a servidor de tiles de terceiros.
+const SATELITE_URL = "/satelite/brasil_albers.jpg";
+const SATELITE_BOUNDS: [number, number, number, number] =
+  [-2_557_280, -2_728_779, 2_941_035, 2_245_885];
+
 /** Vista cartesiana que enquadra o Brasil inteiro; fallback antes da 1a medida do contêiner
  *  (ver `vistaDoFoco`). Não é mais uma constante fixa como no Web Mercator (não há "zoom que
  *  sempre fica bom" em unidades de metros por pixel, cartesiano puro) -- é recalculada assim
@@ -148,6 +159,11 @@ interface Props {
    *  arcos continuam calculados em `arcos` (o painel lateral não depende disto) -- só a
    *  camada do mapa some. */
   mostrarFluxos?: boolean;
+  /** F. mapa base de satélite: liga/desliga a camada raster de contexto (Blue Marble/NASA);
+   *  default false. Quando ligada, a malha de municípios passa a preenchimento reduzido
+   *  (~35%) para não esconder a imagem nem ser escondida por ela -- os contornos continuam
+   *  com opacidade normal. */
+  mostrarSatelite?: boolean;
   /** F3: maior fluxo municipal publicado NESTA edição (meta.maior_fluxo) -- base da escala de
    *  espessura absoluta dos arcos. Se ausente (meta ainda não carregou), cai de volta no maior
    *  fluxo EM TELA (comportamento anterior), só para não desenhar arcos invisíveis antes da
@@ -196,6 +212,7 @@ export function MapaAtlas({
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
   mostrarFluxos = true, maiorFluxoEdicao = null, boundsNacional = null, centroides = null,
+  mostrarSatelite = false,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   const feicaoSobCursor = useRef<string | null>(null);
@@ -310,6 +327,27 @@ export function MapaAtlas({
     // UF é o único nível cujo contorno "normal" deve se destacar mais (hierarquia
     // figura-fundo): mais escuro/mais grosso que a fronteira municipal.
     const ehUf = campoId === "cd_uf";
+    // F5 (mapa-representação), ajuste pedido pelo usuário: `contorno` acima foi calibrado
+    // contra o COROPLÉTICO (onde a própria variação de cor já entrega a estrutura espacial;
+    // um traço quase invisível é uma escolha deliberada ali). Sob o preenchimento neutro das
+    // métricas de contagem (NEUTRO_CLARO/ESCURO, ver getFillColor) esse mesmo traço praticamente
+    // some -- as duas cores ficam a poucos pontos de distância no mesmo tom de bege/cinza --,
+    // e sem contorno nenhum a malha de municípios/UF deixa de ser legível. Contorno mais escuro
+    // (não mais grosso -- largura já é a mínima que lê bem) só quando a métrica é de contagem,
+    // para não "poluir" a vista coroplética, que não precisa disso.
+    const contornoMunContagem: RGB = escuro ? [130, 128, 118] : [150, 148, 136];
+
+    // F. mapa base de satélite: camada raster ESTÁTICA de contexto, abaixo de tudo o mais --
+    // ver SATELITE_URL/SATELITE_BOUNDS acima. `visible` (não presença/ausência na lista de
+    // camadas) para não recriar a textura a cada toggle.
+    const satelite = new BitmapLayer({
+      id: "satelite",
+      image: SATELITE_URL,
+      bounds: SATELITE_BOUNDS,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      visible: mostrarSatelite,
+      pickable: false,
+    });
 
     const municipios = new GeoJsonLayer({
       id: "municipios",
@@ -333,7 +371,12 @@ export function MapaAtlas({
         const c = metricaContagem
           ? (escuro ? NEUTRO_ESCURO : NEUTRO_CLARO)
           : corDivergente(valorDaMetrica(porCodigo.get(cd), metrica), quebras, escuro);
-        return [...c, fora ? 70 : 235] as [number, number, number, number];
+        // F. mapa base de satélite: preenchimento reduzido a ~35% quando a imagem está
+        // ligada, para a cor/neutro continuar legível sem esconder a foto por baixo. Os
+        // contornos (camada "contornos-malha") continuam com opacidade normal.
+        const alfaCheio = mostrarSatelite ? 82 : 235;
+        const alfaFora = mostrarSatelite ? 25 : 70;
+        return [...c, fora ? alfaFora : alfaCheio] as [number, number, number, number];
       },
       onClick: (info: PickingInfo) => {
         const cd = (info.object as Feature<Geometry, Record<string, string>> | undefined)?.properties?.[campoId];
@@ -341,7 +384,7 @@ export function MapaAtlas({
         return true;
       },
       updateTriggers: {
-        getFillColor: [metrica, metricaContagem, quebras.join(","), escuro, porCodigo.size, destacar],
+        getFillColor: [metrica, metricaContagem, quebras.join(","), escuro, porCodigo.size, destacar, mostrarSatelite],
       },
     });
 
@@ -361,8 +404,8 @@ export function MapaAtlas({
       getLineWidth: ehUf ? 1.1 : 0.3,
       getLineColor: ehUf
         ? (escuro ? [150, 150, 145, 220] : [120, 118, 108, 220])
-        : [...contorno, 180],
-      updateTriggers: { getLineColor: [escuro, ehUf], getLineWidth: [ehUf] },
+        : (metricaContagem ? [...contornoMunContagem, 210] : [...contorno, 180]),
+      updateTriggers: { getLineColor: [escuro, ehUf, metricaContagem], getLineWidth: [ehUf] },
     });
 
     // Contorno de seleção e de núcleo de RM: continuam desenhados por feição (precisam da
@@ -411,17 +454,17 @@ export function MapaAtlas({
     // (ver ESPIGAS_METRICAS). `getPolygon` recalcula os vértices a cada mudança de zoom
     // (`vista.zoom`, via updateTriggers): a base/altura são pensadas em PIXELS (ver
     // lib/espigas.ts), então precisam ser reconvertidas para metros sempre que a escala
-    // px/metro muda -- o mesmo padrão de `getHeight`/`alturaDoArco` no ArcLayer abaixo. Sem
-    // stroke: um traço, mesmo fino, dobra a malha de linhas em 5.570 espigas adjacentes e não
-    // ajudou a separar espigas vizinhas no resultado visual -- a opacidade (210/255) já basta
-    // para diferenciar uma espiga grande cobrindo uma pequena atrás dela.
+    // px/metro muda -- o mesmo padrão de `getHeight`/`alturaDoArco` no ArcLayer abaixo.
+    // `SolidPolygonLayer` não tem uma opção de contorno (não é `stroked`/`GeoJsonLayer`; um
+    // traço, mesmo fino, dobra a malha de linhas em 5.570 espigas adjacentes e não ajudou a
+    // separar espigas vizinhas no resultado visual -- a opacidade (210/255) já basta para
+    // diferenciar uma espiga grande cobrindo uma pequena atrás dela).
     const espigas = pontosEspiga.length > 0 && new SolidPolygonLayer<PontoEspiga>({
       id: "espigas",
       data: pontosEspiga,
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: true,
       filled: true,
-      stroked: false,
       getPolygon: (d: PontoEspiga) =>
         poligonoEspiga(d.x, d.y, alturaEspigaPx(d.valor, maiorAbsolutoEspiga), vista.zoom, d.sinal),
       getFillColor: (d: PontoEspiga) => {
@@ -508,10 +551,10 @@ export function MapaAtlas({
       updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
     });
 
-    return [municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos];
+    return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [malha, contornos, porCodigo, metrica, metricaContagem, quebras, arcos, selecionado, escuro, aoSelecionar,
-      aoSelecionarFluxo, maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos,
+      aoSelecionarFluxo, maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos, mostrarSatelite,
       pontosEspiga, maiorAbsolutoEspiga, vista.zoom]);
 
   const dica = hover?.object as
@@ -551,7 +594,19 @@ export function MapaAtlas({
         // simplificada. -15 é um pouco além da vista nacional (zoom -12); -2 ainda dá espaço
         // para aproximar mais que o teto de enquadramento automático de município (-8,25, ver
         // App.tsx) sem chegar a ampliar vértices individuais da malha a 1%.
-        controller={{ dragRotate: false, minZoom: -15, maxZoom: -2 }}
+        // OrthographicController aceita limites por eixo em runtime (min/maxZoomX/Y, ver
+        // OrthographicStateProps em @deck.gl/core) -- a vista é isotrópica (mesma escala nos
+        // dois eixos, ver fitBoundsCartesiano), então os dois eixos recebem o mesmo limite.
+        // O tipo do prop `controller` do <DeckGL> é o `ControllerOptions` genérico (comum a
+        // qualquer View), que não inclui os campos específicos do Orthographic -- lacuna de
+        // tipagem do deck.gl, não erro de uso; o cast documenta isso em vez de mascarar com
+        // `any` solto.
+        controller={{
+          dragRotate: false,
+          minZoomX: -15, maxZoomX: -2,
+          minZoomY: -15, maxZoomY: -2,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- ver comentário acima
+        } as any}
         layers={camadas}
         onHover={aoHover}
         getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}

@@ -173,12 +173,18 @@
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
   max-width: min(300px, calc(100vw - 24px));
 }
+.mapa-controles-linha { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }
 .botao-fluxos {
   padding: 6px 12px; font-size: 12.5px; background: var(--surface-raised);
   border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--ink);
   box-shadow: 0 2px 10px rgba(0,0,0,.10);
 }
 .botao-fluxos[aria-pressed="false"] { color: var(--ink-muted-texto); }
+/* F. mapa base de satélite: crédito da imagem, visível só quando a camada está ligada. */
+.atribuicao-satelite {
+  margin: 0; padding: 3px 8px; font-size: 10.5px; color: var(--ink-muted-texto);
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius);
+}
 .legenda {
   padding: 10px 12px;
   background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius);
@@ -334,8 +340,14 @@
    direção para baixo das espigas reais, sem precisar desenhar um triângulo de verdade aqui. */
 .legenda-espigas { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin-top: 5px; }
 .legenda-espigas-polo { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+/* ganho e perda usam o MESMO layout -- linha horizontal, 3 amostras crescentes da esquerda
+   para a direita, com barras dentro de uma faixa de altura fixa (32px) para as duas ficarem
+   no mesmo tamanho de card. Perda difere só na ÂNCORA (align-items: flex-start em vez de
+   flex-end -- as barras "penduram" do topo, espelhando a espiga real, que aponta para
+   baixo) -- antes a perda virava uma pilha vertical (column-reverse), um layout diferente do
+   ganho que não lia como a mesma escala espelhada. */
 .legenda-espigas-amostras { display: flex; align-items: flex-end; gap: 3px; height: 32px; }
-.legenda-espigas-amostras.espiga-baixo { flex-direction: column-reverse; align-items: center; height: auto; }
+.legenda-espigas-amostras.espiga-baixo { align-items: flex-start; }
 .espiga-amostra { display: inline-block; width: 5px; border-radius: 1px 1px 0 0; }
 .espiga-baixo .espiga-amostra { border-radius: 0 0 1px 1px; }
 .legenda-espigas-rotulo { font-size: 11px; color: var(--ink-muted-texto); }

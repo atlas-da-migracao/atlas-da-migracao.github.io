@@ -80,8 +80,9 @@ export default function App() {
   const [erro, setErro] = useState<string | null>(null);
 
   const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
-          mostrarFluxos, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo, setNivel, setMetrica,
-          setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos } = useStore();
+          mostrarFluxos, mostrarSatelite, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo,
+          setNivel, setMetrica, setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos,
+          setMostrarSatelite } = useStore();
   const recursos = edicao(censo).recursos;
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
@@ -754,12 +755,24 @@ export default function App() {
             aoPassarFeicao={nivelEfetivo === "uf" ? setUfSobMapa : undefined}
             mostrarFluxos={mostrarFluxos} maiorFluxoEdicao={meta?.maior_fluxo ?? null}
             boundsNacional={meta?.bounds_albers ?? null} centroides={centroidesAtivos}
+            mostrarSatelite={mostrarSatelite}
           />
           <div className="mapa-controles-baixo">
-            <button type="button" className="botao-fluxos" aria-pressed={mostrarFluxos}
-                    onClick={() => setMostrarFluxos(!mostrarFluxos)}>
-              {mostrarFluxos ? "Fluxos: ligados" : "Fluxos: desligados"}
-            </button>
+            <div className="mapa-controles-linha">
+              <button type="button" className="botao-fluxos" aria-pressed={mostrarFluxos}
+                      onClick={() => setMostrarFluxos(!mostrarFluxos)}>
+                {mostrarFluxos ? "Fluxos: ligados" : "Fluxos: desligados"}
+              </button>
+              <button type="button" className="botao-fluxos" aria-pressed={mostrarSatelite}
+                      onClick={() => setMostrarSatelite(!mostrarSatelite)}>
+                {mostrarSatelite ? "Satélite: ligado" : "Satélite: desligado"}
+              </button>
+            </div>
+            {mostrarSatelite && (
+              <p className="atribuicao-satelite">
+                Imagem de satélite: NASA Visible Earth, Blue Marble.
+              </p>
+            )}
             {porCodigoAtivo.size > 0 && !rm && (
               <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
                        maiorAbsolutoMetrica={maiorAbsolutoMetrica}

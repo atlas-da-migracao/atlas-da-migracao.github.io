@@ -40,6 +40,11 @@ interface Estado {
    *  pendular. Default true (não aparece na URL); `?fluxos=0` desliga. Não afeta as consultas
    *  (o painel lateral continua listando os fluxos normalmente), só a camada `ArcLayer`. */
   mostrarFluxos: boolean;
+  /** F. mapa base de satélite: liga/desliga a camada raster de contexto (Blue Marble/NASA,
+   *  pré-reprojetada em Albers, ver web/public/satelite/). Default false (não aparece na
+   *  URL); `?sat=1` liga. Independente de edição/nível -- a mesma imagem cobre o Brasil
+   *  inteiro em qualquer censo. */
+  mostrarSatelite: boolean;
   /** troca de edição do Censo; reseta toda seleção (município/unidade/fluxo/RM/recorte/nível) */
   setCenso: (censo: Censo) => void;
   selecionarMunicipio: (cd: string | null) => void;
@@ -56,6 +61,7 @@ interface Estado {
   setAba: (aba: AbaRM) => void;
   setCruzar: (v: boolean) => void;
   setMostrarFluxos: (v: boolean) => void;
+  setMostrarSatelite: (v: boolean) => void;
   /** F6 leva 2: aplica várias peças de estado de uma vez (ex.: o link de um "achado-chave"
    *  da capa nacional, que precisa entrar em modo RM, trocar de aba E selecionar um fluxo
    *  na mesma navegação -- as ações individuais acima limpam campos umas das outras). */
@@ -95,11 +101,12 @@ function daUrl() {
       ? aba : "mig") as AbaRM,
     cruzar: p.get("cruzar") === "1",
     mostrarFluxos: p.get("fluxos") !== "0",
+    mostrarSatelite: p.get("sat") === "1",
   };
 }
 
 function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | "destino" | "metrica" | "topN"
-                              | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos">) {
+                              | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos" | "mostrarSatelite">) {
   const p = new URLSearchParams();
   if (e.censo !== CENSO_PADRAO) p.set("censo", e.censo);
   if (e.rm) {
@@ -115,6 +122,7 @@ function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | 
   if (e.topN !== 15) p.set("top", String(e.topN));
   if (e.filtro) p.set("f", e.filtro);
   if (!e.mostrarFluxos) p.set("fluxos", "0");
+  if (e.mostrarSatelite) p.set("sat", "1");
   const qs = p.toString();
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
@@ -178,6 +186,7 @@ export const useStore = create<Estado>((set, get) => ({
                      paraUrl({ ...get(), aba, origem: null, destino: null }); },
   setCruzar: (cruzar) => { set({ cruzar }); paraUrl({ ...get(), cruzar }); },
   setMostrarFluxos: (mostrarFluxos) => { set({ mostrarFluxos }); paraUrl({ ...get(), mostrarFluxos }); },
+  setMostrarSatelite: (mostrarSatelite) => { set({ mostrarSatelite }); paraUrl({ ...get(), mostrarSatelite }); },
   irPara: (patch) => { set(patch); paraUrl({ ...get(), ...patch }); },
 }));
 
