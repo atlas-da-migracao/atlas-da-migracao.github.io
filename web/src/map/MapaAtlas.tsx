@@ -3,7 +3,7 @@
  *  de terceiros e mantém a leitura cartográfica limpa. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
-import { GeoJsonLayer, ArcLayer, SolidPolygonLayer, BitmapLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, ArcLayer, SolidPolygonLayer, BitmapLayer, TextLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { OrthographicView, COORDINATE_SYSTEM } from "@deck.gl/core";
 import type { PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -12,8 +12,12 @@ import { fitBoundsCartesiano, validarEExpandirBbox, type Bbox } from "../lib/rm"
 import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal, rotuloPrecisao } from "../lib/format";
 import { hexParaRgb } from "../lib/paletas";
-import { alturaDoArco, TILT_ARCO } from "../lib/arcos";
-import { alturaEspigaPx, poligonoEspiga } from "../lib/espigas";
+import { alturaDoArco, TILT_ARCO, poligonoSeta } from "../lib/arcos";
+import {
+  alturaEspigaPx, poligonoEspiga, ANCORA_ESPIGA_MUNICIPIO, TETO_ESPIGA_PX, fatorAlturaPorZoom,
+  metrosPorPixel,
+} from "../lib/espigas";
+import { CAPITAIS, type Capital } from "../lib/capitais";
 
 // F10: o mapa deixou de usar MapView (Web Mercator) -- a vista padrão agora é
 // OrthographicView + COORDINATE_SYSTEM.CARTESIAN, consumindo diretamente as coordenadas em
@@ -303,10 +307,7 @@ export function MapaAtlas({
   // F5 (mapa-representação): pontos das espigas bipolares -- um por unidade da malha ativa
   // com centroide conhecido e valor não nulo/zero na métrica de contagem ativa. Ordenado por
   // |valor| ASCENDENTE (maiores por último = desenhados por cima), mesmo padrão já usado nos
-  // arcos (ver larguraDoArco acima e o comentário de ordenação em App.tsx). A âncora da escala
-  // (maiorAbsoluto) é o maior |valor| ENTRE AS UNIDADES VISÍVEIS no nível ativo -- não uma
-  // constante publicada por edição: mais simples (não exige tocar meta.json/pipeline) e já é
-  // o padrão usado por `quebrasSimetricas` (App.tsx) para o próprio coroplético.
+  // arcos (ver larguraDoArco acima e o comentário de ordenação em App.tsx).
   const pontosEspiga = useMemo<PontoEspiga[]>(() => {
     if (!metricaContagem || !centroides || centroides.size === 0) return [];
     const pontos: PontoEspiga[] = [];
@@ -318,8 +319,38 @@ export function MapaAtlas({
     pontos.sort((a, b) => Math.abs(a.valor) - Math.abs(b.valor));
     return pontos;
   }, [metricaContagem, metrica, porCodigo, centroides]);
-  const maiorAbsolutoEspiga = useMemo(
-    () => Math.max(1, ...pontosEspiga.map((p) => Math.abs(p.valor))), [pontosEspiga]);
+  // Âncora da escala: no nível MUNICÍPIO, uma constante FIXA entre as 5 edições
+  // (ANCORA_ESPIGA_MUNICIPIO, ver lib/espigas.ts) -- pedido do usuário, que notou 1980
+  // parecendo muito mais "cheio" de espigas grandes que as demais edições. O motivo era a
+  // normalização pelo maior valor DA PRÓPRIA edição: 1980 tem uma distribuição menos
+  // concentrada (mais municípios perto do próprio máximo, que já é bem menor em termos
+  // absolutos), então relativamente mais espigas batiam perto do teto visual. Com uma âncora
+  // comum, a mesma altura em pixels passa a valer a mesma contagem de pessoas em qualquer
+  // edição -- comparável entre censos. Nos níveis agregados (RGI/RGInt/UF), sem uma âncora
+  // cross-edição verificada, continua o cálculo dinâmico de antes (maior valor entre as
+  // unidades visíveis no nível/edição ativos).
+  const maiorAbsolutoEspiga = useMemo(() => {
+    if (campoId === "CD_MUN" && (metrica === "saldo" || metrica === "imig" || metrica === "emig")) {
+      return ANCORA_ESPIGA_MUNICIPIO[metrica];
+    }
+    return Math.max(1, ...pontosEspiga.map((p) => Math.abs(p.valor)));
+  }, [campoId, metrica, pontosEspiga]);
+
+  // Rótulos de capital sempre visíveis (pedido do usuário). Só no nível município: nos níveis
+  // agregados (RGI/RGInt/UF) o ponto de referência de cada capital não corresponde a uma
+  // unidade da malha ativa, e o próprio contorno de UF já orienta a leitura. Filtra pela
+  // presença em `centroides` -- resolve sem lista por edição as capitais que não existem em
+  // todas (Palmas/TO só a partir de 1990; Boa Vista/RR só como capital de estado desde 1988,
+  // ver comentário em lib/capitais.ts).
+  const pontosCapital = useMemo(() => {
+    if (campoId !== "CD_MUN" || !centroides || centroides.size === 0) return [];
+    return CAPITAIS
+      .map((c) => {
+        const p = centroides.get(c.cd_mun);
+        return p ? { ...c, x: p.x, y: p.y } : null;
+      })
+      .filter((c): c is Capital & { x: number; y: number } => c != null);
+  }, [campoId, centroides]);
 
   const camadas = useMemo(() => {
     if (!malha) return [];
@@ -465,8 +496,11 @@ export function MapaAtlas({
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: true,
       filled: true,
-      getPolygon: (d: PontoEspiga) =>
-        poligonoEspiga(d.x, d.y, alturaEspigaPx(d.valor, maiorAbsolutoEspiga), vista.zoom, d.sinal),
+      getPolygon: (d: PontoEspiga) => poligonoEspiga(
+        d.x, d.y,
+        alturaEspigaPx(d.valor, maiorAbsolutoEspiga, TETO_ESPIGA_PX, fatorAlturaPorZoom(vista.zoom)),
+        vista.zoom, d.sinal,
+      ),
       getFillColor: (d: PontoEspiga) => {
         const cor = d.corChave === "ganho" || d.corChave === "entrada"
           ? (escuro ? ARC_IN_ESCURO : ARC_IN_CLARO)
@@ -551,11 +585,87 @@ export function MapaAtlas({
       updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
     });
 
-    return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos];
+    // Ponta de seta na chegada de cada arco (pedido do usuário: "os fluxos devem ser setas,
+    // com direção clara"; ver poligonoSeta em lib/arcos.ts -- direção pela corda reta
+    // origem->destino, tamanho fixo em pixels, ponta afastada do centroide de destino por um
+    // raio mínimo para não se sobrepor a outras chegando ali). Mesma cor do lado de chegada do
+    // arco (arcCor/getTargetColor acima), um pouco mais opaca para a ponta se destacar da
+    // linha. `metrosPorPixel(vista.zoom)` -- mesma conversão usada pelas espigas.
+    const setas = mostrarFluxos && arcos.length > 0 && new SolidPolygonLayer<Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }>({
+      id: "setas",
+      data: arcos,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      // Decorativa/não-clicável de propósito: a ponta fica bem perto do centroide de destino
+      // (só AFASTAMENTO_SETA_PX de distância -- ver lib/arcos.ts), então torná-la pickable
+      // fazia hover/clique perto de uma cidade "roubar" o município ou a dica embaixo dela
+      // pela seta em vez do polígono/arco de verdade -- o mesmo clique já funciona na LINHA
+      // do arco (camada "arcos", que continua pickable).
+      pickable: false,
+      filled: true,
+      getPolygon: (d) => poligonoSeta(d.x_o!, d.y_o!, d.x_d!, d.y_d!, metrosPorPixel(vista.zoom)) ?? [[0, 0], [0, 0], [0, 0]],
+      getFillColor: (d) => {
+        if (d.corRgb) return [...d.corRgb, d.cruza ? 90 : 235] as [number, number, number, number];
+        const cor = arcCor(d);
+        const base = cor ?? (escuro ? ORIGEM_ESCURO : ORIGEM_CLARO);
+        return [...base, d.cruza ? 110 : 235] as [number, number, number, number];
+      },
+      updateTriggers: { getPolygon: [vista.zoom], getFillColor: [escuro] },
+    });
+
+    // Rótulos de capital, sempre visíveis (pedido do usuário) -- no topo da pilha de camadas,
+    // depois dos arcos, para nunca ficar coberto por eles. Ponto pequeno (âncora exata do
+    // centroide) + nome ao lado, com halo (fontSettings.sdf + outline) para ler sobre
+    // qualquer fundo: coroplético, espiga, satélite. Sem colisão a resolver -- só 27 pontos
+    // fixos, nunca lotam a tela mesmo na vista nacional.
+    const capitalPontos = new ScatterplotLayer<Capital & { x: number; y: number }>({
+      id: "capitais-pontos",
+      data: pontosCapital,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      pickable: false,
+      getPosition: (d) => [d.x, d.y],
+      radiusUnits: "pixels",
+      getRadius: 2.6,
+      getFillColor: escuro ? [255, 255, 255, 235] : [17, 17, 17, 235],
+      stroked: true,
+      getLineColor: escuro ? [17, 17, 17, 235] : [255, 255, 255, 235],
+      lineWidthUnits: "pixels",
+      getLineWidth: 1,
+    });
+    const capitalRotulos = new TextLayer<Capital & { x: number; y: number }>({
+      id: "capitais-rotulos",
+      data: pontosCapital,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      pickable: false,
+      getPosition: (d) => [d.x, d.y],
+      getText: (d) => d.nome,
+      sizeUnits: "pixels",
+      getSize: 11.5,
+      // fontFamily é lido pelo canvas 2D interno da camada (glyph atlas), que não resolve
+      // custom properties de CSS -- precisa da pilha de fontes já expandida, a mesma de
+      // --font em styles/tokens.css.
+      fontFamily: 'system-ui, -apple-system, "Segoe UI", sans-serif',
+      // characterSet default do TextLayer é só ASCII 32-128 -- qualquer acento (São, Belém,
+      // Goiânia, Vitória...) fica fora do atlas de glifos e sai em branco/quebrado. 'auto'
+      // gera o atlas a partir do texto de verdade em `data` (as 27 capitais, nomes fixos e
+      // conhecidos -- não precisa da lista de caracteres explícita).
+      characterSet: "auto",
+      fontSettings: { sdf: true },
+      outlineWidth: 3,
+      outlineColor: escuro ? [13, 13, 13, 255] : [249, 249, 247, 255],
+      getColor: escuro ? [237, 235, 228, 255] : [26, 26, 24, 255],
+      getTextAnchor: "start",
+      getAlignmentBaseline: "center",
+      getPixelOffset: [7, 0],
+      fontWeight: 600,
+      updateTriggers: { getColor: [escuro], outlineColor: [escuro] },
+    });
+
+    return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos, setas,
+            capitalPontos, capitalRotulos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [malha, contornos, porCodigo, metrica, metricaContagem, quebras, arcos, selecionado, escuro, aoSelecionar,
       aoSelecionarFluxo, maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos, mostrarSatelite,
-      pontosEspiga, maiorAbsolutoEspiga, vista.zoom]);
+      pontosEspiga, maiorAbsolutoEspiga, vista.zoom, pontosCapital]);
 
   const dica = hover?.object as
     | (Feature<Geometry, Record<string, string>> & Fluxo & PontoEspiga)

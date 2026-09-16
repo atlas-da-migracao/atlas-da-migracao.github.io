@@ -50,3 +50,54 @@ export function alturaDoArco(vao: number): number {
 export function flechaDoArco(vao: number): number {
   return 0.5 * alturaDoArco(vao) * Math.max(0, vao);
 }
+
+/** Ponta de seta na chegada de cada arco (pedido do usuário: "os fluxos devem ser setas, com
+ *  direção clara"). O `ArcLayer` não desenha ponta nenhuma -- é um triângulo desenhado à
+ *  parte (`SolidPolygonLayer`, mesmo padrão de `poligonoEspiga` em lib/espigas.ts: base e
+ *  comprimento fixos em PIXELS, convertidos para metros pelo zoom atual, para o tamanho na
+ *  tela não mudar com a aproximação).
+ *
+ *  A direção usada é a CORDA reta origem->destino, não a curva real do arco (que tem flecha
+ *  em XY via `getTilt`, ver acima) -- a tangente exata da curva no ponto de chegada exigiria
+ *  reproduzir a mesma matemática do vertex shader do ArcLayer em JS; a corda é uma aproximação
+ *  boa o bastante (a flecha é no máximo ~30% do vão, ver ALTURA_ARCO) e mantém a seta simples
+ *  de calcular e testar.
+ *
+ *  `afastamentoPx`: pedido explícito do usuário -- "as pontas das setas devem ficar afastadas
+ *  do centroide de seu destino, em um raio mínimo para que não se sobreponham". A ponta NUNCA
+ *  toca o centroide: fica retraída `afastamentoPx` pixels antes dele, ao longo da própria
+ *  direção do arco -- várias setas convergindo no mesmo destino (comum: um município recebe
+ *  de vários outros) ficam com as pontas espalhadas num pequeno raio ao redor do ponto, não
+ *  empilhadas exatamente nele. */
+export const COMPRIMENTO_SETA_PX = 9;
+export const LARGURA_SETA_PX = 7;
+export const AFASTAMENTO_SETA_PX = 9;
+
+/** Vértices (metros, Albers) do triângulo da seta -- `null` se origem e destino coincidirem
+ *  (não deveria ocorrer nos dados; direção indefinida, nada para desenhar). */
+export function poligonoSeta(
+  xOrigem: number,
+  yOrigem: number,
+  xDestino: number,
+  yDestino: number,
+  metrosPorPixelAtual: number,
+  comprimentoPx: number = COMPRIMENTO_SETA_PX,
+  larguraPx: number = LARGURA_SETA_PX,
+  afastamentoPx: number = AFASTAMENTO_SETA_PX,
+): [number, number][] | null {
+  const dx = xDestino - xOrigem, dy = yDestino - yOrigem;
+  const dist = Math.hypot(dx, dy);
+  if (!(dist > 1e-6)) return null;
+  const ux = dx / dist, uy = dy / dist; // versor origem -> destino
+  const px = -uy, py = ux; // perpendicular (90° anti-horário)
+  const afastamentoM = afastamentoPx * metrosPorPixelAtual;
+  const comprimentoM = comprimentoPx * metrosPorPixelAtual;
+  const meiaLarguraM = (larguraPx / 2) * metrosPorPixelAtual;
+  const tipX = xDestino - ux * afastamentoM, tipY = yDestino - uy * afastamentoM;
+  const baseX = tipX - ux * comprimentoM, baseY = tipY - uy * comprimentoM;
+  return [
+    [baseX + px * meiaLarguraM, baseY + py * meiaLarguraM],
+    [baseX - px * meiaLarguraM, baseY - py * meiaLarguraM],
+    [tipX, tipY],
+  ];
+}

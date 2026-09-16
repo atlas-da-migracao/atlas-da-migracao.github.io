@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { BASE_ESPIGA_PX, TETO_ESPIGA_PX, alturaEspigaPx, metrosPorPixel, poligonoEspiga } from "../espigas";
+import {
+  BASE_ESPIGA_PX, TETO_ESPIGA_PX, alturaEspigaPx, metrosPorPixel, poligonoEspiga,
+  fatorAlturaPorZoom, ZOOM_REFERENCIA_ESPIGA,
+} from "../espigas";
 
 describe("escala em pixels das espigas (metrosPorPixel)", () => {
   it("zoom 0 (log2(1)): 1 px de tela = 1 metro de mundo", () => {
@@ -84,5 +87,35 @@ describe("polígono da espiga (poligonoEspiga)", () => {
     const [, , apicePerto] = poligonoEspiga(0, 0, 100, 4, 1);
     const [, , apiceLonge] = poligonoEspiga(0, 0, 100, -4, 1);
     expect(apiceLonge[1]).toBeGreaterThan(apicePerto[1]);
+  });
+});
+
+describe("fatorAlturaPorZoom -- espigas crescem em pixels ao aproximar", () => {
+  it("é 1 (sem crescimento) na vista Brasil e mais afastado", () => {
+    expect(fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA)).toBe(1);
+    expect(fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA - 3)).toBe(1);
+  });
+
+  it("cresce monotonicamente ao aproximar (zoom maior)", () => {
+    const a = fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA + 1);
+    const b = fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA + 3);
+    const c = fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA + 6);
+    expect(b).toBeGreaterThan(a);
+    expect(c).toBeGreaterThan(b);
+  });
+
+  it("tem um teto -- não cresce sem limite num zoom extremo (município sozinho na tela)", () => {
+    expect(fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA + 30)).toBeLessThanOrEqual(6);
+  });
+
+  it("zoom não finito cai de volta a 1 (sem crescimento), nunca quebra", () => {
+    expect(fatorAlturaPorZoom(Number.NaN)).toBe(1);
+    expect(fatorAlturaPorZoom(Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(6);
+  });
+
+  it("aplicado em alturaEspigaPx, aumenta a altura final proporcionalmente", () => {
+    const semZoom = alturaEspigaPx(300, 1000, 120, 1);
+    const comZoom = alturaEspigaPx(300, 1000, 120, fatorAlturaPorZoom(ZOOM_REFERENCIA_ESPIGA + 4));
+    expect(comZoom).toBeGreaterThan(semZoom);
   });
 });

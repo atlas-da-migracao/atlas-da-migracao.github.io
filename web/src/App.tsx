@@ -18,6 +18,7 @@ import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunic
          pendularDaRM, saldoPorCategoria,
          type NivelAgregado, type ResumoRM, type UnidadeAgregada } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
+import { ANCORA_ESPIGA_MUNICIPIO } from "./lib/espigas";
 import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, uniaoDeBboxes, type Bbox } from "./lib/rm";
 import type { FluxoUF } from "./lib/acordes";
 import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
@@ -516,17 +517,21 @@ export default function App() {
     return quebrasSimetricas(vs);
   }, [municipiosVisiveis, unidadesAtivas, nivelEfetivo, metrica]);
 
-  // F5 (mapa-representação): maior |valor| da métrica ativa entre as unidades visíveis no
-  // nível ativo -- âncora da escala das espigas (MapaAtlas.tsx calcula a mesma coisa a partir
-  // de `porCodigo`/`centroides`; este aqui só alimenta a legenda, que não tem acesso aos
-  // centroides). `null` fora das métricas de contagem (saldo/imig/emig) -- a legenda usa isso
-  // para decidir entre o texto genérico e os números.
+  // F5 (mapa-representação): âncora da escala das espigas, para a legenda mostrar os MESMOS
+  // números que o mapa usa (MapaAtlas.tsx calcula isto de novo a partir de `porCodigo`/
+  // `centroides`, que a legenda não tem acesso). `null` fora das métricas de contagem
+  // (saldo/imig/emig) -- a legenda usa isso para decidir entre o texto genérico e os números.
+  // No nível MUNICÍPIO, a âncora é FIXA entre as 5 edições (ANCORA_ESPIGA_MUNICIPIO, ver
+  // lib/espigas.ts -- mesma correção e mesmo motivo documentados lá: normalizar cada edição
+  // pelo próprio máximo fazia 1980 parecer muito mais cheia de espigas grandes que as demais).
+  // Nos níveis agregados, continua o cálculo dinâmico por edição/nível.
   const maiorAbsolutoMetrica = useMemo(() => {
     if (metrica !== "saldo" && metrica !== "imig" && metrica !== "emig") return null;
-    const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? []);
+    if (nivelEfetivo === "mun") return ANCORA_ESPIGA_MUNICIPIO[metrica];
+    const valores: ValorMapa[] = unidadesAtivas ?? [];
     const abs = valores.map((m) => Math.abs(metrica === "saldo" ? m.saldo : metrica === "imig" ? m.imig : m.emig));
     return abs.length ? Math.max(1, ...abs) : null;
-  }, [municipiosVisiveis, unidadesAtivas, nivelEfetivo, metrica]);
+  }, [unidadesAtivas, nivelEfetivo, metrica]);
 
   const selecionado = municipio ? porCodigo.get(municipio) ?? null : null;
   const unidadeSelecionada = nivelEfetivo !== "mun" && selecao

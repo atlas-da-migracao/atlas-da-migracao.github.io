@@ -8,6 +8,7 @@ import { num, num2, sinal } from "../lib/format";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { DiagramaAcordes } from "./DiagramaAcordes";
 import { AvisoProxy } from "./AvisoProxy";
+import { AvisoUnidadeUf } from "./AvisoUnidade";
 import type { FluxoUF, UnidadeUF } from "../lib/acordes";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
@@ -142,6 +143,7 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
         <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
       </header>
 
+      {nivel === "uf" && <AvisoUnidadeUf meta={meta} codigoUf={unidade.codigo} />}
       <AvisoProxy meta={meta} />
 
       <div className="kpis">
