@@ -2,6 +2,18 @@ import { useState } from "react";
 import type { Metrica } from "../lib/types";
 import { corDaFaixa, faixasLegenda } from "../lib/escalas";
 import { num } from "../lib/format";
+import { alturaEspigaPx } from "../lib/espigas";
+
+// F5 (mapa-representação): métricas de CONTAGEM (saldo, imigrantes, emigrantes) trocam a
+// legenda de faixas de cor (coroplético) por espigas de referência -- ver MapaAtlas.tsx,
+// ESPIGAS_METRICAS (mesmo conjunto, duplicado aqui só para não puxar deck.gl/@luma.gl neste
+// módulo leve, igual já acontece com LARGURA_MIN/MAX abaixo).
+const METRICAS_ESPIGA = new Set<Metrica>(["saldo", "imig", "emig"]);
+/** Teto da amostra na LEGENDA, menor que o teto do mapa (`TETO_ESPIGA_PX` em lib/espigas.ts,
+ *  120px) -- é só um ícone de referência, não precisa do mesmo tamanho da maior espiga real. */
+const TETO_ESPIGA_LEGENDA_PX = 30;
+const alturaAmostraEspiga = (fracaoDoMaior: number, maiorAbsoluto: number) =>
+  alturaEspigaPx(fracaoDoMaior * maiorAbsoluto, maiorAbsoluto, TETO_ESPIGA_LEGENDA_PX);
 
 // F3 (mapa-representação): mesma escala de espessura do ArcLayer (ver larguraDoArco em
 // map/MapaAtlas.tsx) -- reproduzida aqui só para desenhar as 3 amostras da legenda, sem
@@ -21,7 +33,7 @@ const TITULOS: Record<Metrica, string> = {
   iem: "Índice de eficácia migratória (%)",
 };
 
-export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo }: {
+export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maiorAbsolutoMetrica }: {
   metrica: Metrica; quebras: number[]; escuro: boolean;
   /** F6: rótulo do nível agregado ativo (ex.: "Reg. imediata"); omitido no nível município. */
   notaNivel?: string;
@@ -29,6 +41,11 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo }: {
    *  -- base das 3 amostras de espessura abaixo. `null`/ausente enquanto meta.json não
    *  carregou: a nota de espessura cai de volta ao texto genérico anterior. */
   maiorFluxo?: number | null;
+  /** F5 (mapa-representação): maior |valor| da métrica ativa ENTRE AS UNIDADES VISÍVEIS no
+   *  nível ativo (calculado em App.tsx, mesma âncora usada pelas espigas do mapa -- ver
+   *  MapaAtlas.tsx) -- base das 3 amostras de comprimento abaixo, só quando `metrica` é de
+   *  contagem (saldo/imig/emig). `null`/ausente cai num texto genérico sem números. */
+  maiorAbsolutoMetrica?: number | null;
 }) {
   // A legenda começa recolhida num chip no mobile, para não cobrir o mapa; no desktop
   // começa aberta. Em ambos os tamanhos, o botão no título permite minimizá-la de volta ao chip.
@@ -51,14 +68,56 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo }: {
         <button type="button" className="fechar legenda-fechar" onClick={() => setAberta(false)}
                 aria-label="Minimizar legenda">×</button>
       </div>
-      <ul>
-        {faixas.map((f, i) => (
-          <li key={i}>
-            <span className="amostra" style={{ background: corDaFaixa(f.nivel, f.sinal, escuro) }} />
-            {f.rotulo}
-          </li>
-        ))}
-      </ul>
+      {METRICAS_ESPIGA.has(metrica) ? (
+        // F5 (mapa-representação): contagem (saldo/imig/emig) não pinta a malha -- o valor sai
+        // em espigas bipolares (MapaAtlas.tsx), então a legenda mostra espigas de referência em
+        // vez de faixas de cor. Saldo tem os dois polos (ganho para cima, perda para baixo);
+        // imigrantes/emigrantes têm só um polo, sempre para cima, na cor de entrada/saída.
+        <div className="legenda-espigas" aria-label="Comprimento da espiga cresce com a raiz quadrada do valor; amostras de referência">
+          <div className="legenda-espigas-polo">
+            <div className="legenda-espigas-amostras">
+              {FRACOES_AMOSTRA.map((f) => (
+                <span key={f} className="espiga-amostra"
+                      style={{
+                        height: maiorAbsolutoMetrica ? alturaAmostraEspiga(f, maiorAbsolutoMetrica) : 6 + 18 * f,
+                        background: metrica === "emig" ? "var(--arc-out)" : "var(--arc-in)",
+                      }} />
+              ))}
+            </div>
+            <span className="legenda-espigas-rotulo">
+              {metrica === "saldo" ? "ganho" : metrica === "imig" ? "imigrantes" : "emigrantes"}
+            </span>
+          </div>
+          {metrica === "saldo" && (
+            <div className="legenda-espigas-polo">
+              <div className="legenda-espigas-amostras espiga-baixo">
+                {FRACOES_AMOSTRA.map((f) => (
+                  <span key={f} className="espiga-amostra"
+                        style={{
+                          height: maiorAbsolutoMetrica ? alturaAmostraEspiga(f, maiorAbsolutoMetrica) : 6 + 18 * f,
+                          background: "var(--arc-out)",
+                        }} />
+                ))}
+              </div>
+              <span className="legenda-espigas-rotulo">perda</span>
+            </div>
+          )}
+          <em className="legenda-espigas-valores">
+            {maiorAbsolutoMetrica
+              ? `${FRACOES_AMOSTRA.map((f) => num(Math.round(f * maiorAbsolutoMetrica))).join(" · ")} pessoas`
+              : "comprimento cresce com a raiz quadrada do valor"}
+          </em>
+        </div>
+      ) : (
+        <ul>
+          {faixas.map((f, i) => (
+            <li key={i}>
+              <span className="amostra" style={{ background: corDaFaixa(f.nivel, f.sinal, escuro) }} />
+              {f.rotulo}
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="legenda-nota">
         Arcos: <span className="amostra pequena" style={{ background: "var(--arc-in)" }} /> entradas ·{" "}
         <span className="amostra pequena" style={{ background: "var(--arc-out)" }} /> saídas

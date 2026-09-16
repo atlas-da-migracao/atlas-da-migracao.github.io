@@ -481,6 +481,30 @@ export default function App() {
     return new Map((unidadesAtivas ?? []).map((u) => [u.codigo, u]));
   }, [nivelEfetivo, porCodigo, unidadesAtivas]);
 
+  // F5 (mapa-representação): centroide (metros, Albers) de cada unidade da malha ativa --
+  // âncora das espigas bipolares (saldo/imigrantes/emigrantes, ver MapaAtlas.tsx). Reaproveita
+  // as mesmas consultas já usadas para enquadrar um fluxo/uma RM (`centroidesDeMunicipios`/
+  // `centroidesDeUnidades`), pedindo o conjunto inteiro de códigos da malha ativa em vez de só
+  // origem+destino. Refeita ao trocar de nível ou de edição; os CÓDIGOS não mudam sob recorte
+  // (só os valores), por isso a dependência é `municipios`/`unidadesAtivas`, não
+  // `municipiosVisiveis`/`porCodigoAtivo`.
+  const [centroidesAtivos, setCentroidesAtivos] = useState<Map<string, { x: number; y: number }>>(new Map());
+  useEffect(() => {
+    let vivo = true;
+    const codigos = nivelEfetivo === "mun" ? municipios.map((m) => m.cd_mun) : (unidadesAtivas ?? []).map((u) => u.codigo);
+    if (codigos.length === 0) { setCentroidesAtivos(new Map()); return; }
+    const consulta = nivelEfetivo === "mun"
+      ? centroidesDeMunicipios(codigos)
+      : centroidesDeUnidades(nivelEfetivo as NivelAgregado, codigos);
+    consulta
+      .then((pts) => {
+        if (vivo) setCentroidesAtivos(new Map(pts.map((p) => [p.cd_mun, { x: p.x_albers, y: p.y_albers }])));
+      })
+      .catch(() => { if (vivo) setCentroidesAtivos(new Map()); });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nivelEfetivo, censo, municipios.length, unidadesAtivas]);
+
   const quebras = useMemo(() => {
     const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? []);
     if (!valores.length) return [1, 2, 3];
@@ -489,6 +513,18 @@ export default function App() {
       : metrica === "imig" ? m.imig : metrica === "emig" ? -m.emig
       : (m.iem ?? 0) * 100);
     return quebrasSimetricas(vs);
+  }, [municipiosVisiveis, unidadesAtivas, nivelEfetivo, metrica]);
+
+  // F5 (mapa-representação): maior |valor| da métrica ativa entre as unidades visíveis no
+  // nível ativo -- âncora da escala das espigas (MapaAtlas.tsx calcula a mesma coisa a partir
+  // de `porCodigo`/`centroides`; este aqui só alimenta a legenda, que não tem acesso aos
+  // centroides). `null` fora das métricas de contagem (saldo/imig/emig) -- a legenda usa isso
+  // para decidir entre o texto genérico e os números.
+  const maiorAbsolutoMetrica = useMemo(() => {
+    if (metrica !== "saldo" && metrica !== "imig" && metrica !== "emig") return null;
+    const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? []);
+    const abs = valores.map((m) => Math.abs(metrica === "saldo" ? m.saldo : metrica === "imig" ? m.imig : m.emig));
+    return abs.length ? Math.max(1, ...abs) : null;
   }, [municipiosVisiveis, unidadesAtivas, nivelEfetivo, metrica]);
 
   const selecionado = municipio ? porCodigo.get(municipio) ?? null : null;
@@ -717,7 +753,7 @@ export default function App() {
             descricaoAcessivel={descricaoMapa}
             aoPassarFeicao={nivelEfetivo === "uf" ? setUfSobMapa : undefined}
             mostrarFluxos={mostrarFluxos} maiorFluxoEdicao={meta?.maior_fluxo ?? null}
-            boundsNacional={meta?.bounds_albers ?? null}
+            boundsNacional={meta?.bounds_albers ?? null} centroides={centroidesAtivos}
           />
           <div className="mapa-controles-baixo">
             <button type="button" className="botao-fluxos" aria-pressed={mostrarFluxos}
@@ -726,6 +762,7 @@ export default function App() {
             </button>
             {porCodigoAtivo.size > 0 && !rm && (
               <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
+                       maiorAbsolutoMetrica={maiorAbsolutoMetrica}
                        notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined} />
             )}
           </div>

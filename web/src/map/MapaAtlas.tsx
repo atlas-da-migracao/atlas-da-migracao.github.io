@@ -3,7 +3,7 @@
  *  de terceiros e mantém a leitura cartográfica limpa. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
-import { GeoJsonLayer, ArcLayer } from "@deck.gl/layers";
+import { GeoJsonLayer, ArcLayer, SolidPolygonLayer } from "@deck.gl/layers";
 import { OrthographicView, COORDINATE_SYSTEM } from "@deck.gl/core";
 import type { PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -13,6 +13,7 @@ import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal, rotuloPrecisao } from "../lib/format";
 import { hexParaRgb } from "../lib/paletas";
 import { alturaDoArco, TILT_ARCO } from "../lib/arcos";
+import { alturaEspigaPx, poligonoEspiga } from "../lib/espigas";
 
 // F10: o mapa deixou de usar MapView (Web Mercator) -- a vista padrão agora é
 // OrthographicView + COORDINATE_SYSTEM.CARTESIAN, consumindo diretamente as coordenadas em
@@ -39,6 +40,49 @@ export interface VistaCartesiana {
 const ARC_IN_CLARO = hexParaRgb("#2a78d6"), ARC_IN_ESCURO = hexParaRgb("#3987e5");
 const ARC_OUT_CLARO = hexParaRgb("#eb6834"), ARC_OUT_ESCURO = hexParaRgb("#d95926");
 const ORIGEM_CLARO = hexParaRgb("#c3c2b7"), ORIGEM_ESCURO = hexParaRgb("#383835");
+
+// F5 (mapa-representação): preenchimento neutro da malha quando a métrica é de CONTAGEM
+// (saldo, imigrantes, emigrantes) -- o coroplético fica reservado às taxas (TLM/IEM), a
+// contagem passa a ser lida pelo comprimento das espigas (ver ESPIGAS_METRICAS abaixo). Não é
+// --surface (quase idêntico a --plane, o fundo do canvas -- ver `style` do DeckGL): um passo a
+// mais de bege/cinza garante que a malha continue lendo como "figura" mesmo sem cor de dado.
+const NEUTRO_CLARO = hexParaRgb("#eeece4"), NEUTRO_ESCURO = hexParaRgb("#242422");
+
+/** Métricas de CONTAGEM (soma que cresce com o tamanho do município) -- coroplético para elas
+ *  distorce por área; passam a usar espigas bipolares. TLM e IEM já são razões (por mil
+ *  habitantes, proporção do fluxo) e continuam coropléticas, sem espiga. */
+const ESPIGAS_METRICAS = new Set<Metrica>(["saldo", "imig", "emig"]);
+
+/** Ponto de dado de uma espiga: já resolvido para altura/direção/cor, um por unidade com
+ *  centroide conhecido e valor não nulo/diferente de zero na métrica ativa. */
+interface PontoEspiga {
+  cd: string;
+  x: number;
+  y: number;
+  /** valor com sinal (saldo) ou magnitude (imig/emig, sempre >= 0) usado na escala */
+  valor: number;
+  /** 1 = espiga para cima (ganho/entrada), -1 = para baixo (perda) */
+  sinal: 1 | -1;
+  corChave: "ganho" | "perda" | "entrada" | "saida";
+}
+
+/** Valor e cor de uma espiga a partir do indicador da unidade e da métrica ativa. `null`
+ *  quando a métrica não é de contagem, ou o valor é nulo/zero (nada a desenhar). Saldo é
+ *  BIPOLAR (sinal do próprio saldo); imigrantes/emigrantes são sempre positivos e sempre para
+ *  cima, com a cor de "entrada"/"saída" já usada nos arcos (consistência de paleta). */
+function espigaDaMetrica(m: ValorMapa | undefined, metrica: Metrica): Omit<PontoEspiga, "cd" | "x" | "y"> | null {
+  if (!m || !ESPIGAS_METRICAS.has(metrica)) return null;
+  if (metrica === "saldo") {
+    if (!m.saldo) return null;
+    return { valor: m.saldo, sinal: m.saldo >= 0 ? 1 : -1, corChave: m.saldo >= 0 ? "ganho" : "perda" };
+  }
+  if (metrica === "imig") {
+    if (!m.imig) return null;
+    return { valor: m.imig, sinal: 1, corChave: "entrada" };
+  }
+  if (!m.emig) return null;
+  return { valor: m.emig, sinal: 1, corChave: "saida" };
+}
 
 /** F10: bounds (metros, Albers) da malha nacional de municípios -- valores medidos na edição
  *  2022 (ver `meta.bounds_albers`, pipeline/build_meta.py); as 5 edições têm extensão
@@ -113,6 +157,11 @@ interface Props {
    *  usado para enquadrar o Brasil (foco=null) sem esperar o TopoJSON de municípios (mais
    *  pesado) carregar. `null`/ausente cai no fallback aproximado `LIMITES_BRASIL_FALLBACK`. */
   boundsNacional?: { x_min: number; x_max: number; y_min: number; y_max: number } | null;
+  /** F5 (mapa-representação): centroide (metros, Albers) de cada unidade da malha ativa --
+   *  âncora das espigas bipolares. `null`/mapa vazio enquanto a consulta de centroides não
+   *  respondeu: nesse intervalo a métrica de contagem já pinta a malha neutra (não pisca de
+   *  volta ao coroplético), só as espigas ficam ausentes até os pontos chegarem. */
+  centroides?: Map<string, { x: number; y: number }> | null;
 }
 
 const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | null => {
@@ -126,11 +175,27 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
   }
 };
 
+/** F5 (mapa-representação): frase da dica flutuante para a métrica ativa -- usada tanto no
+ *  hover sobre o polígono (metrica de taxa, coroplético) quanto sobre a espiga (metrica de
+ *  contagem). Antes só existia a frase de saldo/TLM; imigrantes e emigrantes caíam por engano
+ *  na frase de saldo (o valor de `valorDaMetrica`, com sinal invertido para o coroplético, não
+ *  o valor bruto que o leitor espera ver na dica). */
+const textoMetrica = (m: ValorMapa | undefined, metrica: Metrica): string => {
+  if (!m) return "sem dados";
+  switch (metrica) {
+    case "tlm": return `${sinal(m.tlm)} por mil habitantes`;
+    case "saldo": return `saldo ${sinal(m.saldo)} pessoas`;
+    case "imig": return `${num(m.imig)} imigrantes`;
+    case "emig": return `${num(m.emig)} emigrantes`;
+    case "iem": return m.iem == null ? "sem dados" : `eficácia ${sinal(Math.round(m.iem * 1000) / 10)}%`;
+  }
+};
+
 export function MapaAtlas({
   malha, contornos = null, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
-  mostrarFluxos = true, maiorFluxoEdicao = null, boundsNacional = null,
+  mostrarFluxos = true, maiorFluxoEdicao = null, boundsNacional = null, centroides = null,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   const feicaoSobCursor = useRef<string | null>(null);
@@ -145,6 +210,7 @@ export function MapaAtlas({
       aoPassarFeicao(cd);
     }
   };
+  const metricaContagem = ESPIGAS_METRICAS.has(metrica);
   // vista controlada: garante que a carga da página sempre comece enquadrando o Brasil
   const [vista, setVista] = useState<VistaCartesiana>(VISTA_BRASIL);
   const [moveu, setMoveu] = useState(false);
@@ -217,6 +283,27 @@ export function MapaAtlas({
   const larguraDoArco = (total: number) =>
     LARGURA_MIN + (LARGURA_MAX - LARGURA_MIN) * Math.sqrt(Math.min(1, Math.max(0, total) / maiorVolume));
 
+  // F5 (mapa-representação): pontos das espigas bipolares -- um por unidade da malha ativa
+  // com centroide conhecido e valor não nulo/zero na métrica de contagem ativa. Ordenado por
+  // |valor| ASCENDENTE (maiores por último = desenhados por cima), mesmo padrão já usado nos
+  // arcos (ver larguraDoArco acima e o comentário de ordenação em App.tsx). A âncora da escala
+  // (maiorAbsoluto) é o maior |valor| ENTRE AS UNIDADES VISÍVEIS no nível ativo -- não uma
+  // constante publicada por edição: mais simples (não exige tocar meta.json/pipeline) e já é
+  // o padrão usado por `quebrasSimetricas` (App.tsx) para o próprio coroplético.
+  const pontosEspiga = useMemo<PontoEspiga[]>(() => {
+    if (!metricaContagem || !centroides || centroides.size === 0) return [];
+    const pontos: PontoEspiga[] = [];
+    for (const [cd, ponto] of centroides) {
+      const dado = espigaDaMetrica(porCodigo.get(cd), metrica);
+      if (!dado) continue;
+      pontos.push({ cd, x: ponto.x, y: ponto.y, ...dado });
+    }
+    pontos.sort((a, b) => Math.abs(a.valor) - Math.abs(b.valor));
+    return pontos;
+  }, [metricaContagem, metrica, porCodigo, centroides]);
+  const maiorAbsolutoEspiga = useMemo(
+    () => Math.max(1, ...pontosEspiga.map((p) => Math.abs(p.valor))), [pontosEspiga]);
+
   const camadas = useMemo(() => {
     if (!malha) return [];
     const contorno: RGB = escuro ? [70, 70, 68] : [225, 224, 217];
@@ -239,8 +326,13 @@ export function MapaAtlas({
       filled: true,
       getFillColor: (f: Feature<Geometry, Record<string, string>>) => {
         const cd = f.properties[campoId];
-        const c = corDivergente(valorDaMetrica(porCodigo.get(cd), metrica), quebras, escuro);
         const fora = destacar && !destacar.has(cd);
+        // F5 (mapa-representação): contagem (saldo/imig/emig) não pinta a malha -- o valor sai
+        // nas espigas (ver camada "espigas" abaixo); a malha fica num neutro fixo, sem
+        // competir com a cor de ganho/perda das espigas. Só TLM/IEM continuam coropléticas.
+        const c = metricaContagem
+          ? (escuro ? NEUTRO_ESCURO : NEUTRO_CLARO)
+          : corDivergente(valorDaMetrica(porCodigo.get(cd), metrica), quebras, escuro);
         return [...c, fora ? 70 : 235] as [number, number, number, number];
       },
       onClick: (info: PickingInfo) => {
@@ -249,7 +341,7 @@ export function MapaAtlas({
         return true;
       },
       updateTriggers: {
-        getFillColor: [metrica, quebras.join(","), escuro, porCodigo.size, destacar],
+        getFillColor: [metrica, metricaContagem, quebras.join(","), escuro, porCodigo.size, destacar],
       },
     });
 
@@ -313,6 +405,40 @@ export function MapaAtlas({
       getLineWidth: 2.5,
       getLineColor: escuro ? [255, 255, 255, 235] : [11, 11, 11, 235],
       updateTriggers: { getLineColor: [escuro] },
+    });
+
+    // F5 (mapa-representação): espigas bipolares -- só quando a métrica ativa é de contagem
+    // (ver ESPIGAS_METRICAS). `getPolygon` recalcula os vértices a cada mudança de zoom
+    // (`vista.zoom`, via updateTriggers): a base/altura são pensadas em PIXELS (ver
+    // lib/espigas.ts), então precisam ser reconvertidas para metros sempre que a escala
+    // px/metro muda -- o mesmo padrão de `getHeight`/`alturaDoArco` no ArcLayer abaixo. Sem
+    // stroke: um traço, mesmo fino, dobra a malha de linhas em 5.570 espigas adjacentes e não
+    // ajudou a separar espigas vizinhas no resultado visual -- a opacidade (210/255) já basta
+    // para diferenciar uma espiga grande cobrindo uma pequena atrás dela.
+    const espigas = pontosEspiga.length > 0 && new SolidPolygonLayer<PontoEspiga>({
+      id: "espigas",
+      data: pontosEspiga,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      pickable: true,
+      filled: true,
+      stroked: false,
+      getPolygon: (d: PontoEspiga) =>
+        poligonoEspiga(d.x, d.y, alturaEspigaPx(d.valor, maiorAbsolutoEspiga), vista.zoom, d.sinal),
+      getFillColor: (d: PontoEspiga) => {
+        const cor = d.corChave === "ganho" || d.corChave === "entrada"
+          ? (escuro ? ARC_IN_ESCURO : ARC_IN_CLARO)
+          : (escuro ? ARC_OUT_ESCURO : ARC_OUT_CLARO);
+        return [...cor, 210] as [number, number, number, number];
+      },
+      onClick: (info: PickingInfo) => {
+        const d = info.object as PontoEspiga | undefined;
+        aoSelecionar(d?.cd ?? null);
+        return true;
+      },
+      updateTriggers: {
+        getPolygon: [vista.zoom, maiorAbsolutoEspiga],
+        getFillColor: [escuro],
+      },
     });
 
     // F3 (mapa-representação): direção legível dentro do que o ArcLayer nativo do deck.gl
@@ -382,14 +508,16 @@ export function MapaAtlas({
       updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
     });
 
-    return [municipios, contornosMalha, contornoRM, contornoSelecao, fluxos];
+    return [municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [malha, contornos, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
-      maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos]);
+  }, [malha, contornos, porCodigo, metrica, metricaContagem, quebras, arcos, selecionado, escuro, aoSelecionar,
+      aoSelecionarFluxo, maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos,
+      pontosEspiga, maiorAbsolutoEspiga, vista.zoom]);
 
   const dica = hover?.object as
-    | (Feature<Geometry, Record<string, string>> & Fluxo)
+    | (Feature<Geometry, Record<string, string>> & Fluxo & PontoEspiga)
     | undefined;
+  const camadaHover = hover?.layer?.id;
 
   return (
     // F6 leva 2: role="group" (não "img") -- o container tem descendentes interativos
@@ -443,18 +571,20 @@ export function MapaAtlas({
       )}
       {dica && hover && (
         <div className="dica" style={{ left: hover.x + 12, top: hover.y + 12 }}>
-          {"properties" in dica && dica.properties?.[campoId] ? (
+          {camadaHover === "espigas" ? (
+            <>
+              <strong>{rotuloDaFeicao?.(dica.cd) ?? dica.cd}</strong>
+              <div>{textoMetrica(porCodigo.get(dica.cd), metrica)}</div>
+              {(() => {
+                const rot = porCodigo.get(dica.cd)?.precisao_imig;
+                const rotulo = rot ? rotuloPrecisao[rot] ?? rot : null;
+                return rotulo ? <div className="muted-pequeno">precisão da imigração: {rotulo}</div> : null;
+              })()}
+            </>
+          ) : "properties" in dica && dica.properties?.[campoId] ? (
             <>
               <strong>{rotuloDaFeicao?.(dica.properties[campoId]) ?? dica.properties[campoId]}</strong>
-              <div>
-                {(() => {
-                  const m = porCodigo.get(dica.properties[campoId]);
-                  if (!m) return "sem dados";
-                  return metrica === "tlm"
-                    ? `${sinal(m.tlm)} por mil habitantes`
-                    : `saldo ${sinal(m.saldo)} pessoas`;
-                })()}
-              </div>
+              <div>{textoMetrica(porCodigo.get(dica.properties[campoId]), metrica)}</div>
               {(() => {
                 const m = porCodigo.get(dica.properties[campoId]);
                 const rot = m?.precisao_imig ? rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig : null;

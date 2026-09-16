@@ -327,6 +327,20 @@
 .legenda-espessura span { display: inline-block; width: 16px; border-radius: 2px; background: var(--ink-muted); }
 .legenda-espessura em { font-style: normal; margin-left: 4px; }
 
+/* F5 (mapa-representação): espigas de referência na legenda (métricas de contagem). Cada
+   polo (ganho/perda, ou a única direção de imig/emig) é uma coluna com as 3 amostras
+   alinhadas pela base (o mesmo ponto de ancoragem no centroide, no mapa) e o rótulo do polo
+   embaixo; o polo de perda inverte a amostra visualmente (`espiga-baixo`) para lembrar a
+   direção para baixo das espigas reais, sem precisar desenhar um triângulo de verdade aqui. */
+.legenda-espigas { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 14px; margin-top: 5px; }
+.legenda-espigas-polo { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.legenda-espigas-amostras { display: flex; align-items: flex-end; gap: 3px; height: 32px; }
+.legenda-espigas-amostras.espiga-baixo { flex-direction: column-reverse; align-items: center; height: auto; }
+.espiga-amostra { display: inline-block; width: 5px; border-radius: 1px 1px 0 0; }
+.espiga-baixo .espiga-amostra { border-radius: 0 0 1px 1px; }
+.legenda-espigas-rotulo { font-size: 11px; color: var(--ink-muted-texto); }
+.legenda-espigas-valores { flex-basis: 100%; font-style: normal; color: var(--ink-muted-texto); margin-top: 2px; }
+
 /* ---- módulo metropolitano (F5b) ---- */
 .seletor-rm {
   font: inherit; font-size: 12.5px; padding: 4px 7px; max-width: 260px;
