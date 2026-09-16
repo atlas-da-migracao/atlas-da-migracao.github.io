@@ -1,18 +1,26 @@
 """Gera os centroides usados pelos arcos do mapa (dado geográfico público do IBGE,
 sem microdados) em cada nível de agregação:
 
-  centroides.parquet       -- por município, via ST_Read + ST_Centroid (polígono real).
+  centroides.parquet       -- por município, via ST_Read + ST_PointOnSurface (ponto garantido
+                               dentro do polígono real -- ver nota abaixo).
   centroides_rgi.parquet   -- por região imediata (RGI).
   centroides_rgint.parquet -- por região intermediária (RGInt).
   centroides_uf.parquet    -- por UF.
 
-Os níveis agregados usam a MÉDIA dos centroides municipais ponderada pela população
-(pop5, de municipios.parquet), em vez do centroide geométrico do polígono dissolvido:
-é uma aproximação (desloca o ponto para onde está a população, não para o meio da área),
-mas evita depender de leitura de TopoJSON pela extensão espacial do DuckDB (que não lê
-esse formato) e de um passo extra de exportação/limpeza de GeoJSON temporário -- e para
-arcos de fluxo, ancorar no centro de massa populacional é, se algo, mais representativo
-que o centro geométrico da área. Documentado aqui e no relatório de QA da F6.
+Nível município: `ST_PointOnSurface` (GEOS, via a extensão spatial do DuckDB) em vez de
+`ST_Centroid` -- o centroide geométrico de um polígono côncavo ou composto (ilhas, recortes
+de baía) pode cair fora da própria área (ex.: municípios litorâneos em ferradura); o "ponto
+na superfície" é sempre interior ao polígono, ainda determinístico e com custo equivalente.
+F2 (mapa-representacao): ver plano, "Centroides dentro do polígono".
+
+Os níveis agregados (RGI/RGInt/UF) continuam com a MÉDIA dos centroides municipais
+ponderada pela população (pop5, de municipios.parquet), em vez de um `ST_PointOnSurface`
+do polígono dissolvido: é uma aproximação (desloca o ponto para onde está a população, não
+para o meio da área), mas evita depender de leitura de TopoJSON pela extensão espacial do
+DuckDB (que não lê esse formato) e de um passo extra de exportação/limpeza de GeoJSON
+temporário -- e para arcos de fluxo, ancorar no centro de massa populacional é, se algo,
+mais representativo que o centro geométrico (ou "ponto na superfície") da área dissolvida.
+Documentado aqui e no relatório de QA da F6.
 
 Por edição (ver pipeline/edicoes.py): a malha bruta é lida de
 <geo_raw>/BR_Municipios_<edicao>.shp e os centroides são escritos em <processed>/geo/.
@@ -38,8 +46,8 @@ def build_municipios(con: duckdb.DuckDBPyConnection, raw: pathlib.Path, geo: pat
     con.execute(f"""
         COPY (
             SELECT CD_MUN AS cd_mun,
-                   ST_X(ST_Centroid(geom)) AS lon,
-                   ST_Y(ST_Centroid(geom)) AS lat
+                   ST_X(ST_PointOnSurface(geom)) AS lon,
+                   ST_Y(ST_PointOnSurface(geom)) AS lat
             FROM ST_Read('{raw}')
             WHERE CD_MUN NOT IN ({excl})
         ) TO '{dest}' (FORMAT PARQUET)

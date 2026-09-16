@@ -4,10 +4,10 @@
     "fluxos_rgi.parquet": "31667b4ab9caf524efcc85d3219f6a03cede3896ee1f144af2f5efb1e0489a95",
     "fluxos_rgint.parquet": "a64e074b774fa5c84b72a5be6a699eb7b0de2f9294f131d6bcbf4d2ec600d1f1",
     "fluxos_uf.parquet": "60c97ba02ca612f2d65cc05e5c71d79482189fce19a04fe7ed08d88fe51b293e",
-    "geo/centroides.parquet": "efa25b69cb6e8e0a5e1672ea0660189f904686f38f0fb78aceb4903869683cec",
-    "geo/centroides_rgi.parquet": "a6810f3d60959306113df7665408a4c27532affe8e7e712fc2cd4988fd052eb4",
-    "geo/centroides_rgint.parquet": "9d06125d6306e0beaf02219b0b81a1c3f6ded31d85fb68a6f9d9a0b965ec96a1",
-    "geo/centroides_uf.parquet": "ed149ba00937ea70f4b3486ac6feb76e40131ead6be9526111a5c7a7da198089",
+    "geo/centroides.parquet": "4c716299d72d62c6103579b66e8f3263f07ab53bfbfec44454370cf876f23e5f",
+    "geo/centroides_rgi.parquet": "1849ac606eb46fe9d413ac88cdde9439d57d09cdf2f3ee5923c34971ea20dc4d",
+    "geo/centroides_rgint.parquet": "f77bb01969160add02149e74405ff1fdb0d941a5de3dbbfc53573cc100c1f1b4",
+    "geo/centroides_uf.parquet": "d8d48465c127526ddfc3e6f9e5e0313740e709c9aeb2b174a77e8c42ae13ea9c",
     "geo/municipios.topojson": "c1bda25b83c0d892843517fd38b4f3382865c386975ab59c7daa6ddbfca5f779",
     "geo/recortes.json": "1ca00bd8f1858ae31b7884f2741aacd5bc595b8c82736e146b775a98dadc964d",
     "geo/rgi.topojson": "189356db93aad93607c68d753b5c8377c392e936db562067af61c754a207e1fc",
@@ -31,6 +31,6 @@
     "rm_resumo.parquet": "afb194f0ce5edc2dae9e5ed2030204a393ebc74ee9150bc14be0753d6d924b69"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-16T16:31:54.548140",
-  "versao_dados": "1.0.4-1980"
+  "timestamp": "2026-09-16T16:44:43.982137",
+  "versao_dados": "1.0.5-1980"
 }

@@ -378,7 +378,10 @@ def test_gate_ok_existe_e_e_valido():
     # a malha inteira passa a validar sem tratamento especial -- geo/fetch_1980.sh voltou ao
     # dissolve simples e pipeline/gridsplit_geom.py foi removido. Só os arquivos de geo/
     # (topojson, centroides) e o meta.json mudaram.
-    assert carimbo["versao_dados"] == "1.0.4-1980"
+        # 1.0.5-1980: Fase 2 (mapa/arcos) -- centroides municipais passaram a ST_PointOnSurface
+    # (ponto garantido dentro do polígono, em vez do centroide geométrico) em
+    # pipeline/build_centroids.py. Só geo/centroides*.parquet mudou.
+    assert carimbo["versao_dados"] == "1.0.5-1980"
     assert "1980/municipios.parquet" not in carimbo["arquivos"], \
         "caminhos no carimbo são relativos à própria PROCESSED"
     assert "fluxos_origem_agregada.parquet" not in carimbo["arquivos"], \

@@ -26,6 +26,11 @@ export interface ValorMapa {
 
 interface Props {
   malha: FeatureCollection | null;
+  /** F2 (mapa-representacao): malha de arestas (topojson.mesh, fronteiras únicas) da mesma
+   *  malha ativa -- usada só para o contorno "normal", em vez de contornar cada feição (o
+   *  que desenha toda fronteira compartilhada duas vezes e revela arestas internas de
+   *  MultiPolygon, ex.: a grade do NORTEGO). null enquanto a topologia bruta não carregou. */
+  contornos?: Feature | null;
   porCodigo: Map<string, ValorMapa>;
   metrica: Metrica;
   quebras: number[];
@@ -72,7 +77,7 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
 };
 
 export function MapaAtlas({
-  malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
+  malha, contornos = null, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
 }: Props) {
@@ -155,27 +160,19 @@ export function MapaAtlas({
   const camadas = useMemo(() => {
     if (!malha) return [];
     const contorno: RGB = escuro ? [70, 70, 68] : [225, 224, 217];
+    // UF é o único nível cujo contorno "normal" deve se destacar mais (hierarquia
+    // figura-fundo): mais escuro/mais grosso que a fronteira municipal.
+    const ehUf = campoId === "cd_uf";
 
     const municipios = new GeoJsonLayer({
       id: "municipios",
       data: malha,
       pickable: true,
-      stroked: true,
+      // F2 (mapa-representacao): sem contorno por feição -- fronteira "normal" agora vem da
+      // malha de arestas (camada "contornos-malha" abaixo), que não duplica arestas
+      // compartilhadas nem desenha arestas internas de MultiPolygon.
+      stroked: false,
       filled: true,
-      lineWidthUnits: "pixels",
-      getLineWidth: (f: Feature<Geometry, Record<string, string>>) => {
-        const cd = f.properties[campoId];
-        if (cd === selecionado) return 2;
-        if (nucleo && cd === nucleo) return 3;
-        return 0.3;
-      },
-      getLineColor: (f: Feature<Geometry, Record<string, string>>) => {
-        const cd = f.properties[campoId];
-        if (cd === selecionado) return escuro ? [255, 255, 255, 255] : [11, 11, 11, 255];
-        if (nucleo && cd === nucleo) return escuro ? [255, 255, 255, 220] : [11, 11, 11, 220];
-        const fora = destacar && !destacar.has(cd);
-        return [...contorno, fora ? 90 : 180];
-      },
       getFillColor: (f: Feature<Geometry, Record<string, string>>) => {
         const cd = f.properties[campoId];
         const c = corDivergente(valorDaMetrica(porCodigo.get(cd), metrica), quebras, escuro);
@@ -189,7 +186,51 @@ export function MapaAtlas({
       },
       updateTriggers: {
         getFillColor: [metrica, quebras.join(","), escuro, porCodigo.size, destacar],
-        getLineColor: [selecionado, escuro, nucleo, destacar, campoId],
+      },
+    });
+
+    // Contorno "normal": malha de arestas (fronteiras únicas), não por feição. `contornos`
+    // vem de topojson.mesh((a,b) => a !== b) em App.tsx -- some tanto a duplicação de uma
+    // fronteira compartilhada (desenhada 1x em vez de 2x) quanto a aresta interna de um
+    // MultiPolygon da mesma feição (ex.: a grade que aparecia dentro do NORTEGO em 1980).
+    const contornosMalha = contornos && new GeoJsonLayer({
+      id: "contornos-malha",
+      data: [contornos],
+      pickable: false,
+      stroked: true,
+      filled: false,
+      lineWidthUnits: "pixels",
+      lineJointRounded: true,
+      getLineWidth: ehUf ? 1.1 : 0.3,
+      getLineColor: ehUf
+        ? (escuro ? [150, 150, 145, 220] : [120, 118, 108, 220])
+        : [...contorno, 180],
+      updateTriggers: { getLineColor: [escuro, ehUf], getLineWidth: [ehUf] },
+    });
+
+    // Contorno de seleção e de núcleo de RM: continuam desenhados por feição (precisam da
+    // cor/espessura de destaque só numa feição específica), sobre a malha de arestas.
+    const contornoSelecao = new GeoJsonLayer({
+      id: "contorno-selecao",
+      data: malha,
+      pickable: false,
+      stroked: true,
+      filled: false,
+      lineWidthUnits: "pixels",
+      getLineWidth: (f: Feature<Geometry, Record<string, string>>) => {
+        const cd = f.properties[campoId];
+        if (cd === selecionado) return 2;
+        if (nucleo && cd === nucleo) return 3;
+        return 0;
+      },
+      getLineColor: (f: Feature<Geometry, Record<string, string>>) => {
+        const cd = f.properties[campoId];
+        if (cd === selecionado) return escuro ? [255, 255, 255, 255] : [11, 11, 11, 255];
+        if (nucleo && cd === nucleo) return escuro ? [255, 255, 255, 220] : [11, 11, 11, 220];
+        return [0, 0, 0, 0];
+      },
+      updateTriggers: {
+        getLineColor: [selecionado, escuro, nucleo, campoId],
         getLineWidth: [selecionado, nucleo, campoId],
       },
     });
@@ -237,10 +278,10 @@ export function MapaAtlas({
       updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
     });
 
-    return [municipios, contornoRM, fluxos];
+    return [municipios, contornosMalha, contornoRM, contornoSelecao, fluxos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [malha, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo, maiorVolume,
-      destacar, perimetro, nucleo, campoId]);
+  }, [malha, contornos, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
+      maiorVolume, destacar, perimetro, nucleo, campoId]);
 
   const dica = hover?.object as
     | (Feature<Geometry, Record<string, string>> & Fluxo)

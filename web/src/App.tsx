@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { feature, merge } from "topojson-client";
+import { feature, merge, mesh } from "topojson-client";
 import type { Feature, FeatureCollection, MultiPolygon } from "geojson";
 import type { GeometryCollection, MultiPolygon as TopoMultiPolygon, Polygon as TopoPolygon, Topology } from "topojson-specification";
 import { MapaAtlas, type ValorMapa } from "./map/MapaAtlas";
@@ -91,6 +91,11 @@ export default function App() {
   const nivelEfetivo: Nivel = rm ? "mun" : nivel;
   useEffect(() => { setUfSobMapa(null); setUfsRealcadas(null); }, [nivelEfetivo]);
   const [malhaNivel, setMalhaNivel] = useState<Partial<Record<NivelAgregado, FeatureCollection>>>({});
+  // F2 (mapa-representacao): topologia bruta por nível agregado, guardada além do
+  // FeatureCollection já decodificado -- topojson.mesh() precisa do objeto topológico
+  // (arcos + índices), não da geometria já expandida em feature(), para calcular fronteiras
+  // únicas (sem duplicar arestas compartilhadas nem desenhar arestas internas de MultiPolygon).
+  const [topoNivel, setTopoNivel] = useState<Partial<Record<NivelAgregado, Topology>>>({});
   const [unidadesNivel, setUnidadesNivel] = useState<Partial<Record<NivelAgregado, UnidadeAgregada[]>>>({});
   const [avisoNivel, setAvisoNivel] = useState<string | null>(null);
 
@@ -105,7 +110,7 @@ export default function App() {
   // caminhos data/ diferentes; sem isto, trocar 2010<->2022 e mudar de nível reusaria a malha
   // ou as unidades da edição anterior (setCenso já volta o nível a "mun", então o efeito
   // abaixo dele não dispara sozinho de novo -- é preciso limpar os caches explicitamente).
-  useEffect(() => { setMalhaNivel({}); setUnidadesNivel({}); setFluxosUF(null); }, [censo]);
+  useEffect(() => { setMalhaNivel({}); setTopoNivel({}); setUnidadesNivel({}); setFluxosUF(null); }, [censo]);
 
   // F6 leva 2: folha de filtros (busca/recorte/métrica) no mobile -- abre como bottom sheet
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
@@ -119,6 +124,7 @@ export default function App() {
       const chave = Object.keys(topo.objects)[0];
       const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
       setMalhaNivel((m) => ({ ...m, [n]: fc }));
+      setTopoNivel((t) => ({ ...t, [n]: topo }));
     }).catch((e) => { if (vivo) setErro(`Falha ao carregar a malha (${n}): ${(e as Error).message}`); });
     return () => { vivo = false; };
   }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -270,7 +276,21 @@ export default function App() {
 
   // malha ativa: municipal por padrão, ou a do nível agregado escolhido
   const malhaAtiva = nivelEfetivo === "mun" ? malha : malhaNivel[nivelEfetivo] ?? null;
+  // topologia bruta correspondente (para o mesh de contornos -- ver contornosMalha abaixo)
+  const topoAtivo = nivelEfetivo === "mun" ? topoMun : topoNivel[nivelEfetivo] ?? null;
   const campoId = CAMPO_ID[nivelEfetivo];
+
+  // F2 (mapa-representacao): contorno "normal" por malha de arestas -- topojson.mesh com o
+  // filtro (a, b) => a !== b mantém só arestas na fronteira entre DUAS feições distintas
+  // (some tanto a aresta interna de um MultiPolygon da mesma feição -- caso do NORTEGO --
+  // quanto a duplicação de desenhar a mesma fronteira compartilhada duas vezes, uma por
+  // município). O contorno de seleção/núcleo de RM continua por feição (ver MapaAtlas).
+  const contornosMalha = useMemo<Feature | null>(() => {
+    if (!topoAtivo) return null;
+    const chave = Object.keys(topoAtivo.objects)[0];
+    const objeto = topoAtivo.objects[chave] as GeometryCollection;
+    return { type: "Feature", properties: {}, geometry: mesh(topoAtivo, objeto, (a, b) => a !== b) };
+  }, [topoAtivo]);
 
   // ============ F6: enquadramento (zoom) da seleção — bbox por feição da malha ativa,
   // calculada uma única vez ao carregá-la, e bbox de um fluxo (par de centroides) sob demanda. ============
@@ -643,7 +663,7 @@ export default function App() {
           {!malhaAtiva && !erro && <div className="carregando">Carregando o mapa…</div>}
           {erro && <div className="erro" role="alert">{erro}</div>}
           <MapaAtlas
-            malha={malhaAtiva} porCodigo={porCodigoAtivo} metrica={metrica} quebras={quebras}
+            malha={malhaAtiva} contornos={contornosMalha} porCodigo={porCodigoAtivo} metrica={metrica} quebras={quebras}
             arcos={arcos} selecionado={codigoSelecionado} escuro={escuro}
             aoSelecionar={aoSelecionarNoMapa} aoSelecionarFluxo={aoSelecionarFluxo}
             foco={foco} zoomMaximo={zoomMaximo} rotuloReenquadrar={rotuloReenquadrar}
