@@ -18,6 +18,10 @@ export interface Fluxo {
   nm_origem?: string; nm_destino?: string;
   uf_origem?: string; uf_destino?: string;
   lon_o?: number; lat_o?: number; lon_d?: number; lat_d?: number;
+  /** F10: mesma origem/destino em metros, cônica equivalente de Albers -- é isto que o mapa
+   *  usa (ArcLayer, coordinateSystem CARTESIAN); lon_o/lat_o continuam publicados para
+   *  qualquer uso futuro fora do mapa (a Fase 6, satélite/Mercator, pode precisar deles). */
+  x_o?: number; y_o?: number; x_d?: number; y_d?: number;
 }
 
 export type Metrica = "saldo" | "tlm" | "imig" | "emig" | "iem";
@@ -33,6 +37,12 @@ export interface Meta {
    *  a partir da seleção em tela, para que a mesma espessura em pixels sempre valer o mesmo
    *  volume dentro de uma edição. */
   maior_fluxo: number;
+  /** F10: bounds (metros, x/y) da malha de municípios já projetada na cônica equivalente de
+   *  Albers (ver pipeline/build_meta.py e docs/METODOLOGIA.md, "Cartografia: projeção cônica
+   *  equivalente de Albers"). Usado pelo mapa para o fitBounds cartesiano da vista nacional
+   *  (OrthographicView) sem precisar decodificar o TopoJSON só para isso. Ausente só se a
+   *  edição não tiver sido regerada depois da Fase 4 -- não deve acontecer em produção. */
+  bounds_albers?: { x_min: number; x_max: number; y_min: number; y_max: number };
   // min_domicilios é null nas edições cuja fonte não publica identificador de domicílio
   // (Censo 1980): o piso de R1 passa a ser só de pessoas, mais alto — ver docs/METODOLOGIA.md.
   revelacao: { min_pessoas: number; min_domicilios: number | null; min_pessoas_detalhe: number;

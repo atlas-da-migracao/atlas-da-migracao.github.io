@@ -9,7 +9,9 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import subprocess
 import sys
+import tempfile
 
 import duckdb
 
@@ -106,6 +108,45 @@ ROTULOS = {
 }
 
 
+def _bounds_albers(ed) -> dict | None:
+    """Bounds (metros, x/y) da malha de municípios já projetada em Albers (F10):
+    `municipios_albers.topojson`, gerado por geo/build.sh. Publicado em meta.json para o
+    front-end enquadrar a vista nacional (`fitBounds` cartesiano) sem ter que baixar/decodificar
+    o TopoJSON só para calcular um bbox. `None` se o arquivo ainda não foi gerado (edição
+    ainda não passou pela Fase 4 do mapa -- não deve acontecer depois que geo/build.sh roda,
+    mas evita quebrar o build.py de uma edição parcialmente migrada)."""
+    caminho = ROOT / ed.processed / "geo" / "municipios_albers.topojson"
+    if not caminho.exists():
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        geojson_path = pathlib.Path(tmp) / "decoded.geojson"
+        subprocess.run(
+            ["node", str(ROOT / "geo/decode_topojson.mjs"), str(caminho), str(geojson_path)],
+            check=True, cwd=ROOT,
+        )
+        fc = json.loads(geojson_path.read_text(encoding="utf-8"))
+
+    xs: list[float] = []
+    ys: list[float] = []
+
+    def _coleta(coords):
+        if isinstance(coords[0], (int, float)):
+            xs.append(coords[0])
+            ys.append(coords[1])
+        else:
+            for c in coords:
+                _coleta(c)
+
+    for feat in fc["features"]:
+        geom = feat.get("geometry")
+        if geom and geom.get("coordinates"):
+            _coleta(geom["coordinates"])
+
+    if not xs:
+        return None
+    return {"x_min": min(xs), "x_max": max(xs), "y_min": min(ys), "y_max": max(ys)}
+
+
 def _unidades_agregadas(ed) -> list[dict] | None:
     """Rótulos das unidades agregadas da edição (ver `meta["unidades_agregadas"]`).
 
@@ -172,6 +213,9 @@ def main() -> None:
         # F3 (mapa-representação): maior fluxo municipal publicado desta edição -- base da
         # escala de espessura ABSOLUTA dos arcos no mapa (ver web/src/map/MapaAtlas.tsx).
         "maior_fluxo": _maior_fluxo(ed),
+        # F10: bounds (m) da malha de municípios em Albers, para fitBounds cartesiano da vista
+        # nacional sem ler o TopoJSON só para isso (ver web/src/map/MapaAtlas.tsx).
+        **({"bounds_albers": ba} if (ba := _bounds_albers(ed)) else {}),
         # Limiares EFETIVOS desta edição, não as constantes-padrão: numa edição sem chave de
         # domicílio (Censo 1980) `min_domicilios` é null e os pisos de pessoas vêm elevados, e a
         # página de metodologia do site precisa dizer isso em vez de prometer um piso de

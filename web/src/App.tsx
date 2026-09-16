@@ -119,7 +119,9 @@ export default function App() {
     if (nivelEfetivo === "mun" || malhaNivel[nivelEfetivo]) return;
     const n = nivelEfetivo;
     let vivo = true;
-    fetch(`${basePath(censo)}geo/${n}.topojson`).then((r) => r.json() as Promise<Topology>).then((topo) => {
+    // F10: malha em Albers (metros) -- a mesma que o mapa consome (COORDINATE_SYSTEM.CARTESIAN
+    // em MapaAtlas.tsx). O front nunca reprojeta: o arquivo já vem em metros do pipeline.
+    fetch(`${basePath(censo)}geo/${n}_albers.topojson`).then((r) => r.json() as Promise<Topology>).then((topo) => {
       if (!vivo) return;
       const chave = Object.keys(topo.objects)[0];
       const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
@@ -204,7 +206,8 @@ export default function App() {
       try {
         const base = basePath(censo);
         const [topo, m, mapa] = await Promise.all([
-          fetch(`${base}geo/municipios.topojson`).then((r) => r.json() as Promise<Topology>),
+          // F10: malha em Albers (metros) -- ver comentário acima, no efeito de malhaNivel.
+          fetch(`${base}geo/municipios_albers.topojson`).then((r) => r.json() as Promise<Topology>),
           fetch(`${base}meta.json`).then((r) => r.json() as Promise<Meta>),
           fetch(`${base}municipios_mapa.json`).then((r) => r.json() as Promise<MunicipiosMapa>),
         ]);
@@ -315,8 +318,10 @@ export default function App() {
     const consulta = nivelEfetivo === "mun"
       ? centroidesDeMunicipios([origem, destino])
       : centroidesDeUnidades(nivelEfetivo as NivelAgregado, [origem, destino]);
-    consulta.then((pts) => { if (vivo) setFluxoFoco(bboxDeCentroides(pts, 0.25)); })
-      .catch(() => setFluxoFoco(null));
+    // F10: enquadramento em metros (Albers) -- x_albers/y_albers, não lon/lat.
+    consulta.then((pts) => {
+      if (vivo) setFluxoFoco(bboxDeCentroides(pts.map((p) => ({ lon: p.x_albers, lat: p.y_albers })), 0.25));
+    }).catch(() => setFluxoFoco(null));
     return () => { vivo = false; };
   }, [origem, destino, nivelEfetivo]);
 
@@ -332,18 +337,19 @@ export default function App() {
     // F3 (mapa-representação), ajuste pós-verificação visual: sem limite, o top-15 de um
     // município (ex. São Paulo) inclui destinos a 2 mil+ km (Recife, Salvador) e o
     // enquadramento afrouxava até cobrir metade do Brasil -- perde-se a leitura local que é
-    // o ponto da vista de município. Raio de corte = o maior entre 2° (~220 km, cobre uma
-    // região metropolitana) e 4x o tamanho do próprio polígono selecionado (municípios
-    // grandes, ex. no Norte, ainda enquadram seus vizinhos próximos). Arcos com a ponta fora
-    // do raio continuam desenhados (e listados no painel) -- só saem da tela, como antes desta
-    // fase; não há perda de dado, só de enquadramento automático.
-    const [minLon, minLat, maxLon, maxLat] = selecaoFoco;
-    const centro = { lon: (minLon + maxLon) / 2, lat: (minLat + maxLat) / 2 };
-    const tamanhoBase = Math.max(maxLon - minLon, maxLat - minLat);
-    const raio = Math.max(2, tamanhoBase * 4);
+    // o ponto da vista de município. Raio de corte = o maior entre 220 km (cobre uma região
+    // metropolitana) e 4x o tamanho do próprio polígono selecionado (municípios grandes, ex.
+    // no Norte, ainda enquadram seus vizinhos próximos). Arcos com a ponta fora do raio
+    // continuam desenhados (e listados no painel) -- só saem da tela, como antes desta fase;
+    // não há perda de dado, só de enquadramento automático. F10: bbox/centro/raio em metros
+    // (Albers) -- selecaoFoco já vem da malha projetada (ver bboxPorFeicao).
+    const [minX, minY, maxX, maxY] = selecaoFoco;
+    const centro = { lon: (minX + maxX) / 2, lat: (minY + maxY) / 2 };
+    const tamanhoBase = Math.max(maxX - minX, maxY - minY);
+    const raio = Math.max(220_000, tamanhoBase * 4);
     const pontos = arcos.flatMap((a) => [
-      a.lon_o != null && a.lat_o != null ? { lon: a.lon_o, lat: a.lat_o } : null,
-      a.lon_d != null && a.lat_d != null ? { lon: a.lon_d, lat: a.lat_d } : null,
+      a.x_o != null && a.y_o != null ? { lon: a.x_o, lat: a.y_o } : null,
+      a.x_d != null && a.y_d != null ? { lon: a.x_d, lat: a.y_d } : null,
     ]).filter((p): p is { lon: number; lat: number } => p != null
       && Math.hypot(p.lon - centro.lon, p.lat - centro.lat) <= raio);
     return bboxDeCentroides(pontos, 0.15);
@@ -362,7 +368,8 @@ export default function App() {
       if (!vivo) return;
       setRmDestacar(new Set(muns.map((m) => m.cd_mun)));
       setRmNucleo(muns.find((m) => m.nucleo)?.cd_mun ?? null);
-      setRmFoco(bboxDeCentroides(cent));
+      // F10: enquadramento em metros (Albers).
+      setRmFoco(bboxDeCentroides(cent.map((p) => ({ lon: p.x_albers, lat: p.y_albers }))));
     }).catch((e) => setErro(`Falha ao carregar a RM: ${(e as Error).message}`));
     return () => { vivo = false; };
   }, [rm]);
@@ -510,7 +517,13 @@ export default function App() {
 
   // F6: prioridade única de enquadramento — fluxo > seleção (município/unidade) > RM > Brasil.
   const foco = prioridadeFoco(fluxoFoco, selecaoComArcosFoco, rmFoco);
-  const zoomMaximo = fluxoFoco ? undefined : selecaoFoco && nivelEfetivo === "mun" ? 9 : undefined;
+  // F10 (correção): zoom cartesiano = log2(pixels por metro) -- escala bem diferente do zoom
+  // "tipo Mercator" de antes (0-20ish). O teto antigo (9) nunca segurava nada no esquema novo
+  // (município minúsculo enchia a tela). Equivalente ao teto antigo de ~305 m/px (zoom 9 do
+  // z/x/y clássico, 156543/2^9): log2(1/305) ≈ -8,25 -- não zoomar além da resolução em que a
+  // malha (simplificada a 1%) ainda faz sentido.
+  const ZOOM_MAXIMO_MUNICIPIO = -8.25;
+  const zoomMaximo = fluxoFoco ? undefined : selecaoFoco && nivelEfetivo === "mun" ? ZOOM_MAXIMO_MUNICIPIO : undefined;
   const rotuloReenquadrar = fluxoFoco ? "Ver o fluxo"
     : selecaoFoco ? `Ver ${nivelEfetivo === "mun" ? "o município" : nivelEfetivo === "uf" ? "a UF" : "a região"}`
     : rm ? "Ver a RM" : "Ver o Brasil";
@@ -704,6 +717,7 @@ export default function App() {
             descricaoAcessivel={descricaoMapa}
             aoPassarFeicao={nivelEfetivo === "uf" ? setUfSobMapa : undefined}
             mostrarFluxos={mostrarFluxos} maiorFluxoEdicao={meta?.maior_fluxo ?? null}
+            boundsNacional={meta?.bounds_albers ?? null}
           />
           <div className="mapa-controles-baixo">
             <button type="button" className="botao-fluxos" aria-pressed={mostrarFluxos}

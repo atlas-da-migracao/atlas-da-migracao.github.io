@@ -23,6 +23,19 @@
 # de gravar o TopoJSON final quantizado -- ver a função `limpa_e_publica` abaixo e
 # docs/METODOLOGIA.md para o diagnóstico (anéis com autointerseção faziam o earcut do deck.gl
 # gerar triângulos espúrios ou omitir o preenchimento).
+#
+# F10 (projeção Albers): cada produto gera DOIS arquivos -- o de sempre, em graus (WGS84/
+# SIRGAS2000, inalterado) e um paralelo `*_albers.topojson`, em metros, na cônica equivalente
+# de Albers (ver docs/METODOLOGIA.md, "Cartografia: projeção cônica equivalente de Albers
+# (F10)"). A reprojeção (`-proj`) entra logo depois do -filter/-join/-dissolve e ANTES do
+# -simplify -- simplificar em metros pondera o erro igual em todo o país, em vez de
+# implicitamente por latitude como simplificar em graus. A quantização usada é A MESMA do
+# arquivo em graus (1e5/1e5/1e5/1e5): testado com a malha de municípios 2022, quant=1e5 em
+# metros dá um arquivo do mesmo tamanho (1,97 MB) e a mesma ordem de grandeza de resolução
+# (bbox ~4740 km x 4289 km / 1e5 ~ 47 m, contra ~5100 km / 1e5 ~ 51 m no arquivo em graus) e
+# deixa só 1 feição para o reparo dirigido (o mesmo mecanismo já usado para o arquivo em
+# graus). quant=1e6 (mais fino) passa do orçamento de 2 MB sem reduzir inválidos o bastante
+# para justificar; manter 1e5.
 set -e
 cd "$(dirname "$0")/.."
 
@@ -45,6 +58,9 @@ fi
 # Baía de Guanabara/RJ) sem correspondência em municipios_ref.parquet -- inofensivo incluir o
 # filtro nas demais edições, já que "0" nunca aparece nelas.
 FILTRO='CD_MUN != "8888888" && CD_MUN != "9999999" && CD_MUN != "4300001" && CD_MUN != "4300002" && CD_MUN != "0"'
+# Cônica equivalente de Albers, parâmetros fixados em docs/METODOLOGIA.md (F10) -- os mesmos
+# para as 5 edições e os 4 produtos, inclusive NORTEGO (1980).
+PROJ4="+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
 OUT="$PROCESSED/geo"
 mkdir -p "$OUT"
 TMP=$(mktemp -d)
@@ -94,23 +110,35 @@ PYEOF
 #      tinha corrigido em precisão total (achado testando 2022: 0 inválidos antes da
 #      quantização, 4 depois). Por isso a checagem roda DEPOIS deste passo, no TopoJSON final,
 #      não no GeoJSON intermediário.
-#   3. Um segundo `-clean` (agora sobre o próprio TopoJSON já quantizado, mesma grade) --
-#      resolve a maior parte do que a quantização reintroduziu (achado testando RGI 2010,
-#      código 230003: sozinho, esse segundo -clean fecha a autointerseção e preserva a área a
-#      0,3% do valor pré-quantização; ST_MakeValid direto no mesmo caso, sem esse passo antes,
-#      cortava 6,6% da área -- a quantização tinha fragmentado o polígono em 97 partes e o
-#      MakeValid descartava fragmentos espúrios em vez de só fechar o anel).
+#   3. Um segundo `-clean` (sobre o TopoJSON já quantizado, decodificado de volta para GeoJSON
+#      antes de limpar e regravado na mesma grade) -- resolve a maior parte do que a
+#      quantização reintroduziu (achado testando RGI 2010, código 230003: sozinho, esse
+#      segundo -clean fecha a autointerseção e preserva a área a 0,3% do valor pré-
+#      quantização; ST_MakeValid direto no mesmo caso, sem esse passo antes, cortava 6,6% da
+#      área -- a quantização tinha fragmentado o polígono em 97 partes e o MakeValid descartava
+#      fragmentos espúrios em vez de só fechar o anel). F10: o -clean tem que rodar sobre um
+#      GeoJSON decodificado, não direto no arquivo TopoJSON -- testado nas malhas em metros
+#      (Albers), `-clean` direto no `.topojson` quantizado derruba o mapshaper com "Invalid
+#      node geometry" ao (re)construir o mosaico de polígonos (bug de precisão do mapshaper
+#      com arcos de magnitude grande, reproduzido em qualquer quantization testada, de 1e5 a
+#      1e6); decodificar primeiro (`-o format=geojson`) e só então `-clean` evita o bug e dá um
+#      resultado pelo menos tão bom quanto (achado testando municípios 2022 em Albers: 0
+#      feições ruins depois do decode-clean-reencode, contra 1 fazendo -clean direto no
+#      TopoJSON com quant=1e5). Aplicado às duas malhas (graus e Albers) por uniformidade --
+#      não muda o resultado da malha em graus, que já não tinha esse problema.
 #   4. Reparo dirigido (`geo/repair_geojson.py`, ST_MakeValid via GEOS), só nas feições que
 #      `geo/find_bad_ids.py` ainda marca como ST_IsValid=false OU com triangulação earcut ruim
 #      depois do passo 3 -- fallback para o que sobrar. Reparada, a feição é requantizada
 #      (mesma grade) e revalidada; não foi necessário reduzir -simplify nem redimensionar a
 #      malha em nenhuma das 5 edições.
 limpa_e_publica() {
-  destino="$1"; quant="$2"; campo_id="$3"
+  destino="$1"; quant="$2"; campo_id="$3"; stage1="${4:-$STAGE1}"
   limpo="$TMP/$(basename "$destino" .topojson)_limpo.geojson"
-  npx --yes mapshaper "$STAGE1" -clean -o format=geojson "$limpo"
+  npx --yes mapshaper "$stage1" -clean -o format=geojson "$limpo"
   npx --yes mapshaper "$limpo" -o format=topojson quantization="$quant" "$destino"
-  npx --yes mapshaper "$destino" -clean -o format=topojson quantization="$quant" force "$destino"
+  pos_quant="$TMP/$(basename "$destino" .topojson)_pos_quant.geojson"
+  npx --yes mapshaper "$destino" -o format=geojson "$pos_quant"
+  npx --yes mapshaper "$pos_quant" -clean -o format=topojson quantization="$quant" "$destino"
 
   tentativa=0
   while [ "$tentativa" -lt 3 ]; do
@@ -139,6 +167,16 @@ npx --yes mapshaper "$RAW" \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/municipios.topojson" 1e5 CD_MUN
 
+echo "== municípios, projeção Albers (metros) =="
+STAGE1_ALBERS="$TMP/municipios_albers.geojson"
+npx --yes mapshaper "$RAW" \
+    -filter "$FILTRO" \
+    -proj "$PROJ4" \
+    -simplify 1% keep-shapes \
+    -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
+    -o format=geojson "$STAGE1_ALBERS"
+limpa_e_publica "$OUT/municipios_albers.topojson" 1e5 CD_MUN "$STAGE1_ALBERS"
+
 echo "== limites de UF (dissolvidos a partir dos municípios; id = código numérico de 2 dígitos," \
      "consistente com fluxos_uf/municipios.uf -- uf_sigla vai junto só para exibição) =="
 STAGE1="$TMP/uf.geojson"
@@ -150,6 +188,18 @@ npx --yes mapshaper "$RAW" \
     -filter-fields cd_uf,uf_sigla \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/uf.topojson" 1e5 cd_uf
+
+echo "== limites de UF, projeção Albers (metros) =="
+STAGE1_ALBERS="$TMP/uf_albers.geojson"
+npx --yes mapshaper "$RAW" \
+    -filter "$FILTRO" \
+    -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
+    -dissolve cd_uf copy-fields=uf_sigla \
+    -proj "$PROJ4" \
+    -simplify 5% keep-shapes \
+    -filter-fields cd_uf,uf_sigla \
+    -o format=geojson "$STAGE1_ALBERS"
+limpa_e_publica "$OUT/uf_albers.topojson" 1e5 cd_uf "$STAGE1_ALBERS"
 
 echo "== regiões imediatas (RGI, dissolvidas a partir dos municípios) =="
 # `cd_rgi != null`: uma UNIDADE AGREGADA (hoje só 'NORTEGO', o norte de Goiás em 1980 --
@@ -170,6 +220,19 @@ npx --yes mapshaper "$RAW" \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/rgi.topojson" 1e5 cd_rgi
 
+echo "== regiões imediatas, projeção Albers (metros) =="
+STAGE1_ALBERS="$TMP/rgi_albers.geojson"
+npx --yes mapshaper "$RAW" \
+    -filter "$FILTRO" \
+    -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
+    -filter "cd_rgi != null" \
+    -dissolve cd_rgi copy-fields=nm_rgi,cd_uf,uf_sigla \
+    -proj "$PROJ4" \
+    -simplify 1.5% keep-shapes \
+    -filter-fields cd_rgi,nm_rgi,cd_uf,uf_sigla \
+    -o format=geojson "$STAGE1_ALBERS"
+limpa_e_publica "$OUT/rgi_albers.topojson" 1e5 cd_rgi "$STAGE1_ALBERS"
+
 echo "== regiões intermediárias (RGInt, dissolvidas a partir dos municípios) =="
 STAGE1="$TMP/rgint.geojson"
 npx --yes mapshaper "$RAW" \
@@ -181,6 +244,19 @@ npx --yes mapshaper "$RAW" \
     -filter-fields cd_rgint,nm_rgint,cd_uf,uf_sigla \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/rgint.topojson" 1e5 cd_rgint
+
+echo "== regiões intermediárias, projeção Albers (metros) =="
+STAGE1_ALBERS="$TMP/rgint_albers.geojson"
+npx --yes mapshaper "$RAW" \
+    -filter "$FILTRO" \
+    -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
+    -filter "cd_rgint != null" \
+    -dissolve cd_rgint copy-fields=nm_rgint,cd_uf,uf_sigla \
+    -proj "$PROJ4" \
+    -simplify 1.5% keep-shapes \
+    -filter-fields cd_rgint,nm_rgint,cd_uf,uf_sigla \
+    -o format=geojson "$STAGE1_ALBERS"
+limpa_e_publica "$OUT/rgint_albers.topojson" 1e5 cd_rgint "$STAGE1_ALBERS"
 
 echo "== validando (OGC + triangulação earcut) =="
 .venv/bin/python pipeline/validate_geo.py --edicao "$EDICAO"

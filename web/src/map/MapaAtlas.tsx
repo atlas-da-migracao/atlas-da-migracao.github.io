@@ -4,14 +4,32 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import DeckGL from "@deck.gl/react";
 import { GeoJsonLayer, ArcLayer } from "@deck.gl/layers";
-import { WebMercatorViewport } from "@deck.gl/core";
-import type { MapViewState, PickingInfo } from "@deck.gl/core";
+import { OrthographicView, COORDINATE_SYSTEM } from "@deck.gl/core";
+import type { PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Fluxo, Metrica } from "../lib/types";
-import { validarEExpandirBbox, type Bbox } from "../lib/rm";
+import { fitBoundsCartesiano, validarEExpandirBbox, type Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal, rotuloPrecisao } from "../lib/format";
 import { hexParaRgb } from "../lib/paletas";
+import { alturaDoArco, TILT_ARCO } from "../lib/arcos";
+
+// F10: o mapa deixou de usar MapView (Web Mercator) -- a vista padrão agora é
+// OrthographicView + COORDINATE_SYSTEM.CARTESIAN, consumindo diretamente as coordenadas em
+// metros dos arquivos `*_albers.topojson`/`x_albers`,`y_albers` (pré-projetados no pipeline,
+// ver docs/METODOLOGIA.md). O front NUNCA reprojeta: só renderiza o que já vem em metros.
+// `flipY: false` porque o Albers do pipeline é um referencial cartesiano padrão (Y cresce
+// para o norte), não coordenadas de tela (Y para baixo, o default do OrthographicView).
+const VIEW = new OrthographicView({ id: "mapa", flipY: false });
+
+/** Vista cartesiana: `target` no centro do que deve aparecer (metros, Albers) e `zoom` em
+ *  log2(px por metro) -- ver `fitBoundsCartesiano` em lib/rm.ts. Substitui o antigo
+ *  `MapViewState` (longitude/latitude/zoom) de quando o mapa era Web Mercator. */
+export interface VistaCartesiana {
+  target: [number, number, number];
+  zoom: number;
+  transitionDuration?: number;
+}
 
 // F3 (mapa-representação): cores dos arcos, nos dois temas -- mesmos hex de --arc-in/--arc-out
 // em styles/tokens.css (não dá para ler custom properties de dentro de uma cor do deck.gl,
@@ -22,9 +40,18 @@ const ARC_IN_CLARO = hexParaRgb("#2a78d6"), ARC_IN_ESCURO = hexParaRgb("#3987e5"
 const ARC_OUT_CLARO = hexParaRgb("#eb6834"), ARC_OUT_ESCURO = hexParaRgb("#d95926");
 const ORIGEM_CLARO = hexParaRgb("#c3c2b7"), ORIGEM_ESCURO = hexParaRgb("#383835");
 
-export const VISTA_BRASIL: MapViewState = {
-  longitude: -53.5, latitude: -14.5, zoom: 3.35, pitch: 0, bearing: 0,
-};
+/** F10: bounds (metros, Albers) da malha nacional de municípios -- valores medidos na edição
+ *  2022 (ver `meta.bounds_albers`, pipeline/build_meta.py); as 5 edições têm extensão
+ *  territorial muito próxima (a maior diferença é o Fernando de Noronha/litoral entre
+ *  edições, <5% na maior dimensão), então serve de FALLBACK só até `meta.json` responder
+ *  (`boundsNacional` prop, abaixo) -- nunca usado se a edição já carregou. */
+const LIMITES_BRASIL_FALLBACK = { x_min: -2_178_086, x_max: 2_561_841, y_min: -2_385_699, y_max: 1_902_805 };
+
+/** Vista cartesiana que enquadra o Brasil inteiro; fallback antes da 1a medida do contêiner
+ *  (ver `vistaDoFoco`). Não é mais uma constante fixa como no Web Mercator (não há "zoom que
+ *  sempre fica bom" em unidades de metros por pixel, cartesiano puro) -- é recalculada assim
+ *  que o contêiner é medido, via `fitBoundsCartesiano`. */
+export const VISTA_BRASIL: VistaCartesiana = { target: [0, 0, 0], zoom: -12 };
 
 /** Campos mínimos usados na coloração do coroplético -- Municipio e UnidadeAgregada (F6:
  *  níveis RGI/RGInt/UF) satisfazem essa forma, então o mapa não precisa saber qual é qual. */
@@ -49,7 +76,7 @@ interface Props {
   escuro: boolean;
   aoSelecionar: (cd: string | null) => void;
   aoSelecionarFluxo: (o: string, d: string) => void;
-  /** bbox [minLon,minLat,maxLon,maxLat] para enquadrar a seleção atual; null = Brasil.
+  /** bbox [minX,minY,maxX,maxY] em metros (Albers) para enquadrar a seleção atual; null = Brasil.
    *  Prioridade decidida pelo chamador: fluxo > município > RM > Brasil. */
   foco?: Bbox | null;
   /** teto de zoom ao enquadrar `foco` (ex.: município muito pequeno não deve aproximar demais) */
@@ -82,6 +109,10 @@ interface Props {
    *  fluxo EM TELA (comportamento anterior), só para não desenhar arcos invisíveis antes da
    *  1a resposta de `meta.json`. */
   maiorFluxoEdicao?: number | null;
+  /** F10: bounds (metros, Albers) da malha nacional desta edição (`meta.bounds_albers`) --
+   *  usado para enquadrar o Brasil (foco=null) sem esperar o TopoJSON de municípios (mais
+   *  pesado) carregar. `null`/ausente cai no fallback aproximado `LIMITES_BRASIL_FALLBACK`. */
+  boundsNacional?: { x_min: number; x_max: number; y_min: number; y_max: number } | null;
 }
 
 const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | null => {
@@ -99,7 +130,7 @@ export function MapaAtlas({
   malha, contornos = null, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
-  mostrarFluxos = true, maiorFluxoEdicao = null,
+  mostrarFluxos = true, maiorFluxoEdicao = null, boundsNacional = null,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   const feicaoSobCursor = useRef<string | null>(null);
@@ -115,7 +146,7 @@ export function MapaAtlas({
     }
   };
   // vista controlada: garante que a carga da página sempre comece enquadrando o Brasil
-  const [vista, setVista] = useState<MapViewState>(VISTA_BRASIL);
+  const [vista, setVista] = useState<VistaCartesiana>(VISTA_BRASIL);
   const [moveu, setMoveu] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -140,17 +171,22 @@ export function MapaAtlas({
     return () => ro.disconnect();
   }, []);
 
-  /** Vista que enquadra o `foco` (fitBounds com 48px de margem) ou o Brasil, se não houver
-   *  foco, o contêiner ainda não tiver sido medido, ou o bbox não puder ser validado. Função
-   *  pura (não é hook): chamada de dentro do efeito abaixo e do clique em "reenquadrar". */
-  const vistaDoFoco = (): MapViewState => {
+  /** Vista que enquadra o `foco` (fit cartesiano com 48px de margem) ou o Brasil, se não
+   *  houver foco, o contêiner ainda não tiver sido medido, ou o bbox não puder ser validado.
+   *  F10: não existe `WebMercatorViewport.fitBounds` em modo cartesiano (OrthographicView) --
+   *  `fitBoundsCartesiano` (lib/rm.ts) é o equivalente escrito à mão: bbox em metros do foco
+   *  (ou do Brasil inteiro, via `boundsNacional`/fallback), escala = menor entre
+   *  largura_útil/largura_bbox e altura_útil/altura_bbox, zoom = log2(escala). Função pura
+   *  (não é hook): chamada de dentro do efeito abaixo e do clique em "reenquadrar". */
+  const vistaDoFoco = (): VistaCartesiana => {
     if (!tamanho || tamanho.width <= 0 || tamanho.height <= 0) return VISTA_BRASIL;
-    const bbox = validarEExpandirBbox(foco);
+    const limites = boundsNacional ?? LIMITES_BRASIL_FALLBACK;
+    const bboxBruto: Bbox = foco ?? [limites.x_min, limites.y_min, limites.x_max, limites.y_max];
+    const bbox = validarEExpandirBbox(bboxBruto);
     if (!bbox) return VISTA_BRASIL;
-    const vp = new WebMercatorViewport({ width: tamanho.width, height: tamanho.height });
-    const ajustado = vp.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 48 });
-    const zoom = zoomMaximo != null ? Math.min(ajustado.zoom, zoomMaximo) : ajustado.zoom;
-    return { longitude: ajustado.longitude, latitude: ajustado.latitude, zoom, pitch: 0, bearing: 0 };
+    const { target, zoom: zoomAjustado } = fitBoundsCartesiano(bbox, tamanho.width, tamanho.height, 48);
+    const zoom = zoomMaximo != null ? Math.min(zoomAjustado, zoomMaximo) : zoomAjustado;
+    return { target, zoom };
   };
 
   // recalcula o enquadramento sempre que a seleção muda (não a cada re-render: só quando
@@ -191,6 +227,10 @@ export function MapaAtlas({
     const municipios = new GeoJsonLayer({
       id: "municipios",
       data: malha,
+      // F10: malha e vista em coordenadas cartesianas (metros, Albers) -- ver COORDINATE_SYSTEM
+      // no topo do arquivo. Sem isto, o GeoJsonLayer assume LNGLAT (o default) e tenta
+      // reprojetar as coordenadas já em metros como se fossem graus.
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: true,
       // F2 (mapa-representacao): sem contorno por feição -- fronteira "normal" agora vem da
       // malha de arestas (camada "contornos-malha" abaixo), que não duplica arestas
@@ -220,6 +260,7 @@ export function MapaAtlas({
     const contornosMalha = contornos && new GeoJsonLayer({
       id: "contornos-malha",
       data: [contornos],
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: false,
       stroked: true,
       filled: false,
@@ -237,6 +278,7 @@ export function MapaAtlas({
     const contornoSelecao = new GeoJsonLayer({
       id: "contorno-selecao",
       data: malha,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: false,
       stroked: true,
       filled: false,
@@ -262,6 +304,7 @@ export function MapaAtlas({
     const contornoRM = perimetro && new GeoJsonLayer({
       id: "perimetro-rm",
       data: [perimetro],
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: false,
       stroked: true,
       filled: false,
@@ -276,16 +319,16 @@ export function MapaAtlas({
     // oferece. O ArcLayer NÃO afunila (getWidth é um escalar por arco, não por vértice --
     // não há prop de largura variável ao longo da curva); implementamos só os outros dois
     // recursos do plano:
-    // (2) curvatura/tilt: sinal oposto conforme o par ordenado (origem < destino ou não),
-    //     não conforme "entrada"/"saida" -- assim QUALQUER par recíproco A->B e B->A (inclusive
-    //     nos módulos sem campo `direcao`, como os fluxos intra-RM e pendulares) fica separado
-    //     visualmente, em vez de um esconder o outro exatamente na mesma curva.
+    // (2) curvatura: F10 refez essa parte para a projeção ortográfica -- a parábola do
+    //     ArcLayer é girada para dentro do plano do mapa (`getTilt` = -90, flecha sempre à
+    //     direita do sentido de viagem, convenção de Tobler), o que separa QUALQUER par
+    //     recíproco A->B e B->A sem regra por par, inclusive nos módulos sem campo `direcao`
+    //     (fluxos intra-RM e pendulares). Ver o bloco getHeight/getTilt abaixo.
     // (3) degradê de cor mais forte: a ponta de origem vai para um cinza neutro (--axis) em
     //     vez de só reduzir o alfa da mesma cor -- a ponta de destino chega na cor cheia da
     //     direção (entrada/saída) ou da tipologia (RM). Sem direção real (ex.: maioresFluxos
     //     da vista Brasil sem seleção, que não marca `direcao`), as duas pontas ficam neutras
     //     em vez de aplicar a cor de "entrada" por padrão -- ver App.tsx.
-    const TILT = 15;
     const arcCor = (d: Fluxo & { direcao?: string; corRgb?: RGB }) => {
       if (d.corRgb) return d.corRgb;
       if (d.direcao === "entrada") return escuro ? ARC_IN_ESCURO : ARC_IN_CLARO;
@@ -295,10 +338,14 @@ export function MapaAtlas({
     const fluxos = new ArcLayer({
       id: "arcos",
       data: arcos,
+      // F10: posições em metros (x_o/y_o/x_d/y_d, Albers) -- o ArcLayer continua funcionando
+      // normalmente em CARTESIAN (o arco é desenhado no plano da vista, não segue a curvatura
+      // da Terra em nenhum dos dois modos).
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       visible: mostrarFluxos,
       pickable: mostrarFluxos,
-      getSourcePosition: (d: Fluxo) => [d.lon_o!, d.lat_o!],
-      getTargetPosition: (d: Fluxo) => [d.lon_d!, d.lat_d!],
+      getSourcePosition: (d: Fluxo) => [d.x_o!, d.y_o!],
+      getTargetPosition: (d: Fluxo) => [d.x_d!, d.y_d!],
       getSourceColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
         // ponta de origem: cinza neutro em todo arco direcionado (entrada/saída) ou sem
         // direção conhecida; a tipologia intra-RM (corRgb) continua colorida nas duas pontas,
@@ -321,8 +368,12 @@ export function MapaAtlas({
       widthMaxPixels: LARGURA_MAX,
       opacity: 0.75,
       widthUnits: "pixels",
-      getHeight: 0.35,
-      getTilt: (d: Fluxo) => (d.origem < d.destino ? TILT : -TILT),
+      // F10: curvatura no PLANO do mapa, não em Z -- `getTilt = -90` gira a parábola do
+      // ArcLayer para XY. Sob OrthographicView uma flecha em Z não tem projeção em tela e o
+      // arco colapsa na corda reta, que é o que produzia a "lâmina" opaca sobre o Atlântico
+      // na vista Brasil de 1980. Motivo, medições e escolha do sinal: lib/arcos.ts.
+      getHeight: (d: Fluxo) => alturaDoArco(Math.hypot(d.x_d! - d.x_o!, d.y_d! - d.y_o!)),
+      getTilt: TILT_ARCO,
       onClick: (info: PickingInfo) => {
         const f = info.object as Fluxo | undefined;
         if (f) aoSelecionarFluxo(f.origem, f.destino);
@@ -355,6 +406,7 @@ export function MapaAtlas({
         </p>
       )}
       <DeckGL
+        views={VIEW}
         viewState={vista}
         onViewStateChange={({ viewState, interactionState }) => {
           // deck.gl também emite esse evento ao montar/redimensionar; só o gesto do
@@ -363,10 +415,15 @@ export function MapaAtlas({
             interactionState?.isDragging || interactionState?.isZooming || interactionState?.isPanning,
           );
           if (!gesto && !moveu) return;
-          setVista(viewState as MapViewState);
+          setVista(viewState as VistaCartesiana);
           if (gesto) setMoveu(true);
         }}
-        controller={{ dragRotate: false }}
+        // F10: OrthographicView não herda os limites de zoom do MapView (0-20ish) -- sem eles,
+        // dá para rolar até o mapa sumir de tela ou entrar bem além da resolução da malha
+        // simplificada. -15 é um pouco além da vista nacional (zoom -12); -2 ainda dá espaço
+        // para aproximar mais que o teto de enquadramento automático de município (-8,25, ver
+        // App.tsx) sem chegar a ampliar vértices individuais da malha a 1%.
+        controller={{ dragRotate: false, minZoom: -15, maxZoom: -2 }}
         layers={camadas}
         onHover={aoHover}
         getCursor={({ isHovering }) => (isHovering ? "pointer" : "grab")}

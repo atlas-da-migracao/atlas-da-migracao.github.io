@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   agruparOcupacao, agruparTempo, bboxDeCentroides, bboxDeGeometria, calcularRankingSaldoIntraRM,
-  indicadoresAgregados, prepararSankey, prioridadeFoco, uniaoDeBboxes, validarEExpandirBbox,
-  valoresPendular,
+  fitBoundsCartesiano, indicadoresAgregados, prepararSankey, prioridadeFoco, uniaoDeBboxes,
+  validarEExpandirBbox, valoresPendular,
 } from "../rm";
 
 describe("indicadoresAgregados (F6: níveis RGI/RGInt/UF)", () => {
@@ -112,7 +112,9 @@ describe("bboxDeCentroides", () => {
 
 describe("validarEExpandirBbox (F6 leva 3: guarda contra bbox degenerado no fitBounds)", () => {
   it("bbox válido e já maior que a margem mínima passa inalterado", () => {
-    const bbox: [number, number, number, number] = [-47, -23, -46, -22];
+    // F10: margem mínima default em metros (2.200m) -- bbox precisa ser bem maior que isso
+    // para o teste continuar exercitando o caminho "não achata nada".
+    const bbox: [number, number, number, number] = [-50_000, -30_000, 50_000, 30_000];
     expect(validarEExpandirBbox(bbox)).toEqual(bbox);
   });
 
@@ -144,6 +146,31 @@ describe("validarEExpandirBbox (F6 leva 3: guarda contra bbox degenerado no fitB
   it("min > max (bbox invertido/inconsistente) devolve null", () => {
     expect(validarEExpandirBbox([-46, -23, -47, -22])).toBeNull();
     expect(validarEExpandirBbox([-47, -22, -46, -23])).toBeNull();
+  });
+});
+
+describe("fitBoundsCartesiano (F10: fit manual em coordenadas Albers/metros)", () => {
+  it("centraliza o alvo no meio do bbox", () => {
+    const { target } = fitBoundsCartesiano([-1000, -500, 1000, 500], 800, 600);
+    expect(target).toEqual([0, 0, 0]);
+  });
+
+  it("escolhe o menor fator de escala entre largura e altura (bbox mais largo que alto)", () => {
+    // bbox 2000x1000, viewport 800x600 com 0 de padding: escalaX=800/2000=0.4, escalaY=600/1000=0.6
+    const { zoom } = fitBoundsCartesiano([-1000, -500, 1000, 500], 800, 600, 0);
+    expect(zoom).toBeCloseTo(Math.log2(0.4), 6);
+  });
+
+  it("padding reduz a área útil e portanto a escala/zoom", () => {
+    const semPadding = fitBoundsCartesiano([-1000, -500, 1000, 500], 800, 600, 0);
+    const comPadding = fitBoundsCartesiano([-1000, -500, 1000, 500], 800, 600, 100);
+    expect(comPadding.zoom).toBeLessThan(semPadding.zoom);
+  });
+
+  it("bbox maior exige zoom menor (mundo mais \"afastado\")", () => {
+    const perto = fitBoundsCartesiano([-1000, -1000, 1000, 1000], 800, 800);
+    const longe = fitBoundsCartesiano([-1_000_000, -1_000_000, 1_000_000, 1_000_000], 800, 800);
+    expect(longe.zoom).toBeLessThan(perto.zoom);
   });
 });
 

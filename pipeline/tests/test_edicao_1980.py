@@ -381,7 +381,10 @@ def test_gate_ok_existe_e_e_valido():
         # 1.0.5-1980: Fase 2 (mapa/arcos) -- centroides municipais passaram a ST_PointOnSurface
     # (ponto garantido dentro do polígono, em vez do centroide geométrico) em
     # pipeline/build_centroids.py. Só geo/centroides*.parquet mudou.
-    assert carimbo["versao_dados"] == "1.0.5-1980"
+    # 1.0.6-1980: Fase 4 (projeção Albers) -- ver nota equivalente em test_edicao_1991.py;
+    # NORTEGO recebe a mesma malha/centroides em Albers que os demais municípios (é uma
+    # feição a mais no shapefile bruto, ver pipeline/unidades_agregadas_1980.py).
+    assert carimbo["versao_dados"] == "1.0.6-1980"
     assert "1980/municipios.parquet" not in carimbo["arquivos"], \
         "caminhos no carimbo são relativos à própria PROCESSED"
     assert "fluxos_origem_agregada.parquet" not in carimbo["arquivos"], \

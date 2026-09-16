@@ -38,6 +38,10 @@ DECODE_JS = ROOT / "geo/decode_topojson.mjs"
 EARCUT_JS = ROOT / "geo/validate_earcut.mjs"
 
 PRODUTOS = ["municipios", "uf", "rgi", "rgint"]
+# F10: cada produto também publica uma versão em metros (projeção Albers, ver
+# docs/METODOLOGIA.md) -- ST_IsValid e a triangulação earcut não dependem de CRS, então o
+# mesmo par de checagens vale para ela; o campo de id é o mesmo do produto em graus.
+ARQUIVOS_POR_PRODUTO = {p: [f"{p}.topojson", f"{p}_albers.topojson"] for p in PRODUTOS}
 
 
 def _decodifica(topojson_path: pathlib.Path, geojson_path: pathlib.Path) -> None:
@@ -94,12 +98,13 @@ def valida_edicao(con: duckdb.DuckDBPyConnection, nome_edicao: str) -> list[str]
     ed = get_edicao(nome_edicao)
     geo_dir = ROOT / ed.processed / "geo"
     problemas: list[str] = []
-    for produto in PRODUTOS:
-        caminho = geo_dir / f"{produto}.topojson"
-        if not caminho.exists():
-            print(f"  [aviso] {caminho} não existe, pulando")
-            continue
-        problemas.extend(valida_arquivo(con, caminho, produto))
+    for produto, nomes_arquivo in ARQUIVOS_POR_PRODUTO.items():
+        for nome_arquivo in nomes_arquivo:
+            caminho = geo_dir / nome_arquivo
+            if not caminho.exists():
+                print(f"  [aviso] {caminho} não existe, pulando")
+                continue
+            problemas.extend(valida_arquivo(con, caminho, produto))
     return problemas
 
 

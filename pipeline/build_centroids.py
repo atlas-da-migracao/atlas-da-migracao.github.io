@@ -22,6 +22,18 @@ temporário -- e para arcos de fluxo, ancorar no centro de massa populacional é
 mais representativo que o centro geométrico (ou "ponto na superfície") da área dissolvida.
 Documentado aqui e no relatório de QA da F6.
 
+F10 (projeção Albers): cada parquet ganha `x_albers`/`y_albers` ao lado de `lon`/`lat` --
+mesma unidade (município ou nível agregado), mesma linha, coordenadas em metros na cônica
+equivalente de Albers (ver docs/METODOLOGIA.md, string proj4 em `PROJ4_ALBERS` abaixo).
+Nível município: projeção do MESMO ponto (`ST_PointOnSurface`) publicado em lon/lat, via
+`ST_Transform`. Níveis agregados: a média ponderada por `pop5` é calculada DUAS VEZES --
+uma em graus, outra em metros -- nunca projetando a média em graus (a projeção não comuta
+com a média ponderada). A extensão spatial do DuckDB usa PROJ por baixo e aceita strings
+proj4 cruas como CRS de origem/destino; usa-se `+proj=longlat +ellps=GRS80 +no_defs` como
+origem em vez de `EPSG:4674` porque a ordem de eixos oficial do EPSG:4674 é
+latitude/longitude, e `ST_Point(lon, lat)` seguiria a ordem trocada -- confirmado testando o
+ponto (lon_0, lat_0) da projeção, que deve cair exatamente em (0, 0).
+
 Por edição (ver pipeline/edicoes.py): a malha bruta é lida de
 <geo_raw>/BR_Municipios_<edicao>.shp e os centroides são escritos em <processed>/geo/.
 """
@@ -39,6 +51,15 @@ from edicoes import edicao as get_edicao  # noqa: E402
 # geo/fetch_2000.sh -clean introduz numa feição sem geocódigo (ver comentário em geo/build.sh)
 EXCLUIDOS = ("8888888", "9999999", "4300001", "4300002", "0")
 
+# F10: mesmos parâmetros de docs/METODOLOGIA.md ("Cartografia: projeção cônica equivalente de
+# Albers (F10)") e de geo/build.sh ($PROJ4). CRS de origem em proj4 cru (não "EPSG:4674") por
+# causa da ordem de eixos -- ver docstring do módulo.
+CRS_ORIGEM = "+proj=longlat +ellps=GRS80 +no_defs"
+PROJ4_ALBERS = (
+    "+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54 "
+    "+x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
+)
+
 
 def build_municipios(con: duckdb.DuckDBPyConnection, raw: pathlib.Path, geo: pathlib.Path) -> None:
     dest = geo / "centroides.parquet"
@@ -47,15 +68,24 @@ def build_municipios(con: duckdb.DuckDBPyConnection, raw: pathlib.Path, geo: pat
         COPY (
             SELECT CD_MUN AS cd_mun,
                    ST_X(ST_PointOnSurface(geom)) AS lon,
-                   ST_Y(ST_PointOnSurface(geom)) AS lat
+                   ST_Y(ST_PointOnSurface(geom)) AS lat,
+                   ST_X(ST_Transform(ST_PointOnSurface(geom), '{CRS_ORIGEM}', '{PROJ4_ALBERS}')) AS x_albers,
+                   ST_Y(ST_Transform(ST_PointOnSurface(geom), '{CRS_ORIGEM}', '{PROJ4_ALBERS}')) AS y_albers
             FROM ST_Read('{raw}')
             WHERE CD_MUN NOT IN ({excl})
         ) TO '{dest}' (FORMAT PARQUET)
     """)
     n = con.execute(f"SELECT COUNT(*) FROM read_parquet('{dest}')").fetchone()[0]
     bounds = con.execute(f"SELECT MIN(lon), MAX(lon), MIN(lat), MAX(lat) FROM read_parquet('{dest}')").fetchone()
+    bounds_albers = con.execute(
+        f"SELECT MIN(x_albers), MAX(x_albers), MIN(y_albers), MAX(y_albers) FROM read_parquet('{dest}')"
+    ).fetchone()
     print(f"centroides.parquet: {n} municípios")
     print(f"  bounding box: lon [{bounds[0]:.2f}, {bounds[1]:.2f}]  lat [{bounds[2]:.2f}, {bounds[3]:.2f}]")
+    print(
+        f"  bounding box (Albers, m): x [{bounds_albers[0]:.0f}, {bounds_albers[1]:.0f}]"
+        f"  y [{bounds_albers[2]:.0f}, {bounds_albers[3]:.0f}]"
+    )
 
 
 def build_agregado(con: duckdb.DuckDBPyConnection, campo_cd: str, nome_arquivo: str,
@@ -66,7 +96,9 @@ def build_agregado(con: duckdb.DuckDBPyConnection, campo_cd: str, nome_arquivo: 
         COPY (
             SELECT m.{campo_cd} AS cd,
                    SUM(c.lon * m.pop5) / NULLIF(SUM(m.pop5), 0) AS lon,
-                   SUM(c.lat * m.pop5) / NULLIF(SUM(m.pop5), 0) AS lat
+                   SUM(c.lat * m.pop5) / NULLIF(SUM(m.pop5), 0) AS lat,
+                   SUM(c.x_albers * m.pop5) / NULLIF(SUM(m.pop5), 0) AS x_albers,
+                   SUM(c.y_albers * m.pop5) / NULLIF(SUM(m.pop5), 0) AS y_albers
             FROM read_parquet('{municipios}') m
             JOIN read_parquet('{geo}/centroides.parquet') c USING (cd_mun)
             WHERE m.{campo_cd} IS NOT NULL

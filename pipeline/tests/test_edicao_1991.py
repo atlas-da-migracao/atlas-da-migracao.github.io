@@ -253,7 +253,11 @@ def test_gate_ok_existe_e_e_valido():
     # dirigido -- só os arquivos de geo/ (topojson, centroides) e o meta.json mudaram.
         # 1.0.2-1991: Fase 2 (mapa/arcos) -- centroides municipais via ST_PointOnSurface, ver
     # nota em test_edicao_1980.py. Só geo/centroides*.parquet mudou.
-    assert carimbo["versao_dados"] == "1.0.2-1991"
+    # 1.0.3-1991: Fase 4 (projeção Albers) -- geo/build.sh passou a publicar um segundo
+    # TopoJSON por produto (municipios/uf/rgi/rgint _albers.topojson, metros) e
+    # centroides*.parquet ganhou x_albers/y_albers; meta.json ganhou bounds_albers. Ver
+    # docs/METODOLOGIA.md, "Cartografia: projeção cônica equivalente de Albers (F10)".
+    assert carimbo["versao_dados"] == "1.0.3-1991"
     assert "1991/municipios.parquet" not in carimbo["arquivos"], "caminhos no carimbo são relativos à própria PROCESSED"
 
 

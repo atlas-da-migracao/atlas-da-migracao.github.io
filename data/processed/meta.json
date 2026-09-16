@@ -1,7 +1,7 @@
 {
   "edicao": "2022",
   "versao_dados": "2026-09-16",
-  "gerado_em": "2026-09-16T16:48:24",
+  "gerado_em": "2026-09-16T17:28:03",
   "fonte": "IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado)",
   "periodo_referencia": {
     "de": "2017-07-31",
@@ -9,6 +9,12 @@
   },
   "salario_minimo_referencia": 1212.0,
   "maior_fluxo": 23425,
+  "bounds_albers": {
+    "x_min": -2178085.8616164955,
+    "x_max": 2561841.4321951387,
+    "y_min": -2385699.1767765335,
+    "y_max": 1902805.481841628
+  },
   "revelacao": {
     "min_pessoas": 5,
     "min_domicilios": 3,

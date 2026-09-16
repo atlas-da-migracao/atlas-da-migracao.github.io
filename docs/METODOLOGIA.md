@@ -79,6 +79,136 @@ Nos níveis região imediata, região intermediária e UF, imigrantes e emigrant
 
 **Nota de versão (F9.10, malha geográfica revalidada).** Um lote de feições em cada edição — municípios com fronteiras complexas e, sobretudo, unidades dissolvidas (UF/RGI/RGInt) — tinha anéis com autointerseção residual no TopoJSON publicado: `-simplify` seguido de `-clean` **na mesma invocação** do mapshaper não tinha efeito (a simplificação só se materializa na escrita, então o `-clean` via a geometria pré-simplificação) e a quantização final podia reintroduzir autointerseção mesmo em anéis já corrigidos. O sintoma no app era um triângulo/faixa espúrio cortando o mapa ou um preenchimento ausente, porque o earcut do deck.gl não triangula um anel autointersectante de forma previsível. Correção: `geo/build.sh` agora roda cada produto (municípios/UF/RGI/RGInt) em duas invocações do mapshaper — simplificação materializada num GeoJSON intermediário, depois `-clean` — e revalida o TopoJSON quantizado com `pipeline/validate_geo.py` (ST_IsValid via GEOS + a mesma triangulação earcut do front-end), aplicando reparo dirigido (`ST_MakeValid`, só nas feições reprovadas, com tolerância de 0,5% de variação de área) quando sobra alguma. As 20 malhas publicadas (4 produtos × 5 edições) passam a validar sem exceção; a unidade agregada `NORTEGO` (edição 1980) deixou de precisar do recorte em grade que a corrigia isoladamente (`pipeline/gridsplit_geom.py`, removido) — ver `docs/qa/malha_1980.md`, adendo F9.10.
 
+## Cartografia: projeção cônica equivalente de Albers (F10)
+
+Até a versão anterior, o mapa do atlas era desenhado na projeção **Mercator esférica** (Web
+Mercator, EPSG:3857) — a projeção padrão das bibliotecas de mapa na web, herdada dos mosaicos de
+imagem de fundo. Mercator é **conforme**: preserva ângulos e formas locais, e por isso é a
+projeção certa para navegar numa rua. Ela não preserva área: o fator de ampliação de área cresce
+com o quadrado da secante da latitude, e **a distorção é para longe do Equador, nos dois sentidos**
+— ao contrário da intuição comum de que "o Mercator infla a Amazônia". No Brasil, tomando o
+Equador como referência, o extremo norte (Monte Caburaí, +5,3°) aparece com área de tela apenas
+0,8% maior que a proporção correta, enquanto o extremo sul (Chuí, −33,8°) aparece **44% maior**.
+Ou seja: na vista web à qual o leitor está acostumado, é o **Sul** que está inflado e o **Norte**
+que está comprimido, com cerca de 43% de diferença de tamanho aparente entre as duas pontas do
+país, dentro do mesmo mapa.
+
+Para um atlas cujo produto central é um **coroplético** isso não é um detalhe estético. Num
+coroplético o leitor integra cor por área: a impressão de "onde a migração é mais intensa" é, na
+prática, a soma da tinta de cada classe. Numa projeção que amplia o Sul em 44% e deixa o Norte
+quase intacto, uma mesma taxa líquida de migração pinta muito mais tela no Rio Grande do Sul do
+que a mesma área de território pintaria no Pará, e o mapa passa a responder à projeção, não ao
+dado — num atlas de migração interna, justamente na região do país que concentra os maiores
+fluxos de retorno e os saldos negativos mais expressivos. O mesmo vale para a leitura dos fluxos: um arco
+origem→destino desenhado sobre uma malha distorcida sugere distâncias e concentrações que não
+existem. A partir desta versão, portanto, a **vista padrão do atlas é uma projeção de área
+equivalente**.
+
+### Parâmetros adotados
+
+A projeção é a **cônica equivalente de Albers**, com os parâmetros de uso corrente na cartografia
+temática brasileira de área equivalente (IBGE em mapas temáticos de biomas e uso da terra,
+MapBiomas, INPE/PRODES, Embrapa):
+
+| Parâmetro | Valor |
+| --- | --- |
+| Projeção | Cônica equivalente de Albers (`aea`) |
+| 1º paralelo padrão (`lat_1`) | −2° |
+| 2º paralelo padrão (`lat_2`) | −22° |
+| Latitude de origem (`lat_0`) | −12° |
+| Meridiano central (`lon_0`) | −54° |
+| Falso leste/norte | 0 / 0 |
+| Elipsoide / datum | GRS80 (SIRGAS 2000, EPSG:4674 — o datum da malha do IBGE) |
+| Unidade | metro |
+
+String proj4 canônica, usada em todas as edições e em todos os produtos geográficos:
+
+```
++proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs
+```
+
+Três observações sobre a escolha:
+
+1. **A projeção "oficial" do IBGE para o mapa geral do Brasil é a Policônica** (meridiano central
+   −54°), e o código EPSG mais citado para o país, o **EPSG:5880 (SIRGAS 2000 / Brazil
+   Polyconic)**, é policônico — **não é equivalente**. Ele serve ao mapa de referência, não ao
+   coroplético. Por isso o atlas não usa EPSG:5880 e recorre à família Albers, que é a que o
+   próprio IBGE emprega quando o mapa temático exige área correta.
+2. **Em Albers a área é exata por construção, quaisquer que sejam os paralelos padrão.** A escolha
+   de `lat_1`/`lat_2` não afeta a equivalência de área; afeta só a distorção de **forma** (a razão
+   entre a escala ao longo do paralelo e ao longo do meridiano). Mediu-se essa distorção ao longo
+   da amplitude latitudinal do Brasil (+5,3° a −33,8°): com −2°/−22°, o desvio máximo da escala ao
+   longo do paralelo é de **+6,6% no Chuí** e **+3,0% no Monte Caburaí**; com os paralelos que a
+   regra de um sexto de Snyder produziria para a amplitude brasileira (−1,2° e −27,3°), o desvio
+   máximo cairia para **3,7%**. A diferença — menos de 3 pontos percentuais de forma, no extremo
+   do país, e zero de área — não compensa abandonar o conjunto de parâmetros que qualquer leitor
+   brasileiro consegue reproduzir e comparar com o MapBiomas ou com um mapa temático do IBGE.
+   Prevalece a interoperabilidade.
+3. **Os mesmos parâmetros valem para as cinco edições** (2022, 2010, 2000, 1991, 1980) e para os
+   quatro produtos (municípios, UF, RGI, RGInt), inclusive para o polígono da unidade agregada
+   `NORTEGO` de 1980. Isso é condição para que a comparação visual entre edições continue
+   significando o que promete: qualquer diferença de área na tela entre dois censos é diferença
+   de recorte territorial, nunca de projeção.
+
+### Como a projeção entra no pipeline
+
+A reprojeção é feita **uma vez, no pipeline** (`geo/build.sh`, via `mapshaper -proj` com a string
+proj4 acima), e o TopoJSON publicado já sai em coordenadas planas em metros. O front-end nunca
+reprojeta: renderiza as coordenadas como estão, num referencial cartesiano. Essa separação é
+deliberada — as bibliotecas de projeção do navegador trabalham sobre um modelo **esférico** da
+Terra, e o pipeline sobre o **elipsoide GRS80**; projetar dos dois lados produziria duas malhas
+ligeiramente diferentes para o mesmo território. Uma projeção, uma fonte de verdade.
+
+A reprojeção é aplicada **antes** da simplificação e da limpeza topológica descritas na nota F9.10
+acima, e não depois: simplificar em graus decimais pondera implicitamente o erro pela latitude
+(um centésimo de grau vale menos metros no Sul que no Equador), enquanto simplificar em metros
+aplica a mesma tolerância métrica ao país inteiro. A cadeia de validação (`-clean`, quantização,
+`pipeline/validate_geo.py` com ST_IsValid e a triangulação earcut, reparo dirigido) roda sobre a
+geometria já projetada, com o mesmo critério de aprovação.
+
+**Os arquivos em coordenadas geográficas continuam sendo publicados.** Cada produto ganha um par:
+`municipios.topojson` (longitude/latitude, WGS84 — inalterado) e `municipios_albers.topojson`
+(metros, Albers), e assim para UF, RGI e RGInt, em cada edição. O arquivo geográfico não é legado:
+é o que sustenta a vista com imagem de fundo e a navegação intramunicipal do módulo metropolitano,
+onde a conformidade do Mercator é uma vantagem real e a distorção de área, num recorte de poucas
+dezenas de quilômetros, é desprezível. O atlas tem dois usos de mapa — ler padrão nacional e
+navegar dentro de uma região — e eles pedem projeções diferentes.
+
+Os **centroides** seguem a mesma lógica, mas num arquivo só: `centroides*.parquet` passa a ter as
+colunas `x_albers`/`y_albers` ao lado de `lon`/`lat`, para a mesma unidade e na mesma linha. No
+nível municipal, `x_albers`/`y_albers` são a projeção do ponto já publicado (`ST_PointOnSurface`
+da geometria geográfica), o que garante que a âncora do arco, da espiga e da dica de contexto seja
+literalmente o mesmo ponto do território nas duas vistas. Nos níveis agregados (RGI, RGInt, UF), a
+âncora continua sendo a média dos centroides municipais ponderada por `pop5`, mas calculada
+**duas vezes**: em longitude/latitude para a vista geográfica e em metros para a vista Albers — a
+média ponderada não comuta com a projeção, e usar a média em graus projetada deslocaria a âncora
+em relação à malha desenhada. Como já ocorria antes, essa âncora ponderada pode cair fora do
+polígono em unidades de forma muito côncava; ela é um ponto de ancoragem de fluxo, não um
+centroide geométrico.
+
+### O que Albers não resolve, e o que ela custa
+
+- **Não preserva forma nem ângulo.** É a contrapartida matemática da equivalência de área
+  (nenhuma projeção plana faz as duas coisas). No Brasil o efeito é pequeno — até ~6,6% de
+  distorção de forma no extremo sul —, mas o mapa Albers **não serve para medir azimute nem para
+  navegar**, e a escala varia com a latitude: **não há barra de escala válida** para o mapa
+  inteiro, apenas sobre os paralelos padrão. O atlas não publica barra de escala nessa vista.
+- **O Sul encolhe em relação ao que o leitor está acostumado.** Quem conhece o mapa do Brasil pela
+  vista Mercator dos mapas web vai ver o Rio Grande do Sul, Santa Catarina e o Paraná visivelmente
+  **menores** do que esperava, e o Norte proporcionalmente maior. Essa é a correção, não um
+  defeito; mas ela muda o tamanho de tela das regiões metropolitanas conforme a latitude, e o
+  nível de zoom que enquadra a RM de Porto Alegre deixa de ser o mesmo que enquadra a RM de Belém.
+- **Os meridianos convergem: o norte geográfico não é o topo da tela em toda parte.** Numa cônica,
+  só o meridiano central (−54°) fica vertical. Roraima e o Rio Grande do Sul aparecem levemente
+  rotacionados em relação ao eixo da tela, e um arco origem→destino de longo alcance (Nordeste →
+  Sudeste, por exemplo) tem uma curvatura aparente diferente da que tinha em Mercator. A
+  **direção** do fluxo é a mesma e o **volume** codificado na espessura é o mesmo; a impressão de
+  trajetória, não.
+- **Albers não corrige o viés de área do coroplético, só o torna honesto.** Continua verdade que
+  um município enorme e quase vazio ocupa mais tinta que uma capital inteira. Albers garante que a
+  tinta seja proporcional à área **real** — o remédio para o descolamento entre área e população é
+  a camada de símbolos proporcionais ao volume sobre a malha, não a projeção.
+
 ## Edição Censo 2010 e comparabilidade com 2022
 
 A edição 2010 replica a mesma cadeia de processamento da edição 2022 sobre os microdados da
@@ -1320,6 +1450,7 @@ números (3.940 polígonos no nível municipal, 489 RGIs, 130 RGInts, 27 UFs em
 
 ## Limitações conhecidas
 
+- A vista padrão do mapa usa a projeção cônica equivalente de Albers (`+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54`), que preserva área exatamente mas **não preserva forma nem ângulo**: há até ~6,6% de distorção de forma no extremo sul do país, a escala varia com a latitude (não há barra de escala válida para o mapa inteiro) e só o meridiano central fica vertical, de modo que o norte geográfico não é o topo da tela em toda parte. Os arcos origem→destino de longo alcance têm curvatura aparente diferente da da vista geográfica — a direção e o volume são os mesmos, a impressão de trajetória não. Ver a seção "Cartografia: projeção cônica equivalente de Albers (F10)".
 - Estimativas de erro amostral usam um estimador conservador de conglomerados (domicílio como UPA, área de ponderação como estrato), pois o IBGE não disponibiliza estratos/UPAs formais nos microdados da amostra; cross-checado contra a Função de Variância Generalizada do IBGE.
 - Resultados podem divergir de tabulações oficiais do IBGE (SIDRA) por conta de subamostragem, supressão e recalibração aplicadas aos microdados de acesso controlado.
 - Migração de data fixa não captura movimentos múltiplos dentro do quinquênio, apenas o par (residência em 2017, residência em 2022).

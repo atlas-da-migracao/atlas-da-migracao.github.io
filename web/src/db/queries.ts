@@ -13,7 +13,7 @@ export const carregarMunicipios = () =>
 /** Principais fluxos de entrada e de saída de um município, já com coordenadas. */
 export const fluxosDoMunicipio = (cd: string, topN: number) =>
   consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
-    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
+    WITH cent AS (SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')),
     entradas AS (
       SELECT 'entrada' AS direcao, f.origem, f.destino, f.total, f.se, f.cv, f.n_faixa, f.precisao
       FROM fluxos f WHERE f.destino = ${lit(cd)} ORDER BY f.total DESC LIMIT ${topN}
@@ -23,7 +23,8 @@ export const fluxosDoMunicipio = (cd: string, topN: number) =>
     ), u AS (SELECT * FROM entradas UNION ALL SELECT * FROM saidas)
     SELECT u.*, ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
            rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM u
     JOIN municipios_ref ro ON ro.cd_mun = u.origem
     JOIN municipios_ref rd ON rd.cd_mun = u.destino
@@ -35,7 +36,7 @@ export const fluxosDoMunicipio = (cd: string, topN: number) =>
  *  "dimensao__categoria"), ordena e dimensiona pelo volume daquele subgrupo. */
 export const maioresFluxos = (limite = 400, coluna: string | null = null) =>
   consultar<Fluxo>(`
-    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
+    WITH cent AS (SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')),
     t AS (
       SELECT *, ${coluna ? `"${coluna}"` : "total"} AS volume FROM fluxos
       ${coluna ? `WHERE "${coluna}" > 0` : ""}
@@ -45,7 +46,8 @@ export const maioresFluxos = (limite = 400, coluna: string | null = null) =>
            ${coluna ? "NULL AS se, NULL AS cv, NULL AS n_faixa, NULL AS precisao" : "t.se, t.cv, t.n_faixa, t.precisao"},
            ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
            rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM t
     JOIN municipios_ref ro ON ro.cd_mun = t.origem
     JOIN municipios_ref rd ON rd.cd_mun = t.destino
@@ -100,7 +102,7 @@ export const referenciasDoPerfil = (origem: string, destino: string) =>
  *  subgrupo, por isso saem nulos. */
 export const fluxosPorCategoria = (cd: string, coluna: string, topN: number) =>
   consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
-    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
+    WITH cent AS (SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')),
     entradas AS (
       SELECT 'entrada' AS direcao, origem, destino, "${coluna}" AS total,
              NULL AS se, NULL AS cv, NULL AS n_faixa, NULL AS precisao
@@ -112,7 +114,8 @@ export const fluxosPorCategoria = (cd: string, coluna: string, topN: number) =>
     ), u AS (SELECT * FROM entradas UNION ALL SELECT * FROM saidas)
     SELECT u.*, ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
            rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM u
     JOIN municipios_ref ro ON ro.cd_mun = u.origem
     JOIN municipios_ref rd ON rd.cd_mun = u.destino
@@ -185,7 +188,7 @@ export function carregarUnidades(nivel: NivelAgregado) {
 export function fluxosDaUnidade(nivel: NivelAgregado, codigo: string, topN: number) {
   const { fluxos, campo, nomeCol, centroides } = CONFIG_NIVEL[nivel];
   return consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
-    WITH cent AS (SELECT cd, lon, lat FROM read_parquet('${centroides}')),
+    WITH cent AS (SELECT cd, lon, lat, x_albers, y_albers FROM read_parquet('${centroides}')),
     nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref WHERE ${campo} IS NOT NULL),
     entradas AS (
       SELECT 'entrada' AS direcao, origem, destino, total, se, cv, n_faixa, precisao
@@ -196,7 +199,8 @@ export function fluxosDaUnidade(nivel: NivelAgregado, codigo: string, topN: numb
     ), u AS (SELECT * FROM entradas UNION ALL SELECT * FROM saidas)
     SELECT u.origem, u.destino, u.direcao, u.total, u.se, u.cv, u.n_faixa, u.precisao,
            no_.nome AS nm_origem, no_.uf_sigla AS uf_origem, nd.nome AS nm_destino, nd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM u
     JOIN nomes no_ ON no_.codigo = u.origem
     JOIN nomes nd ON nd.codigo = u.destino
@@ -209,12 +213,13 @@ export function fluxosDaUnidade(nivel: NivelAgregado, codigo: string, topN: numb
 export function maioresFluxosNivel(nivel: NivelAgregado, limite = 300) {
   const { fluxos, campo, nomeCol, centroides } = CONFIG_NIVEL[nivel];
   return consultar<Fluxo>(`
-    WITH cent AS (SELECT cd, lon, lat FROM read_parquet('${centroides}')),
+    WITH cent AS (SELECT cd, lon, lat, x_albers, y_albers FROM read_parquet('${centroides}')),
     nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref WHERE ${campo} IS NOT NULL),
     t AS (SELECT * FROM ${fluxos} ORDER BY total DESC LIMIT ${limite})
     SELECT t.origem, t.destino, t.total, t.se, t.cv, t.n_faixa, t.precisao,
            no_.nome AS nm_origem, no_.uf_sigla AS uf_origem, nd.nome AS nm_destino, nd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM t
     JOIN nomes no_ ON no_.codigo = t.origem
     JOIN nomes nd ON nd.codigo = t.destino
@@ -225,10 +230,10 @@ export function maioresFluxosNivel(nivel: NivelAgregado, limite = 300) {
 /** Centroides de um conjunto de unidades de um nível agregado (F6: enquadramento de um fluxo
  *  entre unidades). */
 export function centroidesDeUnidades(nivel: NivelAgregado, codigos: string[]) {
-  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; lon: number; lat: number }[]);
+  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; lon: number; lat: number; x_albers: number; y_albers: number }[]);
   const { centroides } = CONFIG_NIVEL[nivel];
-  return consultar<{ cd_mun: string; lon: number; lat: number }>(`
-    SELECT cd AS cd_mun, lon, lat FROM read_parquet('${centroides}') WHERE cd IN (${codigos.map(lit).join(",")})`);
+  return consultar<{ cd_mun: string; lon: number; lat: number; x_albers: number; y_albers: number }>(`
+    SELECT cd AS cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('${centroides}') WHERE cd IN (${codigos.map(lit).join(",")})`);
 }
 
 export interface DetalheFluxoUnidade {
@@ -258,9 +263,9 @@ export async function detalheFluxoUnidade(nivel: NivelAgregado, o: string, d: st
 
 /** Centroides de um conjunto arbitrário de municípios (F6: enquadramento de um fluxo). */
 export const centroidesDeMunicipios = (codigos: string[]) => {
-  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; lon: number; lat: number }[]);
-  return consultar<{ cd_mun: string; lon: number; lat: number }>(`
-    SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')
+  if (codigos.length === 0) return Promise.resolve([] as { cd_mun: string; lon: number; lat: number; x_albers: number; y_albers: number }[]);
+  return consultar<{ cd_mun: string; lon: number; lat: number; x_albers: number; y_albers: number }>(`
+    SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')
     WHERE cd_mun IN (${codigos.map(lit).join(",")})`);
 };
 
@@ -317,8 +322,8 @@ export const municipiosDaRM = (cd_rm: string) =>
 
 /** Centroides dos municípios de uma RM, para o enquadramento (fitBounds) do mapa. */
 export const centroidesDaRM = (cd_rm: string) =>
-  consultar<{ cd_mun: string; lon: number; lat: number }>(`
-    SELECT c.cd_mun, c.lon, c.lat
+  consultar<{ cd_mun: string; lon: number; lat: number; x_albers: number; y_albers: number }>(`
+    SELECT c.cd_mun, c.lon, c.lat, c.x_albers, c.y_albers
     FROM read_parquet('geo/centroides.parquet') c
     JOIN rm r ON r.cd_mun = c.cd_mun
     WHERE r.cd_rm = ${lit(cd_rm)}`);
@@ -326,11 +331,12 @@ export const centroidesDaRM = (cd_rm: string) =>
 /** Todos os fluxos intra-RM (para arcos, matriz núcleo x periferia e ranking de saldo). */
 export const fluxosIntraDaRM = (cd_rm: string) =>
   consultar<Fluxo & { tipologia: string; cd_rm: string }>(`
-    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet'))
+    WITH cent AS (SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet'))
     SELECT f.cd_rm, f.origem, f.destino, f.tipologia, f.total, f.se, f.cv, f.n_faixa,
            ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
            rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM rm_fluxos_intra f
     JOIN municipios_ref ro ON ro.cd_mun = f.origem
     JOIN municipios_ref rd ON rd.cd_mun = f.destino
@@ -353,7 +359,7 @@ export function pendularDaRM(
     ? "p.tem_detalhe, p.tempo_mediano, p.pct_diario, p.pct_coletivo"
     : "p.tem_detalhe, NULL AS tempo_mediano, NULL AS pct_diario, NULL AS pct_coletivo";
   return consultar<FluxoPendularRM>(`
-    WITH cent AS (SELECT cd_mun, lon, lat FROM read_parquet('geo/centroides.parquet')),
+    WITH cent AS (SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')),
     rmset AS (SELECT cd_mun FROM rm WHERE cd_rm = ${lit(cd_rm)}),
     intra AS (
       SELECT p.origem, p.destino, p.total, p.se, p.cv, p.n_faixa, p.precisao, ${camposExtra}, false AS cruza
@@ -371,7 +377,8 @@ export function pendularDaRM(
     ` : ", u AS (SELECT * FROM intra)"}
     SELECT u.*, ro.nm_mun AS nm_origem, ro.uf_sigla AS uf_origem,
            rd.nm_mun AS nm_destino, rd.uf_sigla AS uf_destino,
-           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d
+           co.lon AS lon_o, co.lat AS lat_o, cd_.lon AS lon_d, cd_.lat AS lat_d,
+           co.x_albers AS x_o, co.y_albers AS y_o, cd_.x_albers AS x_d, cd_.y_albers AS y_d
     FROM u
     JOIN municipios_ref ro ON ro.cd_mun = u.origem
     JOIN municipios_ref rd ON rd.cd_mun = u.destino
