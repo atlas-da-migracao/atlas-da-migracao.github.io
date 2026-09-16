@@ -2,12 +2,15 @@
  *  Mais enxuto que o PainelMunicipio: só KPIs e as tabelas de fluxo -- sem perfil por
  *  característica (municipios_dim só existe por município) e sem erro-padrão (os indicadores
  *  agregados são somas de fluxos municipais publicados, não uma nova estimativa). */
-import type { Fluxo } from "../lib/types";
+import type { Fluxo, Meta } from "../lib/types";
 import type { NivelAgregado, UnidadeAgregada } from "../db/queries";
 import { num, num2, sinal } from "../lib/format";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { DiagramaAcordes } from "./DiagramaAcordes";
+import { AvisoProxy } from "./AvisoProxy";
 import type { FluxoUF, UnidadeUF } from "../lib/acordes";
+import { edicao } from "../lib/edicoes";
+import { useStore } from "../state/store";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
@@ -54,6 +57,10 @@ function TabelaFluxos({ titulo, cor, fluxos, campo, campoUf, aoClicar }: {
 interface Props {
   nivel: NivelAgregado;
   unidade: UnidadeAgregada | null;
+  /** F9.7-b: true quando há uma unidade selecionada (URL/estado), as unidades deste nível/edição
+   *  já carregaram, e mesmo assim ela não foi encontrada -- ex.: link para uma região imediata
+   *  de Tocantins numa edição anterior a 1988. Calculado em App.tsx; ver PainelMunicipio. */
+  naoEncontrado: boolean;
   fluxos: (Fluxo & { direcao?: string })[];
   carregando: boolean;
   aoSelecionarFluxo: (o: string, d: string) => void;
@@ -66,11 +73,12 @@ interface Props {
   ufSobMapa?: string | null;
   aoSelecionarUF?: (cd: string | null) => void;
   aoRealcarUFs?: (cds: string[] | null) => void;
+  meta: Meta | null;
 }
 
-export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionarFluxo, aoFechar,
-                                fluxosUF, unidadesUF, escuro = false, ufSobMapa = null,
-                                aoSelecionarUF, aoRealcarUFs }: Props) {
+export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregando, aoSelecionarFluxo,
+                                aoFechar, fluxosUF, unidadesUF, escuro = false, ufSobMapa = null,
+                                aoSelecionarUF, aoRealcarUFs, meta }: Props) {
   const acordes = fluxosUF && unidadesUF && (
     <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
                      aoSelecionarPar={aoSelecionarFluxo} selecionado={unidade?.codigo ?? null}
@@ -78,23 +86,40 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
   );
   const pronto = usarDuckDBPronto();
   const rotuloNivel = ROTULO_NIVEL[nivel];
+  const ed = edicao(useStore((s) => s.censo));
 
   if (!unidade) {
     return (
       <aside className="painel" aria-label="Painel de detalhes">
         <div className="vazio">
           <h2>Atlas da migração interna</h2>
-          <p>
-            Nível: <strong>{rotuloNivel.toLowerCase()}</strong>. Clique numa unidade no mapa, ou
-            busque pelo nome, para ver seus indicadores e principais fluxos.
-          </p>
-          <p className="muted">
-            Migração entre municípios da mesma unidade não é contabilizada; pares abaixo do limiar
-            de revelação ficam de fora da soma. Não há erro-padrão publicado neste nível
-            (ver a página de Metodologia).
-          </p>
+          {naoEncontrado ? (
+            <div className="aviso" role="note">
+              <p>
+                Esta {rotuloNivel.toLowerCase()} não existe na edição <strong>{ed.rotulo}</strong>{" "}
+                selecionada — edições antigas podem cobrir um território menor ou ter divisão
+                administrativa diferente.
+              </p>
+              <button type="button" className="link-metodologia" onClick={aoFechar}>
+                Limpar seleção
+              </button>
+            </div>
+          ) : (
+            <>
+              <p>
+                Nível: <strong>{rotuloNivel.toLowerCase()}</strong>. Clique numa unidade no mapa, ou
+                busque pelo nome, para ver seus indicadores e principais fluxos.
+              </p>
+              <p className="muted">
+                Migração entre municípios da mesma unidade não é contabilizada; pares abaixo do limiar
+                de revelação ficam de fora da soma. Não há erro-padrão publicado neste nível
+                (ver a página de Metodologia).
+              </p>
+              <AvisoProxy meta={meta} />
+            </>
+          )}
         </div>
-        {nivel === "uf" && acordes && (
+        {!naoEncontrado && nivel === "uf" && acordes && (
           <section className="secao">
             <h3>Fluxos migratórios entre UFs</h3>
             {acordes}
@@ -116,6 +141,8 @@ export function PainelUnidade({ nivel, unidade, fluxos, carregando, aoSelecionar
         </div>
         <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
       </header>
+
+      <AvisoProxy meta={meta} />
 
       <div className="kpis">
         <div className="kpi">

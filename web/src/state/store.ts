@@ -72,7 +72,11 @@ function daUrl() {
     nivel: (n && NIVEIS.includes(n) ? n : "mun") as Nivel,
     origem: p.get("o"),
     destino: p.get("d"),
-    filtro: RECORTES.has(p.get("f") ?? "") ? p.get("f") : null,
+    // como ?rm=/?aba= abaixo: ignora ?f=renda__* vindo de um link para uma edição sem essa
+    // dimensão (hoje só 1980, ver lib/edicoes.ts `recursos.renda`) -- a coluna larga
+    // correspondente nem existe no parquet publicado dessa edição.
+    filtro: RECORTES.has(p.get("f") ?? "") && (edicao(censo).recursos.renda || !p.get("f")?.startsWith("renda__"))
+      ? p.get("f") : null,
     metrica: (m && ["saldo", "tlm", "imig", "emig", "iem"].includes(m) ? m : "tlm") as Metrica,
     topN: Number(p.get("top") ?? 15),
     // módulo metropolitano: ignora ?rm= vindo de um link para uma edição sem esse recurso

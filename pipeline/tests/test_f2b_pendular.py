@@ -19,6 +19,7 @@ EDICOES_TESTADAS = [
     pytest.param("2022", id="2022"),
     pytest.param("2010", id="2010"),
     pytest.param("2000", id="2000"),
+    pytest.param("1980", id="1980"),
 ]
 
 
@@ -160,6 +161,11 @@ def test_tipologia_intra_rm_soma_ao_total(con, edicao_nome):
 @pytest.mark.parametrize("edicao_nome", EDICOES_TESTADAS)
 def test_publicados_f2b_respeitam_limiar(con, edicao_nome):
     I, PUB = _paths(edicao_nome)
+    # 1980 não tem chave de domicílio (controle sempre NULL), então a verificação de ndom < 3
+    # não se aplica. Regra R1 de 1980: n >= 20 (sem ndom check).
+    if edicao_nome == "1980":
+        pytest.skip("1980 usa limiar n >= 20 sem verificação de domicílios (sem controle)")
+
     _req(PUB / "pendular_trab.parquet", I / "pessoas_classificado.parquet")
     v, = con.execute(f"""
         WITH cel AS (

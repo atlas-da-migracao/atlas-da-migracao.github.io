@@ -21,6 +21,11 @@ EDICOES_TESTADAS = [
     pytest.param("2010", 5565, 510, 133, 27, id="2010"),
     pytest.param("2000", 5507, 510, 133, 27, id="2000"),
     pytest.param("1991", 4491, 510, 133, 27, id="1991"),
+    # 1980: 3.939 municípios + 1 UNIDADE AGREGADA ('NORTEGO', os 52 municípios do norte de
+    # Goiás dissolvidos numa feição só) = 3.940 unidades no nível municipal; 27 UFs, com
+    # Tocantins, que é a UF publicada dessa unidade. RGI/RGInt não mudam (489/130): a unidade
+    # não pertence a nenhuma -- ver pipeline/unidades_agregadas_1980.py.
+    pytest.param("1980", 3940, 489, 130, 27, id="1980"),
 ]
 
 
@@ -137,8 +142,12 @@ def test_rgi_ids_batem_com_municipios_ref(con, edicao_nome, n_mun, n_rgi, n_rgin
     PROC, GEO = _paths(edicao_nome)
     _req(GEO / "rgi.topojson", PROC / "municipios_ref.parquet")
     ids_geo = _topojson_ids(GEO / "rgi.topojson", id_field="cd_rgi")
+    # `IS NOT NULL`: uma unidade agregada sai de municipios_ref sem RGI (ver
+    # pipeline/unidades_agregadas_1980.py) e, por isso, também não tem feição em rgi.topojson
+    # (geo/build.sh filtra antes do -dissolve). Os dois lados excluem a mesma coisa.
     ids_dados, = [set(r[0] for r in con.execute(
-        f"SELECT DISTINCT cd_rgi FROM read_parquet('{PROC}/municipios_ref.parquet')").fetchall())]
+        f"SELECT DISTINCT cd_rgi FROM read_parquet('{PROC}/municipios_ref.parquet') "
+        "WHERE cd_rgi IS NOT NULL").fetchall())]
     assert ids_geo == ids_dados
 
 
@@ -148,7 +157,8 @@ def test_rgint_ids_batem_com_municipios_ref(con, edicao_nome, n_mun, n_rgi, n_rg
     _req(GEO / "rgint.topojson", PROC / "municipios_ref.parquet")
     ids_geo = _topojson_ids(GEO / "rgint.topojson", id_field="cd_rgint")
     ids_dados, = [set(r[0] for r in con.execute(
-        f"SELECT DISTINCT cd_rgint FROM read_parquet('{PROC}/municipios_ref.parquet')").fetchall())]
+        f"SELECT DISTINCT cd_rgint FROM read_parquet('{PROC}/municipios_ref.parquet') "
+        "WHERE cd_rgint IS NOT NULL").fetchall())]
     assert ids_geo == ids_dados
 
 

@@ -92,11 +92,42 @@ ROTULOS = {
 }
 
 
+def _unidades_agregadas(ed) -> list[dict] | None:
+    """Rótulos das unidades agregadas da edição (ver `meta["unidades_agregadas"]`).
+
+    Uma unidade agregada é um conjunto de municípios do censo publicado como UMA unidade,
+    porque a fonte não distingue os municípios que o compõem. Só o Censo 1980 tem uma (o norte
+    de Goiás, 52 municípios). O import é tardio para que a ausência do módulo nunca afete as
+    demais edições.
+
+    Isto é o que o front precisa para dizer, no painel da unidade, que ela NÃO é um município
+    -- mesmo padrão do selo `aviso_proxy`: o texto vem daqui, nunca hardcoded no componente,
+    para que a explicação tenha uma fonte só (ver web/src/components/AvisoUnidade.tsx).
+    """
+    if ed.nome != "1980":
+        return None
+    import unidades_agregadas_1980 as U
+
+    return [
+        {
+            "codigo": cd,
+            "nome": info["nome"],
+            "nome_curto": info["nome_curto"],
+            "n_municipios": info["n_municipios"],
+            "uf": info["uf"],
+            "uf_censo": info["uf_1980"],
+            "nota": info["observacao"],
+        }
+        for cd, info in U.UNIDADES_AGREGADAS_1980.items()
+    ]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--edicao", default="2022", help="Edição do censo (ver pipeline/edicoes.py).")
     args = ap.parse_args()
     ed = get_edicao(args.edicao)
+    L = R.limiares(ed.chave_domicilio)
 
     # Rótulos parametrizados por edição (ver pipeline/edicoes.py, Edicao.rotulos_pendular):
     # parte do vocabulário-padrão (ROTULOS) e sobrescreve/remove só o que a edição declara.
@@ -124,10 +155,14 @@ def main() -> None:
         "fonte": f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra ({acesso_desc})",
         "periodo_referencia": dict(ed.periodo_referencia),
         "salario_minimo_referencia": ed.salario_minimo,
+        # Limiares EFETIVOS desta edição, não as constantes-padrão: numa edição sem chave de
+        # domicílio (Censo 1980) `min_domicilios` é null e os pisos de pessoas vêm elevados, e a
+        # página de metodologia do site precisa dizer isso em vez de prometer um piso de
+        # domicílios que não foi aplicado. Ver disclosure_rules.limiares().
         "revelacao": {
-            "min_pessoas": R.MIN_PESSOAS,
-            "min_domicilios": R.MIN_DOMICILIOS,
-            "min_pessoas_detalhe": R.MIN_PESSOAS_DETALHE,
+            "min_pessoas": L.min_pessoas,
+            "min_domicilios": L.min_domicilios,
+            "min_pessoas_detalhe": L.min_pessoas_detalhe,
             "arredondamento": R.ARREDONDAMENTO,
             "cv_boa": R.CV_BOA,
             "cv_cautela": R.CV_CAUTELA,
@@ -145,12 +180,64 @@ def main() -> None:
                 f"Demográfico {ed.nome} (IBGE). DOI: https://doi.org/" + DOI_CONCEITO + "."
             ),
         },
+        # Achado do checkpoint F9.7-b (ao tornar a página de metodologia sensível à edição):
+        # "sujeitas a erro amostral" contradiz a própria página em toda edição sem chave de
+        # domicílio (hoje só 1980, `ed.chave_domicilio=False`) -- lá se/cv são NULL e a edição é
+        # publicada como `sem_estimativa`, não com erro amostral calculado. A cláusula muda só
+        # nesse caso; nas outras quatro o texto é idêntico ao de antes.
         "aviso": (
             "Estimativas elaboradas pelo autor a partir dos microdados da amostra do "
-            f"Censo Demográfico {ed.nome} (IBGE, {acesso_desc}), sujeitas a erro amostral "
-            "e a controle estatístico de revelação; podem divergir das tabulações "
-            "oficiais do IBGE (SIDRA)."
+            f"Censo Demográfico {ed.nome} (IBGE, {acesso_desc}), sujeitas a controle "
+            "estatístico de revelação"
+            + (", publicadas sem estimativa de erro amostral (a fonte não permite calculá-lo)"
+               if not ed.chave_domicilio else " e a erro amostral")
+            + "; podem divergir das tabulações oficiais do IBGE (SIDRA)."
         ),
+        # Texto do selo "proxy" (front-end: componente único usado na capa e nos painéis de
+        # município/unidade e de fluxo quando `Edicao.proxyDataFixa` -- ver
+        # web/src/lib/edicoes.ts). `null` em toda edição que tem quesito de data fixa direto.
+        # Conteúdo consolidado a partir da calibração do proxy contra a data fixa verdadeira
+        # do Censo 1991 -- ver docs/METODOLOGIA.md, "Edição Censo 1980 e comparabilidade",
+        # item 2, e pipeline/sql/1980/MAPEAMENTO_02_classify.md §2.6. Não editar este texto
+        # sem alinhar com a mesma seção de METODOLOGIA.md.
+        # Redação revista pelo metodólogo em F9.7: os números seguem o arredondamento do selo
+        # aprovado em §2.6 (100%, 89%, 0,98, +7%, ~2 p.p.) e a última frase antes da regra de
+        # comparação é a **ressalva obrigatória** daquela seção -- a calibração foi feita em
+        # 1991, então os desvios medem o erro do conceito e são um PISO para 1980. Se for
+        # preciso encurtar o card, corte a cláusula do meio (origem/correlação), nunca a
+        # ressalva. Mexer aqui invalida o carimbo do gate de 1980 (meta.json entra no
+        # .gate_ok): regerar meta.json e recarimbar a edição depois de qualquer alteração.
+        "aviso_proxy": (
+            "Esta edição não tem quesito de data fixa: a migração é um proxy (tempo de "
+            "residência no município + município de residência anterior), calibrado contra a "
+            "data fixa do Censo 1991. Ele capta 100% dos migrantes, acerta a origem municipal "
+            "de 89% deles e reproduz as taxas líquidas com correlação de 0,98; em troca, infla "
+            "o volume em cerca de 7%, atenua os saldos em 6% a 9% e subestima a migração "
+            "interestadual em cerca de 2 pontos percentuais. Como a calibração foi feita em "
+            "1991, esses desvios são um piso. Entre edições, compare composição, direção e "
+            "hierarquia dos fluxos — não o nível."
+        ) if ed.proxy_data_fixa else None,
+        # Resumo de uma linha para o card fechado (achado do auditor em F9.7-b: o texto
+        # completo acima tem ~106 palavras e ~40% da altura visível do painel na capa --
+        # denso demais pra um card de UI). web/src/components/AvisoProxy.tsx mostra este
+        # resumo sempre e abre o texto completo acima ("saiba mais") sob demanda -- a
+        # ressalva de calibração (piso, não erro desta edição) fica só no texto completo,
+        # de propósito: o resumo é a "o quê", o completo é o "por que confiar quanto".
+        "aviso_proxy_resumo": (
+            "O Censo 1980 não perguntou onde a pessoa morava 5 anos antes: a migração aqui é "
+            "estimada por um proxy, com volume cerca de 7% acima do real e saldos mais fracos "
+            "do que seriam. Compare direção e composição entre municípios — não o volume total."
+        ) if ed.proxy_data_fixa else None,
+        # Unidades agregadas (F9.9): conjuntos de municípios do censo publicados como UMA
+        # unidade, porque a fonte não distingue os municípios que os compõem. Hoje só 1980 tem
+        # um caso, o norte de Goiás ('NORTEGO'). Diferente da chave `origens_agregadas` de
+        # 1.0.1-1980, que descrevia uma origem SEM unidade, esta descreve uma unidade de
+        # verdade: ela está em municipios.parquet, nos dois lados de fluxos.parquet e na malha,
+        # e o front a trata como qualquer município -- o que este bloco existe para dizer é o
+        # que ela tem de diferente (não é um município; 52 municípios agregados; mudanças
+        # internas não aparecem como migração). Ver pipeline/unidades_agregadas_1980.py e
+        # docs/METODOLOGIA.md, item 4 da seção do Censo 1980.
+        **({"unidades_agregadas": unids_ag} if (unids_ag := _unidades_agregadas(ed)) else {}),
     }
     dest = ROOT / ed.processed / "meta.json"
     dest.parent.mkdir(parents=True, exist_ok=True)

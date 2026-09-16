@@ -62,4 +62,44 @@ describe("edicoes", () => {
       }
     }
   });
+
+  it("1980 é a única edição sem renda, e a única com proxyDataFixa", () => {
+    for (const c of CENSOS) {
+      const ed = edicao(c);
+      if (c === "1980") {
+        expect(ed.recursos.renda).toBe(false);
+        expect(ed.proxyDataFixa).toBe(true);
+      } else {
+        expect(ed.recursos.renda).toBe(true);
+        expect(ed.proxyDataFixa).toBe(false);
+      }
+    }
+  });
+
+  it("1980 é a única edição sem a dimensão pendular de posição na ocupação", () => {
+    for (const c of CENSOS) {
+      const ed = edicao(c);
+      if (c === "1980") {
+        expect(ed.recursos.posicao).toBe(false);
+      } else {
+        expect(ed.recursos.posicao).toBe(true);
+      }
+    }
+  });
+
+  it("1980 é a quinta edição, com módulo metropolitano e pendular completos (sem modo/tempoMinutos/renda/posicao)", () => {
+    expect(basePath("1980")).toBe("data/1980/");
+    expect(edicao("1980").recursos.rm).toBe(true);
+    expect(edicao("1980").recursos.pendular).toBe(true);
+    expect(edicao("1980").recursos.modo).toBe(false);
+    expect(edicao("1980").recursos.tempoMinutos).toBe(false);
+    expect(edicao("1980").recursos.renda).toBe(false);
+    expect(edicao("1980").recursos.posicao).toBe(false);
+    expect(edicao("1980").vocabulario).toEqual({});
+    expect(edicao("1980").rotuloRetorno).toBeNull();
+  });
+
+  it("CENSOS inclui as cinco edições, com 1980 a mais antiga", () => {
+    expect(CENSOS).toEqual(["2022", "2010", "2000", "1991", "1980"]);
+  });
 });

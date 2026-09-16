@@ -15,7 +15,11 @@ export function Filtro({ valor, aoMudar, escuro }: {
   // "status" é a única dimensão cujo vocabulário difere por edição (ver docs/METODOLOGIA.md,
   // "Edição Censo 2010 e comparabilidade") -- as demais categorias existem em todas.
   const censo = useStore((s) => s.censo);
-  const statusValidos = new Set(edicao(censo).statusCategorias);
+  const ed = edicao(censo);
+  const statusValidos = new Set(ed.statusCategorias);
+  // sem renda em edições que não publicam essa dimensão (hoje só 1980, ver lib/edicoes.ts
+  // `recursos.renda`) -- mesmo padrão usado para "modo"/"tempoMinutos" em PainelPendular.tsx.
+  const dimensoesAtivas = ORDEM.filter((dim) => dim !== "renda" || ed.recursos.renda);
   const [dimAtiva, catAtiva] = valor ? (valor.split("__") as [NomeDimensao, string]) : [null, null];
   const atual = dimAtiva && catAtiva
     ? DIMENSOES[dimAtiva].categorias.find((c) => c.chave === catAtiva)
@@ -26,7 +30,7 @@ export function Filtro({ valor, aoMudar, escuro }: {
       <label htmlFor="filtro-sel">Recorte:</label>
       <select id="filtro-sel" value={valor ?? ""} onChange={(e) => aoMudar(e.target.value || null)}>
         <option value="">Todos os migrantes</option>
-        {ORDEM.map((dim) => (
+        {dimensoesAtivas.map((dim) => (
           <optgroup key={dim} label={DIMENSOES[dim].titulo}>
             {DIMENSOES[dim].categorias
               .filter((c) => !OCULTAS.has(c.chave))

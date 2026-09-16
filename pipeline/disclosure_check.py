@@ -89,6 +89,11 @@ def main() -> int:
     PROCESSED = ROOT / ed.processed
     GATE_OK = PROCESSED / ".gate_ok"
     os.chdir(ROOT)
+    # Limiares efetivos de R1/R2 da edição (ver disclosure_rules.limiares): em edição sem chave de
+    # domicílio o piso `ndom >= 3` não é computável e cede lugar a pisos de pessoas mais altos.
+    L = R.limiares(ed.chave_domicilio)
+    # Faixas de R5 inteiramente abaixo do piso de R1 — nenhuma categoria nominal pode cair nelas.
+    faixas_proibidas = ", ".join(f"'{x}'" for x in L.faixas_abaixo_r1())
 
     con = duckdb.connect()
     con.execute("PRAGMA threads=10; PRAGMA memory_limit='16GB';")
@@ -109,7 +114,25 @@ def main() -> int:
     if not violacoes:
         ok("R6", f"{len(arquivos)} arquivos sem colunas de domicílio ou área de ponderação")
 
-    # ---- R1: todo par publicado tem n>=5 pessoas e >=3 domicílios ----
+    # ---- R1: a declaração de `chave_domicilio` confere com os microdados? ----
+    # O gate não confia na flag: `chave_domicilio=False` tira o piso de domicílios do predicado de
+    # R1 (em troca de pisos de pessoas mais altos), então declará-la numa edição que TEM domicílio
+    # seria um caminho para publicar abaixo do limiar. Confere-se, em agregado, que `controle` é
+    # de fato inutilizável — ou de fato utilizável — antes de aceitar a declaração.
+    com_controle = con.execute(
+        "SELECT COUNT(*) FILTER (WHERE controle IS NOT NULL) FROM mig").fetchone()[0]
+    if L.sem_chave_domicilio:
+        if com_controle:
+            falha("R1", f"edição declara chave_domicilio=False, mas {com_controle:,} registros têm "
+                        "`controle` preenchido — R1 tem de usar o piso de domicílios")
+        else:
+            ok("R1", f"edição sem chave de domicílio confirmada (`controle` nulo em 100% dos "
+                     f"registros): R1 = {L.descricao_r1()}; R2 = {L.descricao_r2()}")
+    elif not com_controle:
+        falha("R1", "edição declara chave_domicilio=True, mas `controle` é nulo em todos os "
+                    "registros — o piso de domicílios de R1 seria vacuamente falso")
+
+    # ---- R1: todo par publicado passa no limiar da edição (pessoas e, se houver, domicílios) ----
     con.execute("""
         CREATE OR REPLACE TEMP TABLE cel AS
         SELECT df_mun AS origem, cd_mun AS destino,
@@ -119,13 +142,13 @@ def main() -> int:
     r = con.execute(f"""
         SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet') p
         LEFT JOIN cel c ON c.origem = p.origem AND c.destino = p.destino
-        WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS} OR c.ndom < {R.MIN_DOMICILIOS}
+        WHERE {L.sql_viola_r1('c.n', 'c.ndom')}
     """).fetchone()[0]
     if r:
-        falha("R1", f"{r} fluxos publicados abaixo do limiar de {R.MIN_PESSOAS} pessoas / {R.MIN_DOMICILIOS} domicílios")
+        falha("R1", f"{r} fluxos publicados abaixo do limiar de {L.descricao_r1()}")
     else:
         n_pub = con.execute(f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet')").fetchone()[0]
-        ok("R1", f"{n_pub:,} fluxos publicados, todos com n>={R.MIN_PESSOAS} e domicílios>={R.MIN_DOMICILIOS}")
+        ok("R1", f"{n_pub:,} fluxos publicados, todos com {L.descricao_r1()}")
 
     dims = R.dimensoes(ed.nome)
 
@@ -153,27 +176,62 @@ def main() -> int:
     if not cel_violadas:
         ok("R1", f"{total_cel} categorias de fluxo verificadas célula a célula, nenhuma abaixo do limiar")
 
-    # ---- R2: detalhe só em fluxos com n >= 20 ----
+    # ---- R2: detalhe só em fluxos acima do piso de detalhe da edição (20; 50 sem domicílio) ----
     alguma = " OR ".join(f"{nome_col(d, c)} IS NOT NULL" for d, cs in dims.items() for c in cs)
     v = con.execute(f"""
         SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet') p
         JOIN cel c ON c.origem = p.origem AND c.destino = p.destino
-        WHERE c.n < {R.MIN_PESSOAS_DETALHE} AND ({alguma})
+        WHERE c.n < {L.min_pessoas_detalhe} AND ({alguma})
     """).fetchone()[0]
     if v:
-        falha("R2", f"{v} fluxos com n<{R.MIN_PESSOAS_DETALHE} publicam detalhe por características")
+        falha("R2", f"{v} fluxos com n<{L.min_pessoas_detalhe} publicam detalhe por características")
     else:
-        ok("R2", f"nenhum fluxo com menos de {R.MIN_PESSOAS_DETALHE} observações publica detalhe")
+        ok("R2", f"nenhum fluxo com menos de {L.min_pessoas_detalhe} observações publica detalhe")
+
+    # ---- R6: as UNIDADES AGREGADAS declaradas são unidades de verdade (F9.9) ----
+    # Uma unidade agregada (hoje só 'NORTEGO', o norte de Goiás em 1980 -- ver
+    # pipeline/unidades_agregadas_1980.py) é publicada como qualquer outra unidade, e é
+    # justamente por isso que ela precisa de uma verificação própria: o gate confere que ela
+    # NÃO é um fantasma (tem linha em municipios_ref e em municipios, com população > 0), que
+    # não vira autoloop em nenhum fluxo, e que a composição não vazou -- nenhum dos 52 códigos
+    # municipais que ela agrega pode aparecer como unidade publicada, sob pena de publicar um
+    # território duas vezes. Os limiares R1/R2 dela são os mesmos de todo mundo e já foram
+    # verificados acima, junto com os demais pares de fluxos.parquet.
+    if ed.nome == "1980":
+        import unidades_agregadas_1980 as UA
+        for cod, info in UA.UNIDADES_AGREGADAS_1980.items():
+            n_ref, n_mun = con.execute(f"""
+                SELECT (SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios_ref.parquet')
+                        WHERE cd_mun = '{cod}'),
+                       (SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios.parquet')
+                        WHERE cd_mun = '{cod}' AND pop > 0)
+            """).fetchone()
+            if not (n_ref == 1 and n_mun == 1):
+                falha("R6", f"unidade agregada {cod}: {n_ref} linha(s) em municipios_ref e "
+                            f"{n_mun} em municipios com população > 0 (esperado 1 e 1)")
+            v = con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet') "
+                f"WHERE origem = destino AND origem = '{cod}'").fetchone()[0]
+            membros = ", ".join(f"'{m}'" for m in UA.MEMBROS[cod])
+            vaz = con.execute(
+                f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios_ref.parquet') "
+                f"WHERE cd_mun IN ({membros})").fetchone()[0]
+            if v or vaz:
+                falha("R6", f"unidade agregada {cod}: {v} autoloop(s) em fluxos.parquet e "
+                            f"{vaz} município(s) componente(s) publicado(s) à parte")
+            else:
+                ok("R6", f"unidade agregada {cod} ({info['n_municipios']} municípios de 1980): "
+                         "publicada como uma unidade, sem autoloop e sem componente solto")
 
     # ---- R1 nos perfis municipais ----
     v = con.execute(f"""
         SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios_dim.parquet')
-        WHERE categoria <> 'outros' AND n_faixa = '<5'
+        WHERE categoria <> 'outros' AND n_faixa IN ({faixas_proibidas})
     """).fetchone()[0]
     if v:
-        falha("R1", f"{v} células de perfil municipal publicadas com n<5 fora da categoria 'outros'")
+        falha("R1", f"{v} células de perfil municipal publicadas com n<{L.min_pessoas} fora da categoria 'outros'")
     else:
-        ok("R1", "perfis municipais: nenhuma categoria nominal publicada com menos de 5 observações")
+        ok("R1", f"perfis municipais: nenhuma categoria nominal publicada com menos de {L.min_pessoas} observações")
 
     # ---- R1/R2 nos fluxos pendulares (F2b) ----
     for tipo, univ, orig, dest in (("trab", "ocupado AND pendular_trab", "cd_mun", "trab_mun"),
@@ -190,7 +248,7 @@ def main() -> int:
         v = con.execute(f"""
             SELECT COUNT(*) FROM read_parquet('{arq}') p
             LEFT JOIN cel_p c ON c.origem = p.origem AND c.destino = p.destino
-            WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS} OR c.ndom < {R.MIN_DOMICILIOS}
+            WHERE {L.sql_viola_r1('c.n', 'c.ndom')}
         """).fetchone()[0]
         if v:
             falha("R1", f"pendular_{tipo}: {v} fluxos abaixo do limiar")
@@ -202,17 +260,18 @@ def main() -> int:
             v = con.execute(f"""
                 SELECT COUNT(*) FROM read_parquet('{dim}') d
                 LEFT JOIN cel_p c ON c.origem = d.origem AND c.destino = d.destino
-                WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS_DETALHE}
+                WHERE c.n IS NULL OR c.n < {L.min_pessoas_detalhe}
             """).fetchone()[0]
             if v:
-                falha("R2", f"pendular_{tipo}_dim: {v} linhas de detalhe em fluxos com n<{R.MIN_PESSOAS_DETALHE}")
+                falha("R2", f"pendular_{tipo}_dim: {v} linhas de detalhe em fluxos com n<{L.min_pessoas_detalhe}")
             else:
-                ok("R2", f"pendular_{tipo}_dim: detalhe restrito a fluxos com n>={R.MIN_PESSOAS_DETALHE}")
+                ok("R2", f"pendular_{tipo}_dim: detalhe restrito a fluxos com n>={L.min_pessoas_detalhe}")
             v = con.execute(
-                f"SELECT COUNT(*) FROM read_parquet('{dim}') WHERE categoria <> 'outros' AND n_faixa = '<5'"
+                f"SELECT COUNT(*) FROM read_parquet('{dim}') WHERE categoria <> 'outros' "
+                f"AND n_faixa IN ({faixas_proibidas})"
             ).fetchone()[0]
             if v:
-                falha("R1", f"pendular_{tipo}_dim: {v} categorias nominais com n<5")
+                falha("R1", f"pendular_{tipo}_dim: {v} categorias nominais com n<{L.min_pessoas}")
 
     # ---- R1 nas tabelas metropolitanas ----
     for arq, univ, o, d in (
@@ -232,12 +291,12 @@ def main() -> int:
         v = con.execute(f"""
             SELECT COUNT(*) FROM read_parquet('{f}') p
             LEFT JOIN cel_rm c ON c.origem = p.{col_o} AND c.destino = p.{col_d}
-            WHERE c.n IS NULL OR c.n < {R.MIN_PESSOAS}
+            WHERE c.n IS NULL OR c.n < {L.min_pessoas}
         """).fetchone()[0]
         if v:
             falha("R1", f"{arq}: {v} linhas abaixo do limiar")
         else:
-            ok("R1", f"{arq}: todas as linhas acima do limiar de {R.MIN_PESSOAS} observações")
+            ok("R1", f"{arq}: todas as linhas acima do limiar de {L.min_pessoas} observações")
 
     # ---- R4: valores ponderados em múltiplos de 5 ----
     checagens = [("fluxos.parquet", "total"), ("municipios.parquet", "imig"),
@@ -271,7 +330,7 @@ def main() -> int:
                 "pendular_trab.parquet", "pendular_trab_dim.parquet", "pendular_estudo.parquet",
                 "rm_fluxos_intra.parquet", "rm_mig_pendular.parquet"):
         if not (PROCESSED / arq).exists():
-            continue  # módulo metropolitano: não existe em edições sem 08_metro.sql
+            continue  # módulo metropolitano (ou origem agregada): não existe em toda edição
         cols = {c.lower() for c in con.execute(f"SELECT * FROM read_parquet('{PROCESSED}/{arq}') LIMIT 0").df().columns}
         numericas = [c for c in cols if c == "n" or c.startswith("n_") and not c.endswith("_faixa")]
         if numericas:
@@ -301,8 +360,8 @@ def main() -> int:
               "## Regras aplicadas",
               "",
               f"| Regra | Parâmetro |", "|---|---|",
-              f"| R1 limiar por célula | ≥ {R.MIN_PESSOAS} pessoas e ≥ {R.MIN_DOMICILIOS} domicílios |",
-              f"| R2 detalhe por características | só em fluxos com ≥ {R.MIN_PESSOAS_DETALHE} observações |",
+              f"| R1 limiar por célula | {L.descricao_r1()} |",
+              f"| R2 detalhe por características | {L.descricao_r2()} |",
               "| R3 supressão complementar | categorias suprimidas somadas em `outros` da mesma dimensão |",
               f"| R4 arredondamento | múltiplos de {R.ARREDONDAMENTO} |",
               "| R5 contagem amostral | publicada apenas em faixas |",

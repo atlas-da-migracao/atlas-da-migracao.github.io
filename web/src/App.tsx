@@ -209,7 +209,14 @@ export default function App() {
         setMeta(m);
         // pinta o coroplético imediatamente; o DuckDB completa os campos depois
         setMunicipios(mapa.linhas.map(([cd, nm, uf, pop, imig, emig, saldo, tlm, iem, cv]) => ({
-          cd_mun: cd, nm_mun: nm, uf_sigla: uf, uf: cd.slice(0, 2),
+          // uf: prefixo do código, que vale para todo município do IBGE. Uma UNIDADE AGREGADA
+          // (código sintético não numérico, ex.: 'NORTEGO' no Censo 1980) não tem prefixo de
+          // UF -- aqui ela fica com o lixo do slice até o DuckDB substituir a linha inteira
+          // pelos dados de municipios.parquet, que traz a UF publicada da unidade. Nenhum
+          // componente lê `uf` nesta janela (o painel usa uf_sigla, que vem correto do
+          // arquivo), mas o CASE fica explícito para não parecer que o prefixo é confiável.
+          cd_mun: cd, nm_mun: nm, uf_sigla: uf,
+          uf: /^\d{7}$/.test(cd) ? cd.slice(0, 2) : "",
           cd_rgi: null, nm_rgi: null, cd_rgint: null, nm_rgint: null, cd_rm: null, nm_rm: null,
           pop, pop5: pop, imig, imig_ni: 0, imig_int: 0, emig, saldo,
           tbi: null, tbe: null, tlm, iem,
@@ -427,6 +434,14 @@ export default function App() {
   const selecionado = municipio ? porCodigo.get(municipio) ?? null : null;
   const unidadeSelecionada = nivelEfetivo !== "mun" && selecao
     ? (unidadesAtivas ?? []).find((u) => u.codigo === selecao) ?? null : null;
+  // F9.7-b: distingue "nada selecionado"/"ainda carregando" de "selecionado mas não existe nesta
+  // edição" (ex.: link para um município/unidade que só existe em outra edição) -- só true depois
+  // que os dados terminarem de carregar, para não piscar a mensagem durante a busca inicial via
+  // URL. Ver PainelMunicipio/PainelUnidade (prop `naoEncontrado`) e o guard equivalente, já
+  // autocontido, em PainelRM.tsx.
+  const municipioNaoEncontrado = municipios.length > 0 && Boolean(municipio) && !selecionado;
+  const unidadeNaoEncontrada = nivelEfetivo !== "mun" && unidadesNivel[nivelEfetivo] != null
+    && Boolean(selecao) && !unidadeSelecionada;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
   const aoSelecionarNoMapa = nivelEfetivo === "mun" ? selecionarMunicipio : selecionarUnidade;
   // rótulo da dica flutuante do mapa (nome/UF), pelo código da feição sob o cursor
@@ -471,15 +486,15 @@ export default function App() {
   const painelDireita = rm ? (
     origem && destino ? (
       aba === "mig" || !recursos.pendular
-        ? <PainelFluxo origem={origem} destino={destino} escuro={escuro}
+        ? <PainelFluxo origem={origem} destino={destino} escuro={escuro} meta={meta}
                        aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
         : <Suspense fallback={fallbackPainel}>
-            <PainelPendular origem={origem} destino={destino} tipo={aba} escuro={escuro}
+            <PainelPendular origem={origem} destino={destino} tipo={aba} escuro={escuro} meta={meta}
                             aoFechar={() => selecionarFluxo(null, null)} />
           </Suspense>
     ) : (
       <Suspense fallback={fallbackPainel}>
-        <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro}
+        <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro} meta={meta}
                   aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
                   aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo} />
       </Suspense>
@@ -487,27 +502,27 @@ export default function App() {
   ) : nivelEfetivo !== "mun" ? (
     <Suspense fallback={fallbackPainel}>
       {origem && destino ? (
-        <PainelFluxoUnidade nivel={nivelEfetivo} origem={origem} destino={destino}
+        <PainelFluxoUnidade nivel={nivelEfetivo} origem={origem} destino={destino} meta={meta}
                             aoFechar={() => selecionarFluxo(null, null)} />
       ) : (
-        <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} fluxos={arcos}
-                      carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
-                      aoFechar={() => selecionarUnidade(null)}
+        <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} naoEncontrado={unidadeNaoEncontrada}
+                      fluxos={arcos} carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
+                      aoFechar={() => selecionarUnidade(null)} meta={meta}
                       fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel.uf} escuro={escuro}
                       ufSobMapa={ufSobMapa} aoSelecionarUF={selecionarUnidade} aoRealcarUFs={aoRealcarUFs} />
       )}
     </Suspense>
   ) : origem && destino ? (
-    <PainelFluxo origem={origem} destino={destino} escuro={escuro}
+    <PainelFluxo origem={origem} destino={destino} escuro={escuro} meta={meta}
                  aoFechar={() => selecionarFluxo(null, null)} aoAbrirMunicipio={selecionarMunicipio} />
   ) : municipio ? (
-    <PainelMunicipio municipio={selecionado} fluxos={arcos} carregando={carregandoFluxos}
-                     escuro={escuro} recorte={filtro}
+    <PainelMunicipio municipio={selecionado} naoEncontrado={municipioNaoEncontrado} fluxos={arcos}
+                     carregando={carregandoFluxos} escuro={escuro} recorte={filtro}
                      recorteCarregando={Boolean(filtro) && !recorte}
-                     aoSelecionarFluxo={aoSelecionarFluxo}
+                     aoSelecionarFluxo={aoSelecionarFluxo} meta={meta}
                      aoFechar={() => selecionarMunicipio(null)} />
   ) : (
-    <CapaNacional aoSelecionarFluxo={aoSelecionarFluxo} recorte={filtro} />
+    <CapaNacional aoSelecionarFluxo={aoSelecionarFluxo} recorte={filtro} meta={meta} />
   );
 
   // F6: itens de busca e rótulo do campo, de acordo com o nível ativo
@@ -532,7 +547,8 @@ export default function App() {
         <div className="cabecalho-linha1">
           <div className="marca">
             <h1>Atlas da migração interna no Brasil</h1>
-            <span className="muted"> · {edicao(censo).subtitulo}</span>
+            <span className="muted marca-subtitulo-completo"> · {edicao(censo).subtitulo}</span>
+            <span className="muted marca-subtitulo-curto"> · {edicao(censo).rotulo}</span>
           </div>
           <div className="utilidades">
             {CENSOS.length > 1 && (

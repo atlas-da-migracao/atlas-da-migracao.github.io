@@ -10,6 +10,7 @@ import { valoresPendular, type NomeDimensaoDados } from "../lib/rm";
 import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
+import type { Meta } from "../lib/types";
 
 interface Props {
   origem: string;
@@ -18,6 +19,7 @@ interface Props {
   tipo: "trab" | "estudo";
   escuro: boolean;
   aoFechar: () => void;
+  meta: Meta | null;
 }
 
 type LinhaDim = { dimensao: string; categoria: string; valor: number; n_faixa: string };
@@ -30,7 +32,7 @@ const DIMS_TRAB: NomeDimensaoDados[] = [
 ];
 const DIMS_ESTUDO: NomeDimensaoDados[] = ["nivel"];
 
-export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Props) {
+export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }: Props) {
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
   const recursos = ed.recursos;
@@ -46,8 +48,18 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
   // vêm undefined nessa edição, e a dimensão correspondente nem é publicada em
   // pendular_trab_dim_bruto.parquet (07_pendular.sql), então tem de ser filtrada aqui como
   // "modo" já era.
+  // 1980 não tem renda (nem pessoal, nem do trabalho principal -- fonte só preenche as
+  // variáveis de rendimento no Ceará, ver docs/METODOLOGIA.md, "Edição Censo 1980 e
+  // comparabilidade", item 7): mesmo `recursos.renda` que esconde a dimensão "renda" nos
+  // outros painéis também esconde "renda_trab" aqui.
+  // 1980 também não tem "posicao" (o questionário não distingue empregado com/sem carteira/
+  // militar estatutário, os únicos valores que o vocabulário do atlas usa para essa dimensão
+  // -- ver pipeline/sql/1980/MAPEAMENTO_02_classify.md §6.6): `pos_grupo` fica NULL em 100%
+  // das linhas dessa edição, então a dimensão é filtrada aqui como "renda_trab" já é.
   const dims: NomeDimensaoDados[] = dimsBase.filter((d) =>
     (recursos.modo || d !== "modo") &&
+    (recursos.renda || d !== "renda_trab") &&
+    (recursos.posicao || d !== "posicao") &&
     (ed.vocabulario.tempo != null || d !== "tempo") &&
     (ed.vocabulario.frequencia != null || d !== "frequencia"));
   /** paleta (DIMENSOES_PENDULAR) a exibir para uma dimensão de dados: usa a variante "*2010"
@@ -163,8 +175,9 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar }: Prop
 
       {!ida.tem_detalhe ? (
         <p className="aviso">
-          A caracterização deste fluxo não é publicada: com menos de 20 observações na amostra,
-          o detalhamento individualizaria os informantes.
+          A caracterização deste fluxo não é publicada: com menos de{" "}
+          {meta?.revelacao.min_pessoas_detalhe ?? 20} observações na amostra, o
+          detalhamento individualizaria os informantes.
         </p>
       ) : (
         <>

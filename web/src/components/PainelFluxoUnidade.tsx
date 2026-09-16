@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { detalheFluxoUnidade, type DetalheFluxoUnidade, type NivelAgregado } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { num, rotuloPrecisao, sinal } from "../lib/format";
+import { AvisoProxy } from "./AvisoProxy";
+import type { Meta } from "../lib/types";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
@@ -15,9 +17,10 @@ interface Props {
   origem: string;
   destino: string;
   aoFechar: () => void;
+  meta: Meta | null;
 }
 
-export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar }: Props) {
+export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: Props) {
   const [dados, setDados] = useState<{ ida: DetalheFluxoUnidade | null; volta: DetalheFluxoUnidade | null } | null>(null);
   const [carregando, setCarregando] = useState(true);
   const pronto = usarDuckDBPronto();
@@ -65,6 +68,8 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar }: Props) 
         </div>
         <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
       </header>
+
+      <AvisoProxy meta={meta} />
 
       <div className="kpis">
         <div className="kpi">

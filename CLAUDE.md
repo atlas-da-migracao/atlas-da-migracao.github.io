@@ -4,6 +4,7 @@ Convenções para qualquer sessão Claude Code neste projeto. Ler antes de come�
 Plano completo: `PLANO_Atlas_Migracao_Censo2022.pdf` (raiz) e `~/.claude/plans/atue-como-um-dem-grafo-polished-crescent.md`.
 Plano da edição Censo 2010 (segunda edição do atlas, em andamento no branch `censo-2010`): `~/.claude/plans/eager-puzzling-wren.md`.
 Plano da edição Censo 1991 (quarta edição, branch `censo-1991`): `~/.claude/plans/elabore-um-plano-para-warm-hartmanis.md`. Essa edição não tem deslocamento pendular e os microdados chegam em DBF — a conversão para largura fixa é feita por `scripts/prep_1991.py` antes do pipeline, a partir do symlink `data/raw1991`.
+Plano da edição Censo 1980 (quinta edição, branch `censo-1980`): `~/.claude/plans/elabore-um-plano-para-warm-hartmanis.md`, seção "Plano F9". Única edição alimentada por **fonte secundária** (Base dos Dados/BigQuery, não a cópia pública do IBGE, que omite a variável de origem) — extraída por `scripts/extract_1980_bd.py` para `data/raw1980` (Parquet por UF), validada contra a cópia DBF do IBGE. A migração é **proxy** de data fixa (última etapa + tempo de residência), não data fixa: selo `proxy_data_fixa` em toda a interface. Sem chave de domicílio — sem erro amostral (`se`/`cv` nulos) e com limiares R1/R2 próprios (`n ≥ 20`/`n ≥ 50`). Sem renda. Única edição com uma **unidade agregada**: os 52 municípios do norte de Goiás (hoje Tocantins) chegam sem geocódigo na fonte e são publicados como **uma** unidade, `NORTEGO` — com população, imigração/emigração, pendular, UF `17` e polígono próprios (as 52 feições dissolvidas em uma), `cd_rgi`/`cd_rgint`/`cd_rm` NULL, e um aviso "não é um município" na interface. Ver `pipeline/unidades_agregadas_1980.py`, `pipeline/sql/1980/MAPEAMENTO_norte_goias.md` e `docs/METODOLOGIA.md`, "Edição Censo 1980 e comparabilidade", item 4.
 Convenções para trabalhar com múltiplas edições/censos (layout por edição, overrides de SQL, recortes retroativos, vocabulários) e guia para incluir uma edição nova: `docs/EDICOES.md`.
 
 ## Regras de sigilo (não negociáveis)
@@ -20,6 +21,7 @@ Os microdados em `data/raw` são de **acesso controlado** do IBGE (Censo 2022). 
 ## Caminhos
 
 - Microdados brutos: `data/raw` (symlink) → `<UF>/Pessoas_<UF>_controlado.csv`, `Domicilios_*`, `Familia_*`, `Mortalidade_*`.
+- Microdados das outras edições (gitignored, mesmas regras de sigilo): symlinks `data/raw2010`, `data/raw2000` e `data/raw1991` (DBF → TXT de largura fixa por `scripts/prep_1991.py`); e `data/raw1980`, pasta local com um Parquet por UF (`pessoa_<uf>.parquet`) extraído da Base dos Dados por `scripts/extract_1980_bd.py` — única edição que não vem da cópia do IBGE. Caminho de cada edição em `pipeline/edicoes.py`.
 - Rótulos/códigos (públicos, gerados): `pipeline/labels.py` (regenerar com `python pipeline/gen_labels.py data/raw`).
 - Malha municipal 2022 (shapefile IBGE): `data/geo/raw/BR_Municipios_2022.{shp,dbf,shx,prj,cpg}`.
 - Dados intermediários: `data/interim` (Parquet, gitignored). Dados publicáveis: `data/processed` (Parquet/JSON/TopoJSON, **versionado no git**, só depois do gate — ver `.gate_ok` e `pipeline/verify_gate.py`).

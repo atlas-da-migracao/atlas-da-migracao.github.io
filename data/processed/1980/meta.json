@@ -1,0 +1,116 @@
+{
+  "edicao": "1980",
+  "versao_dados": "2026-09-16",
+  "gerado_em": "2026-09-16T12:25:16",
+  "fonte": "IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos)",
+  "periodo_referencia": {
+    "de": "1975-09-01",
+    "ate": "1980-09-01"
+  },
+  "salario_minimo_referencia": 4149.6,
+  "revelacao": {
+    "min_pessoas": 20,
+    "min_domicilios": null,
+    "min_pessoas_detalhe": 50,
+    "arredondamento": 5,
+    "cv_boa": 15.0,
+    "cv_cautela": 30.0
+  },
+  "rotulos": {
+    "status": {
+      "retorno_natal": "Retorno ao município natal",
+      "primeira_saida": "Primeira saída do município natal",
+      "etapas_multiplas": "Migração de etapas múltiplas",
+      "nao_natural": "Não nasceu no município nem no exterior",
+      "nascido_exterior": "Nascido no exterior, migrante interno",
+      "internacional_brasileiro": "Retorno do exterior (brasileiro)",
+      "internacional_estrangeiro": "Imigração internacional (estrangeiro)",
+      "origem_nao_informada": "Origem não informada",
+      "outros": "Outros / suprimido"
+    },
+    "edu": {
+      "sem_instr_fund_incompleto": "Sem instrução ou fundamental incompleto",
+      "fund_completo_medio_incompleto": "Fundamental completo, médio incompleto",
+      "medio_completo_superior_incompleto": "Médio completo, superior incompleto",
+      "superior_completo": "Superior completo",
+      "nao_determinado": "Não determinado",
+      "outros": "Outros / suprimido"
+    },
+    "renda": {
+      "ate_1_4_sm": "Até 1/4 de salário mínimo",
+      "de_1_4_a_1_2_sm": "De 1/4 a 1/2 salário mínimo",
+      "de_1_2_a_1_sm": "De 1/2 a 1 salário mínimo",
+      "de_1_a_2_sm": "De 1 a 2 salários mínimos",
+      "mais_de_2_sm": "Mais de 2 salários mínimos",
+      "nao_aplicavel": "Não aplicável (domicílio coletivo)",
+      "outros": "Outros / suprimido"
+    },
+    "idade_sexo": {
+      "05_14_M": "5 a 14 anos, masculino",
+      "05_14_F": "5 a 14 anos, feminino",
+      "15_24_M": "15 a 24 anos, masculino",
+      "15_24_F": "15 a 24 anos, feminino",
+      "25_39_M": "25 a 39 anos, masculino",
+      "25_39_F": "25 a 39 anos, feminino",
+      "40_59_M": "40 a 59 anos, masculino",
+      "40_59_F": "40 a 59 anos, feminino",
+      "60_mais_M": "60 anos ou mais, masculino",
+      "60_mais_F": "60 anos ou mais, feminino",
+      "outros": "Outros / suprimido"
+    },
+    "posicao": {
+      "empregado_com_carteira": "Empregado com carteira",
+      "empregado_sem_carteira": "Empregado sem carteira",
+      "militar_estatutario": "Militar ou estatutário",
+      "empregador": "Empregador",
+      "conta_propria_familiar": "Conta própria ou familiar"
+    },
+    "setor": {
+      "agropecuaria": "Agropecuária",
+      "industria": "Indústria",
+      "construcao": "Construção",
+      "comercio": "Comércio",
+      "transporte_logistica": "Transporte e logística",
+      "servicos_empresariais": "Serviços empresariais",
+      "admin_educacao_saude": "Administração, educação e saúde",
+      "outros_servicos": "Outros serviços"
+    },
+    "renda_trab": {
+      "sem_declaracao": "Sem declaração",
+      "ate_1_sm": "Até 1 salário mínimo",
+      "de_1_a_2_sm": "De 1 a 2 salários mínimos",
+      "de_2_a_3_sm": "De 2 a 3 salários mínimos",
+      "de_3_a_5_sm": "De 3 a 5 salários mínimos",
+      "mais_de_5_sm": "Mais de 5 salários mínimos"
+    },
+    "nivel": {
+      "infantil_fundamental": "Infantil ou fundamental",
+      "medio": "Médio",
+      "graduacao": "Graduação",
+      "pos_graduacao": "Pós-graduação"
+    }
+  },
+  "citacao": {
+    "autor": "Daniel Pessini",
+    "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
+    "doi_conceito": "10.5281/zenodo.22469791",
+    "doi_versao": "10.5281/zenodo.22469792",
+    "licenca": "CC BY 4.0",
+    "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
+    "texto": "Daniel Pessini. Atlas da migração interna no Brasil. Dados do Censo Demográfico 1980 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
+  },
+  "aviso": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 1980 (IBGE, dados públicos), sujeitas a controle estatístico de revelação, publicadas sem estimativa de erro amostral (a fonte não permite calculá-lo); podem divergir das tabulações oficiais do IBGE (SIDRA).",
+  "aviso_proxy": "Esta edição não tem quesito de data fixa: a migração é um proxy (tempo de residência no município + município de residência anterior), calibrado contra a data fixa do Censo 1991. Ele capta 100% dos migrantes, acerta a origem municipal de 89% deles e reproduz as taxas líquidas com correlação de 0,98; em troca, infla o volume em cerca de 7%, atenua os saldos em 6% a 9% e subestima a migração interestadual em cerca de 2 pontos percentuais. Como a calibração foi feita em 1991, esses desvios são um piso. Entre edições, compare composição, direção e hierarquia dos fluxos — não o nível.",
+  "aviso_proxy_resumo": "O Censo 1980 não perguntou onde a pessoa morava 5 anos antes: a migração aqui é estimada por um proxy, com volume cerca de 7% acima do real e saldos mais fracos do que seriam. Compare direção e composição entre municípios — não o volume total.",
+  "unidades_agregadas": [
+    {
+      "codigo": "NORTEGO",
+      "nome": "Norte de Goiás (atual Tocantins)",
+      "nome_curto": "Norte de Goiás",
+      "n_municipios": 52,
+      "uf": "17",
+      "uf_censo": "52",
+      "nota": "Não é um município: é a agregação dos 52 municípios do norte de Goiás que em 1988 formaram o Tocantins, publicados como uma unidade só porque a fonte desta edição não informa em qual deles cada residente morava. Os números abaixo são do conjunto; mudanças de município dentro dele não aparecem como migração."
+    }
+  ]
+}

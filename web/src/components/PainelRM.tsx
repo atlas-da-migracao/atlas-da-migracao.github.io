@@ -8,12 +8,13 @@ import {
   migPendularResumoDaRM, municipiosPendularDaRM, nomesDeMunicipios, pendularDaRM, resumoDaRM,
   type FluxoPendularRM, type MigPendularResumoRM, type ResumoRM,
 } from "../db/queries";
-import type { Fluxo } from "../lib/types";
+import type { Fluxo, Meta } from "../lib/types";
 import { calcularRankingSaldoIntraRM, prepararSankey } from "../lib/rm";
 import { CLASSE_ESTUDO, CLASSE_TRAB, TIPOLOGIA_INTRA_RM, cor } from "../lib/paletas";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { Sankey } from "./Sankey";
 import { ComparativoRM } from "./ComparativoRM";
+import { AvisoProxy } from "./AvisoProxy";
 import { num, num1, sinal } from "../lib/format";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
@@ -24,6 +25,7 @@ interface Props {
   cruzar: boolean;
   topN: number;
   escuro: boolean;
+  meta: Meta | null;
   aoMudarAba: (a: AbaRM) => void;
   aoMudarCruzar: (v: boolean) => void;
   aoSair: () => void;
@@ -92,7 +94,7 @@ function RankingDivergente({ itens, rotuloValor }: {
 }
 
 export function PainelRM({
-  cdRm, aba, cruzar, topN, escuro, aoMudarAba, aoMudarCruzar, aoSair, aoEscolherRM, aoSelecionarFluxo,
+  cdRm, aba, cruzar, topN, escuro, meta, aoMudarAba, aoMudarCruzar, aoSair, aoEscolherRM, aoSelecionarFluxo,
 }: Props) {
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
@@ -110,14 +112,18 @@ export function PainelRM({
   const [estudoResumo, setEstudoResumo] = useState<{ saida_estudo: number; entrada_estudo: number } | null>(null);
   const [migEstudo, setMigEstudo] = useState<{ classe_estudo: string; total: number }[]>([]);
   const [mostrarComparativo, setMostrarComparativo] = useState(false);
+  // distingue "ainda buscando" de "buscou e não achou" (cdRm inexistente nesta edição), para não
+  // travar em "Carregando…" para sempre -- ver achado do auditor F9.7-b sobre `?rm=<inexistente>`.
+  const [carregado, setCarregado] = useState(false);
 
   // dados que não dependem da aba
   useEffect(() => {
     let vivo = true;
+    setCarregado(false);
     Promise.all([resumoDaRM(cdRm), fluxosIntraDaRM(cdRm)]).then(([r, f]) => {
       if (!vivo) return;
       setResumo(r); setFluxosIntra(f);
-    });
+    }).finally(() => { if (vivo) setCarregado(true); });
     return () => { vivo = false; };
   }, [cdRm]);
 
@@ -180,7 +186,29 @@ export function PainelRM({
       .sort((a, b) => (b.indice_atracao ?? 0) - (a.indice_atracao ?? 0)).slice(0, 8),
   [rankingPendular]);
 
-  if (!resumo) return <aside className="painel" aria-label="Painel de detalhes"><p className="muted">Carregando a região metropolitana…</p></aside>;
+  if (!resumo) {
+    return (
+      <aside className="painel" aria-label="Painel de detalhes">
+        {carregado ? (
+          <div className="vazio">
+            <h2>Atlas da migração interna</h2>
+            <div className="aviso" role="note">
+              <p>
+                Esta região metropolitana não existe na edição <strong>{ed.rotulo}</strong>{" "}
+                selecionada — edições antigas podem cobrir um território menor ou ter divisão
+                administrativa diferente.
+              </p>
+              <button type="button" className="link-metodologia" onClick={aoSair}>
+                Voltar para o Brasil
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="muted">Carregando a região metropolitana…</p>
+        )}
+      </aside>
+    );
+  }
 
   const totalIntra = resumo.mig_intra || 1;
 
@@ -221,6 +249,8 @@ export function PainelRM({
 
       {aba === "mig" && (
         <>
+          <AvisoProxy meta={meta} />
+
           <div className="kpis">
             <Kpi rotulo="Migrantes intra-RM" valor={num(resumo.mig_intra)} />
             <Kpi rotulo="Saldo com o resto do país" valor={sinal(resumo.saldo_externo)}
@@ -389,13 +419,14 @@ export function PainelRM({
             <Kpi rotulo="Entradas por estudo" valor={num(estudoResumo?.entrada_estudo ?? 0)} />
           </div>
 
-          {/* 2000 tem um único quesito "trabalha ou estuda?", com precedência do trabalho: quem
-              trabalha no próprio município e estuda em outro só aparece no fluxo de trabalho.
-              O deslocamento por estudo é, portanto, um piso -- ver docs/METODOLOGIA.md, "Edição
-              Censo 2000 e comparabilidade". */}
-          {censo === "2000" && (
+          {/* 2000 e 1980 têm um único quesito "trabalha ou estuda?", com precedência do
+              trabalho: quem trabalha no próprio município e estuda em outro só aparece no fluxo
+              de trabalho. O deslocamento por estudo é, portanto, um piso -- ver
+              `Edicao.pendularCampoUnico` (lib/edicoes.ts) e docs/METODOLOGIA.md, "Edição Censo
+              2000 e comparabilidade" / "Edição Censo 1980 e comparabilidade". */}
+          {ed.pendularCampoUnico && (
             <p className="muted-pequeno explicacao">
-              Piso, não estimativa do total: o Censo 2000 tem um único quesito de trabalho/estudo,
+              Piso, não estimativa do total: esta edição tem um único quesito de trabalho/estudo,
               com precedência do trabalho, e por isso este fluxo cobre só estudantes não ocupados.
             </p>
           )}

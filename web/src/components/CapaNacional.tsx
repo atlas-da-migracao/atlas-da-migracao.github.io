@@ -4,19 +4,21 @@
  *  contra a metodologia -- não uma consulta ao vivo, porque cruzam bases distintas). */
 import { useEffect, useState } from "react";
 import { capaBrasil, maioresFluxos, type CapaBrasil } from "../db/queries";
-import type { Fluxo } from "../lib/types";
+import type { Fluxo, Meta } from "../lib/types";
 import { num, num1 } from "../lib/format";
 import { rotuloRecorte } from "../lib/paletas";
 import { useStore } from "../state/store";
 import { edicao } from "../lib/edicoes";
+import { AvisoProxy } from "./AvisoProxy";
 
 interface Props {
   aoSelecionarFluxo: (o: string, d: string) => void;
   /** chave do recorte ativo (ex.: "renda__mais_de_2_sm"), ou null */
   recorte?: string | null;
+  meta: Meta | null;
 }
 
-export function CapaNacional({ aoSelecionarFluxo, recorte = null }: Props) {
+export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props) {
   const [capa, setCapa] = useState<CapaBrasil | null>(null);
   const [top5, setTop5] = useState<Fluxo[]>([]);
   const censo = useStore((s) => s.censo);
@@ -48,9 +50,13 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null }: Props) {
         <p>
           Fluxos migratórios entre {capa ? `os ${num(capa.n_municipios)}` : "os"} municípios
           brasileiros no quinquênio {ed.periodo.de.slice(0, 4)}–{ed.periodo.ate.slice(0, 4)},
-          a partir do quesito de data fixa do Censo Demográfico {ed.nome}.
+          {ed.proxyDataFixa
+            ? ` a partir de um proxy de data fixa do Censo Demográfico ${ed.nome} (ver aviso abaixo).`
+            : ` a partir do quesito de data fixa do Censo Demográfico ${ed.nome}.`}
         </p>
       </div>
+
+      <AvisoProxy meta={meta} />
 
       {capa && milhoes != null && (
         <>

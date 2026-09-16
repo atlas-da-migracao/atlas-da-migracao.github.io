@@ -153,11 +153,20 @@ const CONFIG_NIVEL: Record<NivelAgregado, { fluxos: string; campo: string; nomeC
   uf: { fluxos: "fluxos_uf", campo: "uf", nomeCol: "uf_nome", centroides: "geo/centroides_uf.parquet" },
 };
 
+/** NOTA (F9.9, edição 1980): `WHERE ${campo} IS NOT NULL` em todas as listas de unidade
+ *  agregada abaixo. Uma UNIDADE AGREGADA de `municipios_ref` (hoje só 'NORTEGO', os 52
+ *  municípios do norte de Goiás publicados como uma unidade só -- ver
+ *  pipeline/unidades_agregadas_1980.py) cobre 11 RGIs e 3 RGInts de 2022 e não é de nenhuma,
+ *  então sai com cd_rgi/cd_rgint nulos. Sem o filtro, o `SELECT DISTINCT` traria um código
+ *  nulo como se fosse uma RGI/RGInt, que apareceria no seletor e no painel como uma unidade
+ *  sem nome. No nível de UF o filtro é inócuo (a unidade TEM UF publicada, '17'), e nas
+ *  demais edições também -- lá nenhum município fica sem recorte. A contrapartida geográfica
+ *  do mesmo filtro está em geo/build.sh (`-filter "cd_rgi != null"` antes do -dissolve). */
 /** Indicadores de todas as unidades de um nível, para o coroplético e os painéis. */
 export function carregarUnidades(nivel: NivelAgregado) {
   const { fluxos, campo, nomeCol } = CONFIG_NIVEL[nivel];
   return consultar<UnidadeAgregada>(`
-    WITH nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    WITH nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref WHERE ${campo} IS NOT NULL),
          pop AS (SELECT ${campo} AS codigo, SUM(pop5) AS pop5 FROM municipios GROUP BY 1),
          imig AS (SELECT destino AS codigo, SUM(total) AS imig FROM ${fluxos} GROUP BY 1),
          emig AS (SELECT origem AS codigo, SUM(total) AS emig FROM ${fluxos} GROUP BY 1)
@@ -177,7 +186,7 @@ export function fluxosDaUnidade(nivel: NivelAgregado, codigo: string, topN: numb
   const { fluxos, campo, nomeCol, centroides } = CONFIG_NIVEL[nivel];
   return consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
     WITH cent AS (SELECT cd, lon, lat FROM read_parquet('${centroides}')),
-    nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref WHERE ${campo} IS NOT NULL),
     entradas AS (
       SELECT 'entrada' AS direcao, origem, destino, total, se, cv, n_faixa, precisao
       FROM ${fluxos} WHERE destino = ${lit(codigo)} ORDER BY total DESC LIMIT ${topN}
@@ -201,7 +210,7 @@ export function maioresFluxosNivel(nivel: NivelAgregado, limite = 300) {
   const { fluxos, campo, nomeCol, centroides } = CONFIG_NIVEL[nivel];
   return consultar<Fluxo>(`
     WITH cent AS (SELECT cd, lon, lat FROM read_parquet('${centroides}')),
-    nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref WHERE ${campo} IS NOT NULL),
     t AS (SELECT * FROM ${fluxos} ORDER BY total DESC LIMIT ${limite})
     SELECT t.origem, t.destino, t.total, t.se, t.cv, t.n_faixa, t.precisao,
            no_.nome AS nm_origem, no_.uf_sigla AS uf_origem, nd.nome AS nm_destino, nd.uf_sigla AS uf_destino,
@@ -231,7 +240,7 @@ export interface DetalheFluxoUnidade {
 export async function detalheFluxoUnidade(nivel: NivelAgregado, o: string, d: string) {
   const { fluxos, campo, nomeCol } = CONFIG_NIVEL[nivel];
   const linhas = await consultar<DetalheFluxoUnidade>(`
-    WITH nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref),
+    WITH nomes AS (SELECT DISTINCT ${campo} AS codigo, ${nomeCol} AS nome, uf_sigla FROM municipios_ref WHERE ${campo} IS NOT NULL),
     par AS (
       SELECT origem, destino, total, n_faixa, precisao FROM ${fluxos}
       WHERE (origem = ${lit(o)} AND destino = ${lit(d)}) OR (origem = ${lit(d)} AND destino = ${lit(o)})

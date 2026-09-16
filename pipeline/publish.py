@@ -67,6 +67,13 @@ def main() -> None:
     ed = get_edicao(args.edicao)
     INTERIM = ROOT / ed.interim
     PROCESSED = ROOT / ed.processed
+    # Limiares efetivos de R1/R2 desta edição. Em edição sem chave de domicílio (Censo 1980) o
+    # piso `ndom >= 3` não é computável e é substituído por pisos elevados de pessoas -- ver
+    # disclosure_rules.limiares() e docs/METODOLOGIA.md, seção do Censo 1980, item 8.
+    L = R.limiares(ed.chave_domicilio)
+    if L.sem_chave_domicilio:
+        print(f"Edição {ed.nome}: sem chave de domicílio -- R1 usa n >= {L.min_pessoas} "
+              f"(sem piso de domicílios) e R2, n >= {L.min_pessoas_detalhe}.")
 
     os.chdir(ROOT)
     PROCESSED.mkdir(parents=True, exist_ok=True)
@@ -79,8 +86,9 @@ def main() -> None:
     vals, cnts = expr_categorias(dims)
 
     # ---------------- fluxos municipais ----------------
-    # R1: só pares com >= 5 pessoas e >= 3 domicílios; R2: detalhe só com n >= 20;
-    # R4: arredondamento; R5: n em faixas.
+    # R1: só pares com >= 5 pessoas e >= 3 domicílios (>= 20 pessoas, sem piso de domicílios,
+    # em edição sem chave de domicílio -- ver L acima); R2: detalhe só com n >= 20 (>= 50 na
+    # mesma exceção); R4: arredondamento; R5: n em faixas.
     con.execute(f"""
         CREATE OR REPLACE TEMP TABLE fluxos_cel AS
         SELECT df_mun AS origem, cd_mun AS destino,
@@ -94,9 +102,9 @@ def main() -> None:
         for cat in cats:
             c = nome_col(dim, cat)
             detalhe_cols.append(
-                f"CASE WHEN f.n >= {R.MIN_PESSOAS_DETALHE} THEN {R.sql_arredonda('f.' + c)} END AS {c}")
+                f"CASE WHEN f.n >= {L.min_pessoas_detalhe} THEN {R.sql_arredonda('f.' + c)} END AS {c}")
         detalhe_cols.append(
-            f"CASE WHEN f.n >= {R.MIN_PESSOAS_DETALHE} "
+            f"CASE WHEN f.n >= {L.min_pessoas_detalhe} "
             f"THEN {R.sql_arredonda('f.' + dim + '__outros')} END AS {dim}__outros")
     con.execute(f"""
         COPY (
@@ -107,11 +115,11 @@ def main() -> None:
                    CASE WHEN b.cv IS NULL THEN 'sem_estimativa'
                         WHEN b.cv <= {R.CV_BOA} THEN 'boa'
                         WHEN b.cv <= {R.CV_CAUTELA} THEN 'cautela' ELSE 'baixa' END AS precisao,
-                   (f.n >= {R.MIN_PESSOAS_DETALHE}) AS tem_detalhe,
+                   (f.n >= {L.min_pessoas_detalhe}) AS tem_detalhe,
                    {', '.join(detalhe_cols)}
             FROM fluxos_cel f
             LEFT JOIN fluxos_b b ON b.origem = f.origem AND b.destino = f.destino
-            WHERE f.n >= {R.MIN_PESSOAS} AND f.ndom >= {R.MIN_DOMICILIOS}
+            WHERE {L.sql_r1('f.n', 'f.ndom')}
         ) TO '{PROCESSED}/fluxos.parquet' (FORMAT PARQUET)
     """)
 
@@ -145,7 +153,7 @@ def main() -> None:
                        WHERE categoria IS NOT NULL),
             marcado AS (
                 SELECT cd_mun, direcao, dimensao,
-                       CASE WHEN n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+                       CASE WHEN {L.sql_r1()}
                             THEN categoria ELSE 'outros' END AS categoria,
                        valor, n
                 FROM d
@@ -168,9 +176,23 @@ def main() -> None:
                             WHEN cv <= {R.CV_BOA} THEN 'boa'
                             WHEN cv <= {R.CV_CAUTELA} THEN 'cautela' ELSE 'baixa' END AS precisao
                 FROM read_parquet('{INTERIM}/fluxos_{nivel}_bruto.parquet')
-                WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+                WHERE {L.sql_r1()}
             ) TO '{PROCESSED}/fluxos_{nivel}.parquet' (FORMAT PARQUET)
         """)
+
+    # ---------------- (removido em F9.9) fluxos com ORIGEM AGREGADA ----------------
+    # A versão 1.0.1-1980 publicava aqui `fluxos_origem_agregada.parquet`: os fluxos que SAÍAM
+    # do norte de Goiás, sob uma origem sintética, numa tabela à parte -- porque a origem não
+    # era uma unidade da edição (sem população, malha ou recorte) e somá-la a fluxos.parquet
+    # deixaria municípios com o maior fluxo de entrada invisível no mapa.
+    #
+    # Esse bloco foi REMOVIDO, não desativado, porque a premissa dele deixou de valer: desde
+    # 1.0.2-1980 o norte de Goiás É uma unidade publicada ('NORTEGO' em municipios_ref, em
+    # municipios.parquet e na malha -- ver pipeline/unidades_agregadas_1980.py), então os
+    # mesmos fluxos entram em `fluxos.parquet` pelo caminho normal, com origem clicável dos
+    # dois lados, e a tabela separada seria uma segunda publicação do mesmo dado sob outro
+    # regime. Nada aqui precisa de código especial para a unidade agregada: ela é uma linha de
+    # `municipios_ref` como as outras.
 
     # ================= F2b: pendular e metropolitano =================
     # Edições sem quesito de deslocamento pendular no questionário (ex.: Censo 1991,
@@ -186,10 +208,10 @@ def main() -> None:
                            CASE WHEN cv IS NULL THEN 'sem_estimativa'
                                 WHEN cv <= {R.CV_BOA} THEN 'boa'
                                 WHEN cv <= {R.CV_CAUTELA} THEN 'cautela' ELSE 'baixa' END AS precisao,
-                           (n >= {R.MIN_PESSOAS_DETALHE}) AS tem_detalhe
+                           (n >= {L.min_pessoas_detalhe}) AS tem_detalhe
                            {", ROUND(tempo_mediano, 1) AS tempo_mediano, ROUND(pct_diario, 1) AS pct_diario, ROUND(pct_coletivo, 1) AS pct_coletivo" if tipo == "trab" else ""}
                     FROM read_parquet('{INTERIM}/pendular_{tipo}_bruto.parquet')
-                    WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+                    WHERE {L.sql_r1()}
                 ) TO '{PROCESSED}/pendular_{tipo}.parquet' (FORMAT PARQUET)
             """)
             # caracterização em formato longo: célula a célula (R1) e só para fluxos com detalhe (R2)
@@ -197,10 +219,10 @@ def main() -> None:
                 COPY (
                     WITH pares AS (
                         SELECT origem, destino, n FROM read_parquet('{INTERIM}/pendular_{tipo}_bruto.parquet')
-                        WHERE n >= {R.MIN_PESSOAS_DETALHE} AND ndom >= {R.MIN_DOMICILIOS}
+                        WHERE {L.sql_r2()}
                     ), marcado AS (
                         SELECT d.origem, d.destino, d.dimensao,
-                               CASE WHEN d.n >= {R.MIN_PESSOAS} AND d.ndom >= {R.MIN_DOMICILIOS}
+                               CASE WHEN {L.sql_r1('d.n', 'd.ndom')}
                                     THEN COALESCE(d.categoria, 'outros') ELSE 'outros' END AS categoria,
                                d.valor, d.n
                         FROM read_parquet('{INTERIM}/pendular_{tipo}_dim_bruto.parquet') d
@@ -270,7 +292,7 @@ def main() -> None:
                        {R.sql_arredonda('total')} AS total, ROUND(se, 1) AS se, ROUND(cv, 2) AS cv,
                        {R.sql_faixa_n('n')} AS n_faixa
                 FROM read_parquet('{INTERIM}/rm_fluxos_intra_bruto.parquet')
-                WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+                WHERE {L.sql_r1()}
             ) TO '{PROCESSED}/rm_fluxos_intra.parquet' (FORMAT PARQUET)
         """)
 
@@ -287,7 +309,7 @@ def main() -> None:
                            {R.sql_faixa_n('n')} AS n_faixa,
                            ROUND(pct_diario, 1) AS pct_diario, ROUND(pct_coletivo, 1) AS pct_coletivo
                     FROM read_parquet('{INTERIM}/rm_mig_pendular_bruto.parquet')
-                    WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+                    WHERE {L.sql_r1()}
                 ) TO '{PROCESSED}/rm_mig_pendular.parquet' (FORMAT PARQUET)
             """)
             con.execute(f"""
@@ -305,7 +327,7 @@ def main() -> None:
                            tempo_mediano, ROUND(pct_pendular, 1) AS pct_pendular,
                            {R.sql_faixa_n('n_migrantes_intra')} AS n_faixa
                     FROM read_parquet('{INTERIM}/rm_mig_pendular_resumo_bruto.parquet')
-                    WHERE n_migrantes_intra >= {R.MIN_PESSOAS}
+                    WHERE n_migrantes_intra >= {L.min_pessoas}
                 ) TO '{PROCESSED}/rm_mig_pendular_resumo.parquet' (FORMAT PARQUET)
             """)
             con.execute(f"""
@@ -313,7 +335,7 @@ def main() -> None:
                     SELECT cd_rm, origem_mig, destino_mig, destino_estudo, classe_estudo,
                            {R.sql_arredonda('total')} AS total, {R.sql_faixa_n('n')} AS n_faixa
                     FROM read_parquet('{INTERIM}/rm_mig_estudo_bruto.parquet')
-                    WHERE n >= {R.MIN_PESSOAS} AND ndom >= {R.MIN_DOMICILIOS}
+                    WHERE {L.sql_r1()}
                 ) TO '{PROCESSED}/rm_mig_estudo.parquet' (FORMAT PARQUET)
             """)
 

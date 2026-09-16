@@ -58,7 +58,11 @@ export function faixasLegenda(quebras: number[], unidade: string) {
     { nivel: 2, sinal: 1, rotulo: `ganho acima de ${f(quebras[2])}${unidade}` },
     { nivel: 1, sinal: 1, rotulo: `${f(quebras[1])} a ${f(quebras[2])}${unidade}` },
     { nivel: 0, sinal: 1, rotulo: `${f(quebras[0])} a ${f(quebras[1])}${unidade}` },
-    { nivel: -1, sinal: 0, rotulo: `perto de zero (±${f(quebras[0])}${unidade})` },
+    // "perto de zero" seria falso quando quebras[0] é grande (ex.: ±92,2‰ no Censo 1980 --
+    // a inflação de volume do proxy e o ruído de municípios pequenos alargam o 60º percentil).
+    // "baixa variação" descreve a mesma faixa (os 60% de menor |valor| da edição) sem prometer
+    // proximidade de zero que o número ao lado pode desmentir.
+    { nivel: -1, sinal: 0, rotulo: `baixa variação (±${f(quebras[0])}${unidade})` },
     { nivel: 0, sinal: -1, rotulo: `${f(quebras[0])} a ${f(quebras[1])}${unidade}` },
     { nivel: 1, sinal: -1, rotulo: `${f(quebras[1])} a ${f(quebras[2])}${unidade}` },
     { nivel: 2, sinal: -1, rotulo: `perda acima de ${f(quebras[2])}${unidade}` },

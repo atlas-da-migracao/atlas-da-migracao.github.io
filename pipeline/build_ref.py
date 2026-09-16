@@ -88,7 +88,7 @@ def _build_outra_edicao(ed: Edicao, dest: pathlib.Path) -> None:
         ) from e
     municipios_ed = getattr(labels_mod, f"MUNICIPIOS_{ed.nome}")
 
-    rows = []
+    rows = list(_linhas_unidades_agregadas(ed))
     sem_recorte = []
     for cd, info in municipios_ed.items():
         rec = labels.RECORTES.get(cd)
@@ -129,8 +129,61 @@ def _build_outra_edicao(ed: Edicao, dest: pathlib.Path) -> None:
         "SUM(CASE WHEN cd_rgi IS NULL THEN 1 ELSE 0 END), "
         "SUM(CASE WHEN cd_rm IS NOT NULL THEN 1 ELSE 0 END) FROM ref"
     ).fetchone()
-    print(f"municipios_ref.parquet ({ed.nome}): {n} municípios, {n_rgi} RGIs, {n_rgint} RGInts, "
+    print(f"municipios_ref.parquet ({ed.nome}): {n} unidades, {n_rgi} RGIs, {n_rgint} RGInts, "
           f"{n_sem_rgi} sem RGI, {n_com_rm} com RM")
+
+
+def _modulo_unidades_agregadas(ed: Edicao):
+    """Módulo de unidades agregadas da edição, ou None se ela não tiver nenhuma.
+
+    Import tardio e condicional: só a edição 1980 tem esse módulo, e a ausência dele nunca
+    pode afetar as demais.
+    """
+    if ed.nome != "1980":
+        return None
+    import unidades_agregadas_1980 as U
+    return U
+
+
+def _linhas_unidades_agregadas(ed: Edicao) -> list[dict]:
+    """Linhas de `municipios_ref.parquet` das unidades agregadas da edição.
+
+    Uma unidade agregada é um conjunto de municípios de 1980 publicado como UMA unidade,
+    porque a fonte não distingue os municípios que o compõem (hoje só o norte de Goiás --
+    ver pipeline/unidades_agregadas_1980.py). Ela entra em `ref` como qualquer outra unidade:
+    03_indicators.sql varre `ref` e lhe dá população, imigração, emigração e saldo; 04_flows.sql
+    a junta nos dois lados da matriz origem->destino. O que a distingue são os recortes de 2022
+    NULL (cd_rgi/cd_rgint/cd_rm), que a mantêm fora dos níveis agregados sem nenhum código
+    especial -- `o_rgi <> d_rgi` nunca é verdadeiro quando um dos lados é NULL.
+    """
+    U = _modulo_unidades_agregadas(ed)
+    return U.linhas_referencia() if U else []
+
+
+def _build_unidades_agregadas(ed: Edicao, dest: pathlib.Path) -> None:
+    """<interim>/unidades_agregadas.parquet: a COMPOSIÇÃO de cada unidade agregada.
+
+    Uma linha por município componente, com `prefixo6` para o JOIN com `org6`/`trab6` em
+    01_extract.sql -- é por ele que uma origem de migração ou um destino de deslocamento
+    pendular em qualquer dos 52 municípios do norte de Goiás resolve para a unidade, do mesmo
+    jeito que um município real resolve por `municipios_ref`.
+
+    A unidade em si NÃO sai daqui (ela já está em municipios_ref, ver
+    `_linhas_unidades_agregadas`); esta tabela é só o mapa prefixo6 -> unidade, que
+    municipios_ref não pode dar porque o código sintético não tem prefixo de 6 dígitos próprio.
+    """
+    U = _modulo_unidades_agregadas(ed)
+    if U is None:
+        return
+    linhas = U.linhas_composicao()  # noqa: F841
+    con = duckdb.connect()
+    import pandas as pd
+    df = pd.DataFrame(linhas)  # noqa: F841
+    con.execute("CREATE TABLE ua AS SELECT * FROM df")
+    con.execute(f"COPY ua TO '{dest}' (FORMAT PARQUET)")
+    n_u, n_m = con.execute("SELECT COUNT(DISTINCT cd_unidade), COUNT(*) FROM ua").fetchone()
+    print(f"unidades_agregadas.parquet ({ed.nome}): {n_u} unidade(s) agregada(s), "
+          f"{n_m} municípios componentes")
 
 
 def main() -> None:
@@ -146,6 +199,7 @@ def main() -> None:
         _build_2022(dest)
     else:
         _build_outra_edicao(ed, dest)
+        _build_unidades_agregadas(ed, dest.parent / "unidades_agregadas.parquet")
 
 
 if __name__ == "__main__":

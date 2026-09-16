@@ -22,4 +22,12 @@ export default defineConfig({
   build: {
     sourcemap: false,
   },
+  // Fixo em 5174 (documentado em CLAUDE.md) -- antes só .claude/launch.json fixava a porta
+  // via "-- --port 5174 --strictPort" na invocação do preview; "npm run dev --prefix web" puro
+  // (como um agente sem esse launch config roda) caía no default do Vite (5173), divergindo da
+  // doc. strictPort: falha alto em vez de subir noutra porta silenciosamente.
+  server: {
+    port: 5174,
+    strictPort: true,
+  },
 })

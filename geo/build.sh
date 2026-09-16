@@ -84,9 +84,17 @@ npx --yes mapshaper "$RAW" \
     -o format=topojson quantization=1e5 "$OUT/uf.topojson"
 
 echo "== regiões imediatas (RGI, dissolvidas a partir dos municípios) =="
+# `cd_rgi != null`: uma UNIDADE AGREGADA (hoje só 'NORTEGO', o norte de Goiás em 1980 --
+# ver pipeline/unidades_agregadas_1980.py) cobre 11 RGIs e 3 RGInts de 2022 e não é de
+# nenhuma, então sai de municipios_ref com cd_rgi/cd_rgint NULL. Sem este filtro, -dissolve
+# criaria uma 490ª "RGI" sem código com a forma do território -- uma unidade fantasma no
+# seletor e no mapa. O filtro é inofensivo nas demais edições (onde nenhum município fica sem
+# recorte) e a mesma regra vale do lado do dado: queries.ts filtra `IS NOT NULL` ao montar a
+# lista de unidades de RGI/RGInt. UF NÃO leva filtro: a unidade agregada TEM UF publicada.
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
+    -filter "cd_rgi != null" \
     -dissolve cd_rgi copy-fields=nm_rgi,cd_uf,uf_sigla \
     -simplify 1.5% keep-shapes \
     -filter-fields cd_rgi,nm_rgi,cd_uf,uf_sigla \
@@ -96,6 +104,7 @@ echo "== regiões intermediárias (RGInt, dissolvidas a partir dos municípios) 
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
+    -filter "cd_rgint != null" \
     -dissolve cd_rgint copy-fields=nm_rgint,cd_uf,uf_sigla \
     -simplify 1.5% keep-shapes \
     -filter-fields cd_rgint,nm_rgint,cd_uf,uf_sigla \

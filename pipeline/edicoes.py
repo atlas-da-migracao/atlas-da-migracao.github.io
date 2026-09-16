@@ -51,6 +51,21 @@ class Edicao:
     # pendular quando ele existe -- `pendular=False` remove o módulo inteiro (inclusive
     # posicao/setor/renda_trab/nivel).
     pendular: bool = True
+    # False quando a FONTE não publica identificador de domicílio e ele não é reconstruível
+    # (hoje, só o Censo 1980: `numero_ordem` é a ordem da pessoa no domicílio, não um
+    # identificador, e a extração veio do BigQuery sem ordem física garantida). Consequências,
+    # todas declaradas: `controle` é NULL em toda a edição, `domicilios_apond.parquet` não é
+    # gerado, `se`/`cv` são NULL e `precisao` é 'sem_estimativa' -- e, no gate, o piso de
+    # domicílios de R1 (`ndom >= MIN_DOMICILIOS`) não é computável e cede lugar aos limiares
+    # elevados de `disclosure_rules.limiares(chave_domicilio=False)`. Ver docs/METODOLOGIA.md,
+    # seção do Censo 1980, item 8.
+    chave_domicilio: bool = True
+    # True só para o Censo 1980: a edição não tem quesito de data fixa (5 anos) -- a migração
+    # publicada é um PROXY construído a partir de "tempo de residência no município" (v517) +
+    # "município de residência anterior / última etapa" (v518), calibrado contra a data fixa
+    # verdadeira de 1991 (MIMO86UF/MIMO86MU) em F9.2. Usado por build_meta.py, docs/EDICOES.md
+    # e pelo front (selo "proxy" na capa/painéis) para nunca apresentar 1980 como data fixa.
+    proxy_data_fixa: bool = False
 
 
 EDICOES: dict[str, Edicao] = {
@@ -147,6 +162,40 @@ EDICOES: dict[str, Edicao] = {
         pula_scripts=["07"],
         sql_override_dir="pipeline/sql/1991",
         pendular=False,  # ver docstring do campo em Edicao -- sem deslocamento pendular nesta edição
+    ),
+    "1980": Edicao(
+        nome="1980",
+        raw="data/raw1980",
+        interim="data/interim/1980",
+        processed="data/processed/1980",
+        geo_raw="data/geo/raw/1980",
+        # Cr$ 4.149,60 -- CONFIRMADO em F9.2 por reconciliação empírica (mesma técnica de 1991),
+        # e não mais provisório. As faixas de rendimento em salários mínimos calculadas pelo
+        # próprio IBGE (v680/v681/v682, 13 faixas) foram cruzadas com os valores em cruzeiros
+        # (v607+v608+v609): Cr$ 4.149,60 reproduz 13/13 faixas; os mínimos regionais menores de
+        # 1980 (3.939,60 / 3.734,64 / 3.458,00), o de novembro/1979 (3.300,00) e o de
+        # novembro/1980 (5.788,80) reproduzem 2/13 cada. Diferente de 1991 -- onde o SM implícito
+        # nas faixas NÃO era o legal --, aqui o valor reconciliado coincide com o mínimo legal da
+        # região I vigente em maio/1980. RESSALVA: a reconciliação só pôde ser feita no Ceará, a
+        # única partição da Base dos Dados em que as variáveis de renda estão preenchidas (0,0%
+        # nas outras 26 UFs) -- e é por isso que a edição 1980 NÃO PUBLICA NENHUMA COLUNA DE
+        # RENDA (renda_trab, renda_pc, renda_classe, renda_trab_classe são NULL/'nao_aplicavel').
+        # Este valor fica declarado em meta.json para documentar a unidade monetária da época e
+        # para uma eventual reextração que traga a renda das demais UFs. Ver
+        # pipeline/sql/1980/MAPEAMENTO_02_classify.md §7 e docs/METODOLOGIA.md, seção
+        # "Edição Censo 1980 e comparabilidade", item 7.
+        salario_minimo=4149.60,
+        # Período do proxy quinquenal (ver `proxy_data_fixa`): não é uma data fixa real do
+        # questionário -- é a janela adotada para a migração publicada (v517 ∈ 0..4, chegada
+        # entre 1975 e 1980); o universo decenal do quesito (v517 ∈ 0..6) fica só na calibração.
+        periodo_referencia={"de": "1975-09-01", "ate": "1980-09-01"},
+        acesso="publico",
+        rotulos_pendular={"frequencia": None, "modo": None, "tempo": None},
+        pula_scripts=[],
+        sql_override_dir="pipeline/sql/1980",
+        pendular=True,
+        chave_domicilio=False,  # ver docstring do campo -- única edição sem identificador de domicílio
+        proxy_data_fixa=True,
     ),
 }
 

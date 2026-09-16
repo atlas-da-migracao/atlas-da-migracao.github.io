@@ -11,6 +11,8 @@ import { CLASSE_TRAB, DIMENSOES, type NomeDimensao } from "../lib/paletas";
 import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
+import { AvisoProxy } from "./AvisoProxy";
+import type { Meta } from "../lib/types";
 
 interface Props {
   origem: string;
@@ -18,6 +20,7 @@ interface Props {
   escuro: boolean;
   aoFechar: () => void;
   aoAbrirMunicipio: (cd: string) => void;
+  meta: Meta | null;
 }
 
 type Refs = Awaited<ReturnType<typeof referenciasDoPerfil>>;
@@ -53,8 +56,10 @@ function daReferencia(refs: Refs, cd: string, direcao: string, dim: string): Rec
   return out;
 }
 
-export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipio }: Props) {
-  const { periodo } = edicao(useStore((s) => s.censo));
+export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipio, meta }: Props) {
+  const ed = edicao(useStore((s) => s.censo));
+  const { periodo } = ed;
+  const temRenda = ed.recursos.renda;
   const [dados, setDados] = useState<Awaited<ReturnType<typeof detalheDoFluxo>> | null>(null);
   const [refs, setRefs] = useState<Refs>([]);
   const [carregando, setCarregando] = useState(true);
@@ -94,8 +99,9 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
           <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
         </header>
         <p className="muted">
-          Este par origem–destino ficou abaixo do limiar de divulgação (menos de 5 pessoas
-          na amostra) e por isso não é publicado individualmente.
+          Este par origem–destino ficou abaixo do limiar de divulgação (menos de{" "}
+          {meta?.revelacao.min_pessoas ?? 5} pessoas na amostra) e por isso não é
+          publicado individualmente.
         </p>
       </aside>
     );
@@ -122,6 +128,8 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
         </div>
         <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
       </header>
+
+      <AvisoProxy meta={meta} />
 
       <div className="kpis">
         <div className="kpi">
@@ -157,8 +165,9 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
 
       {!ida.tem_detalhe ? (
         <p className="aviso">
-          O perfil dos migrantes deste fluxo não é publicado: com menos de 20 observações
-          na amostra, o detalhamento por característica individualizaria os informantes.
+          O perfil dos migrantes deste fluxo não é publicado: com menos de{" "}
+          {meta?.revelacao.min_pessoas_detalhe ?? 20} observações na amostra, o
+          detalhamento por característica individualizaria os informantes.
         </p>
       ) : (
         <>
@@ -167,7 +176,9 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
             As barras comparam quem fez este percurso com três referências: todos os que
             chegaram ao destino, todos os que saíram da origem e a população residente no destino.
           </p>
-          {(["status", "edu", "renda"] as NomeDimensao[]).map((dim) => {
+          {(["status", "edu", "renda"] as NomeDimensao[])
+            .filter((d) => d !== "renda" || temRenda)
+            .map((dim) => {
             const series: SeriePerfil[] = [
               { rotulo: "Neste fluxo", valores: doFluxo(ida, dim), destaque: true },
               { rotulo: `Imigrantes de ${ida.nm_destino}`, valores: daReferencia(refs, ida.destino, "imig", dim) },
