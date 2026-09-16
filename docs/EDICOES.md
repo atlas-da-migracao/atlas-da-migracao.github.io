@@ -338,6 +338,13 @@ conteúdo deles — leia-os e faça o análogo.
    três; em 1980, quatro — e três RMs, 21 RGIs e 3 RGInts não aparecem de forma alguma, ver
    `docs/METODOLOGIA.md`, item 9 da seção de 1980). Malha: `geo/fetch_2010.sh` é o modelo de
    como obter e normalizar shapefiles antigos do geoftp; `geo/build.sh <edicao>` já é parametrizado.
+   **Toda malha publicada passa por `pipeline/validate_geo.py --edicao <edicao>`** antes do gate —
+   ST_IsValid (GEOS) e a mesma triangulação earcut que o deck.gl usa em produção, nos 4 produtos
+   (municípios/UF/RGI/RGInt); `geo/build.sh` já roda essa checagem no fim de cada invocação, com
+   reparo dirigido automático (ver docstring da função `limpa_e_publica`) quando sobra alguma
+   feição inválida ou mal triangulada depois do `-clean` padrão. Não pule essa checagem numa
+   edição nova mesmo que a malha "pareça" boa no mapa — o defeito (anel com autointerseção) é
+   invisível a olho nu na maioria dos zooms e só aparece em municípios/recortes específicos.
 6. **Núcleos metropolitanos.** Rode `pipeline/build_rm_nucleo.py --check`. Se a edição nova mudar
    a composição de alguma RM, o CSV é compartilhado — qualquer mudança afeta **todas** as edições,
    e isso é intencional; confira o diff antes de aceitar. Verifique também se **o núcleo do CSV

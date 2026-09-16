@@ -366,7 +366,19 @@ def test_gate_ok_existe_e_e_valido():
     # 1.0.2-1980: F9.9 publicou a unidade agregada 'NORTEGO'. Praticamente TODO arquivo mudou
     # (a edição passou a cobrir 178.338 registros a mais), e fluxos_origem_agregada.parquet
     # deixou de existir -- a tabela foi absorvida por fluxos.parquet.
-    assert carimbo["versao_dados"] == "1.0.2-1980"
+    # 1.0.3-1980: correção de geometria -- o polígono dissolvido de NORTEGO triangulava mal na
+    # GPU (earcut produzia um triângulo espúrio de ~54% da área, visível como distorção no
+    # mapa); geo/fetch_1980.sh passou a recortar a unidade numa grade 8x16 antes de publicar
+    # (pipeline/gridsplit_geom.py), mesma área e contorno externo, só a malha interna de
+    # triangulação muda.
+    # 1.0.4-1980: F9.10 -- a causa raiz não era a concavidade de NORTEGO, era geo/build.sh
+    # publicar TopoJSON sem passar por -clean depois de -simplify/quantização (a simplificação
+    # do mapshaper só se materializa na escrita; -clean na mesma invocação a desfazia). Com
+    # geo/build.sh corrigido (duas invocações + reparo dirigido, ver pipeline/validate_geo.py),
+    # a malha inteira passa a validar sem tratamento especial -- geo/fetch_1980.sh voltou ao
+    # dissolve simples e pipeline/gridsplit_geom.py foi removido. Só os arquivos de geo/
+    # (topojson, centroides) e o meta.json mudaram.
+    assert carimbo["versao_dados"] == "1.0.4-1980"
     assert "1980/municipios.parquet" not in carimbo["arquivos"], \
         "caminhos no carimbo são relativos à própria PROCESSED"
     assert "fluxos_origem_agregada.parquet" not in carimbo["arquivos"], \

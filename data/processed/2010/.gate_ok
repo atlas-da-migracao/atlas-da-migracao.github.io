@@ -5,15 +5,15 @@
     "fluxos_rgint.parquet": "7ae16ca72484d78b64be9dd07cb03448489138a269fdef61ab30847423d3a605",
     "fluxos_uf.parquet": "53e44cc0991afbb6ccbc1208bdf128772c4c94f7a6e2782915049fd07544b326",
     "geo/centroides.parquet": "7301b71aa61dba5e848c05380141ac6c225f323ce260680199f6f86c78c964a8",
-    "geo/centroides_rgi.parquet": "0f8d46397e52283ea7b375bb80d2cc468bcb4f0a69aa463f73aa20558ad3fad8",
-    "geo/centroides_rgint.parquet": "66f19d838761c60b7998b37a86fc0615113873ad83463e56f712bfc385aca26a",
-    "geo/centroides_uf.parquet": "a6b98302ee67216f0da1b75d5ce4f083ec0810db36353a4dd7879cdba7f48af5",
-    "geo/municipios.topojson": "b9d6e61321745b9812b8db1f953ea243b0fa290db277982ec40cd1cc46d61dd1",
+    "geo/centroides_rgi.parquet": "8f7570e92bce058d82e31ee1f23a0d6ae85b0f2aac8679bb7e1cded085735a5f",
+    "geo/centroides_rgint.parquet": "a91fce8093dcdd362346b50bea2af6c8e575df6b939af59834830c1371b9dc25",
+    "geo/centroides_uf.parquet": "d6b874f4ed7b4f7f5411d631cc3465444a1c3aa211de6a776eb0850aa5e13bcc",
+    "geo/municipios.topojson": "b96fb4b0f130b5593914ac5b1b59b4b58e64d5e7a35e2f0ad741feb089de3b06",
     "geo/recortes.json": "b13fd86a1988629a2bc21f442fa0356a3f645ac20dd5f9e87645272074d710c5",
-    "geo/rgi.topojson": "ee3401bc1f80b1ac2631d66aeeb1e92cb8d12d4645eec59840886ae3405ad1c0",
-    "geo/rgint.topojson": "d6b83375218a2a87c3d953fbec475dd7fd9ec8165306317ee095aee3c28874d8",
-    "geo/uf.topojson": "9c4cbc52e65c7b3f31760417a5d8782f485b34135cfd2a51d22c4d1148151c9d",
-    "meta.json": "86109b73ae7b8004142aed013ac94b4c6ef41a24fba7e51aaf4b8a64b766e9b0",
+    "geo/rgi.topojson": "8ca17c63ed4fe2c4cb214a1643a1048fd869694b0f6bc266e4216b7a08855976",
+    "geo/rgint.topojson": "3f7c8e1ab22a8b400a1f73f93a529d25fae2c9e731cf7e174fb29fb434ca7436",
+    "geo/uf.topojson": "3ce685203220c60b9b6a5e0dd52e2fb5ddc1ccd14711ecbaac5d57b74ba225cf",
+    "meta.json": "6233190eb70cbf59c24aabe05619405c639e24a23d736d3ff594bf02e09ee5e7",
     "municipios.parquet": "2b0852c984a9772877cd011e11a3c7721f5b6a08a6340e0f07bb89f173395270",
     "municipios_dim.parquet": "9b54177538b6f8ba2b40c6c45195c53e430764633a6d8c09205f393f3c1e2ee8",
     "municipios_mapa.json": "58e26e987c4cef78221deafdfb65471318d253701e5bd504b41cfdd1cb07e7be",
@@ -31,6 +31,6 @@
     "rm_resumo.parquet": "3b70184805a1fd4a765a62b341e566a4399d125a564cdbb009578532ad297644"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-14T19:02:31.291183",
-  "versao_dados": "1.0.0-2010"
+  "timestamp": "2026-09-16T16:31:40.833390",
+  "versao_dados": "1.0.1-2010"
 }

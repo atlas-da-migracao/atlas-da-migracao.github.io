@@ -27,8 +27,21 @@ fi
 # arquivos dentro de uma subpasta de edição (ex.: data/processed/2010/**) usam o gate próprio
 # dessa subpasta, verify_gate.py --dir data/processed/<edicao>.
 proc_raiz=$(printf '%s\n' "$staged" | grep -E '^data/processed/[^/]+$' || true)
-subpastas=$(printf '%s\n' "$staged" | grep -E '^data/processed/[^/]+/' \
+# candidatos a "subpasta de edição": 1o segmento depois de data/processed/. Nem todo 1o
+# segmento é uma edição -- data/processed/geo/* e data/processed/meta.json (raiz) pertencem
+# à edição 2022, sem gate próprio (usam o gate raiz, como proc_raiz acima). Uma pasta só é
+# tratada como edição própria se tiver .gate_ok nela mesma (1980, 1991, 2000, 2010, ...);
+# sem isso, geo/build.sh tocando data/processed/geo/*.topojson (edição 2022) reprovava aqui
+# procurando um data/processed/geo/.gate_ok que nunca existiu.
+candidatos=$(printf '%s\n' "$staged" | grep -E '^data/processed/[^/]+/' \
             | sed -E 's#^data/processed/([^/]+)/.*#\1#' | sort -u)
+subpastas=""
+for c in $candidatos; do
+  [ -f "data/processed/$c/.gate_ok" ] && subpastas="$subpastas
+$c"
+  [ -f "data/processed/$c/.gate_ok" ] || proc_raiz="$proc_raiz
+data/processed/$c/"
+done
 if [ -n "$proc_raiz" ] || [ -n "$subpastas" ]; then
   PY=.venv/bin/python
   [ -x "$PY" ] || PY=python3

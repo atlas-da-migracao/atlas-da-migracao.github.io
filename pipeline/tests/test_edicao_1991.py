@@ -247,7 +247,11 @@ def test_gate_ok_existe_e_e_valido():
     import json
     carimbo = json.loads((PROCESSED / ".gate_ok").read_text(encoding="utf-8"))
     assert carimbo["arquivos"]
-    assert carimbo["versao_dados"] == "1.0.0-1991"
+    # 1.0.1-1991: F9.10 -- correção de geometria da malha (geo/build.sh passou a validar cada
+    # TopoJSON publicado, ST_IsValid + triangulação earcut, com reparo dirigido quando
+    # necessário; ver pipeline/validate_geo.py). Nesta edição, 0 feições precisaram de reparo
+    # dirigido -- só os arquivos de geo/ (topojson, centroides) e o meta.json mudaram.
+    assert carimbo["versao_dados"] == "1.0.1-1991"
     assert "1991/municipios.parquet" not in carimbo["arquivos"], "caminhos no carimbo são relativos à própria PROCESSED"
 
 

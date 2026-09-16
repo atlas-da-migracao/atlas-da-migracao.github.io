@@ -127,3 +127,25 @@ Também mudou em `geo/build.sh`: um `-filter "cd_rgi != null"` (e o equivalente 
 (`cd_rgi`/`cd_rgint` NULL em `municipios_ref`); sem o filtro, o dissolve criaria uma 490ª "RGI" sem
 código com a forma do território. O mesmo filtro existe do lado do dado, em
 `web/src/db/queries.ts`.
+
+## Adendo F9.10 — o recorte em grade de NORTEGO (`gridsplit_geom.py`) foi removido
+
+A versão `1.0.3-1980` tinha contornado o triângulo espúrio do earcut recortando o polígono
+dissolvido de NORTEGO numa grade 8x16 (`pipeline/gridsplit_geom.py`, chamado por
+`geo/fetch_1980.sh`) antes de publicar a malha. Investigando o mesmo defeito nas outras 4
+edições (nenhuma delas tem uma feição tão côncava quanto NORTEGO, mas todas tinham alguma
+feição com anel autointersectante), a causa raiz apareceu: `geo/build.sh` gravava o TopoJSON
+final `-simplify` seguido de `-clean` **na mesma invocação** do mapshaper -- e a simplificação
+do mapshaper só se materializa na escrita, então esse `-clean` não via a geometria já
+simplificada e não tinha o que reparar. NORTEGO não era um caso especial de concavidade; era
+só a feição mais visível de um defeito presente em toda a malha.
+
+Com `geo/build.sh` corrigido (duas invocações do mapshaper -- simplifica e grava um
+intermediário, depois `-clean` sobre o intermediário -- mais reparo dirigido via
+`ST_MakeValid`/GEOS nas feições que ainda reprovam `ST_IsValid` ou a triangulação earcut
+depois disso, ver `pipeline/validate_geo.py`), `geo/fetch_1980.sh` voltou ao dissolve simples
+(sem grade) e o polígono de NORTEGO passa nas duas checagens sem tratamento especial.
+`pipeline/gridsplit_geom.py` foi removido. A forma publicada de NORTEGO muda em relação à
+`1.0.3-1980` (a malha interna de triangulação já não vem de 97 peças de grade, e sim do
+contorno único simplificado) mas a área e o contorno externo permanecem os mesmos dentro da
+tolerância de 0,1% verificada em `geo/build.sh`.

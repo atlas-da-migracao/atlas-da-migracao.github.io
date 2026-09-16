@@ -11,7 +11,18 @@
 #
 # Dado geográfico público (sem microdados) -- não sujeito às regras de sigilo do CLAUDE.md,
 # mas o alvo de tamanho e a correspondência 1:1 com municipios_ref.parquet são
-# verificados por pipeline/tests/test_f3_geo.py.
+# verificados por pipeline/tests/test_f3_geo.py, e a validade de cada polígono (OGC +
+# triangulação earcut) por pipeline/validate_geo.py (rode depois deste script).
+#
+# F9.10 (correção): -simplify seguido de -clean NA MESMA invocação do mapshaper desfaz a
+# simplificação (a simplificação é "lazy", só se materializa quando o resultado é escrito) --
+# por isso cada produto abaixo roda em DUAS invocações: (1) filtra/junta/dissolve/simplifica e
+# grava um GeoJSON intermediário; (2) lê esse intermediário, roda -clean (repara os anéis com
+# autointerseção que a simplificação deixa para trás) e, se ainda sobrar alguma feição
+# inválida (ST_IsValid) ou mal triangulada (earcut), aplica um reparo dirigido só nela antes
+# de gravar o TopoJSON final quantizado -- ver a função `limpa_e_publica` abaixo e
+# docs/METODOLOGIA.md para o diagnóstico (anéis com autointerseção faziam o earcut do deck.gl
+# gerar triângulos espúrios ou omitir o preenchimento).
 set -e
 cd "$(dirname "$0")/.."
 
@@ -36,6 +47,9 @@ fi
 FILTRO='CD_MUN != "8888888" && CD_MUN != "9999999" && CD_MUN != "4300001" && CD_MUN != "4300002" && CD_MUN != "0"'
 OUT="$PROCESSED/geo"
 mkdir -p "$OUT"
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
 
 echo "== recortes.json (cd_mun -> RGI/RGInt/UF, a partir de $PROCESSED/municipios_ref.parquet OU data/interim/$EDICAO se ainda não publicado) =="
 # municipios_ref.parquet só é copiado para data/processed pelo publish.py (F7); até lá, ele
@@ -66,22 +80,76 @@ pathlib.Path(dest).write_text(json.dumps(registros, ensure_ascii=False), encodin
 print(f"recortes.json: {len(registros)} municípios")
 PYEOF
 
+# $1 = caminho do TopoJSON final; $2 = quantization; $3 = campo de id (CD_MUN/cd_uf/cd_rgi/
+# cd_rgint), usado pela validação/reparo dirigido. Lê o GeoJSON intermediário de $STAGE1
+# (setado por cada bloco de produto antes de chamar esta função).
+#
+# Ordem de correção (ver docstring no topo do arquivo e pipeline/validate_geo.py):
+#   1. `-clean` do mapshaper com o snap-interval PADRÃO (automático, "tiny") -- corrige a
+#      maior parte das autointerseções deixadas por -simplify sem distorcer feições pequenas.
+#      Testado: um snap-interval maior (ex.: 1e-3 grau) zera os inválidos de 2022 mas em 1980
+#      colapsa Maracajá/SC (feição minúscula demais) a uma geometria nula -- descartado.
+#   2. Quantização (TopoJSON, grade quant^2 sobre o bbox inteiro): ARREDONDA todas as
+#      coordenadas para a grade -- e pode reintroduzir autointerseção em feições que -clean já
+#      tinha corrigido em precisão total (achado testando 2022: 0 inválidos antes da
+#      quantização, 4 depois). Por isso a checagem roda DEPOIS deste passo, no TopoJSON final,
+#      não no GeoJSON intermediário.
+#   3. Um segundo `-clean` (agora sobre o próprio TopoJSON já quantizado, mesma grade) --
+#      resolve a maior parte do que a quantização reintroduziu (achado testando RGI 2010,
+#      código 230003: sozinho, esse segundo -clean fecha a autointerseção e preserva a área a
+#      0,3% do valor pré-quantização; ST_MakeValid direto no mesmo caso, sem esse passo antes,
+#      cortava 6,6% da área -- a quantização tinha fragmentado o polígono em 97 partes e o
+#      MakeValid descartava fragmentos espúrios em vez de só fechar o anel).
+#   4. Reparo dirigido (`geo/repair_geojson.py`, ST_MakeValid via GEOS), só nas feições que
+#      `geo/find_bad_ids.py` ainda marca como ST_IsValid=false OU com triangulação earcut ruim
+#      depois do passo 3 -- fallback para o que sobrar. Reparada, a feição é requantizada
+#      (mesma grade) e revalidada; não foi necessário reduzir -simplify nem redimensionar a
+#      malha em nenhuma das 5 edições.
+limpa_e_publica() {
+  destino="$1"; quant="$2"; campo_id="$3"
+  limpo="$TMP/$(basename "$destino" .topojson)_limpo.geojson"
+  npx --yes mapshaper "$STAGE1" -clean -o format=geojson "$limpo"
+  npx --yes mapshaper "$limpo" -o format=topojson quantization="$quant" "$destino"
+  npx --yes mapshaper "$destino" -clean -o format=topojson quantization="$quant" force "$destino"
+
+  tentativa=0
+  while [ "$tentativa" -lt 3 ]; do
+    decodificado="$TMP/$(basename "$destino" .topojson)_decodificado_$tentativa.geojson"
+    node geo/decode_topojson.mjs "$destino" "$decodificado"
+    ruins=$(.venv/bin/python geo/find_bad_ids.py "$decodificado" "$campo_id")
+    [ -z "$ruins" ] && break
+    echo "  reparo dirigido ($campo_id, tentativa $tentativa): $ruins"
+    reparado="$TMP/$(basename "$destino" .topojson)_reparado_$tentativa.geojson"
+    .venv/bin/python geo/repair_geojson.py "$decodificado" "$reparado" --ids "$ruins" --campo-id "$campo_id"
+    npx --yes mapshaper "$reparado" -o format=topojson quantization="$quant" "$destino"
+    tentativa=$((tentativa + 1))
+  done
+  if [ -n "$ruins" ]; then
+    echo "ERRO: $destino ainda tem feição(ões) inválida(s) depois de $tentativa tentativas de reparo: $ruins" >&2
+    exit 1
+  fi
+}
+
 echo "== municípios (simplificado, mantendo topologia) =="
+STAGE1="$TMP/municipios.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -simplify 1% keep-shapes \
     -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
-    -o format=topojson quantization=1e5 "$OUT/municipios.topojson"
+    -o format=geojson "$STAGE1"
+limpa_e_publica "$OUT/municipios.topojson" 1e5 CD_MUN
 
 echo "== limites de UF (dissolvidos a partir dos municípios; id = código numérico de 2 dígitos," \
      "consistente com fluxos_uf/municipios.uf -- uf_sigla vai junto só para exibição) =="
+STAGE1="$TMP/uf.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
     -dissolve cd_uf copy-fields=uf_sigla \
     -simplify 5% keep-shapes \
     -filter-fields cd_uf,uf_sigla \
-    -o format=topojson quantization=1e5 "$OUT/uf.topojson"
+    -o format=geojson "$STAGE1"
+limpa_e_publica "$OUT/uf.topojson" 1e5 cd_uf
 
 echo "== regiões imediatas (RGI, dissolvidas a partir dos municípios) =="
 # `cd_rgi != null`: uma UNIDADE AGREGADA (hoje só 'NORTEGO', o norte de Goiás em 1980 --
@@ -91,6 +159,7 @@ echo "== regiões imediatas (RGI, dissolvidas a partir dos municípios) =="
 # seletor e no mapa. O filtro é inofensivo nas demais edições (onde nenhum município fica sem
 # recorte) e a mesma regra vale do lado do dado: queries.ts filtra `IS NOT NULL` ao montar a
 # lista de unidades de RGI/RGInt. UF NÃO leva filtro: a unidade agregada TEM UF publicada.
+STAGE1="$TMP/rgi.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
@@ -98,9 +167,11 @@ npx --yes mapshaper "$RAW" \
     -dissolve cd_rgi copy-fields=nm_rgi,cd_uf,uf_sigla \
     -simplify 1.5% keep-shapes \
     -filter-fields cd_rgi,nm_rgi,cd_uf,uf_sigla \
-    -o format=topojson quantization=1e5 "$OUT/rgi.topojson"
+    -o format=geojson "$STAGE1"
+limpa_e_publica "$OUT/rgi.topojson" 1e5 cd_rgi
 
 echo "== regiões intermediárias (RGInt, dissolvidas a partir dos municípios) =="
+STAGE1="$TMP/rgint.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
@@ -108,7 +179,11 @@ npx --yes mapshaper "$RAW" \
     -dissolve cd_rgint copy-fields=nm_rgint,cd_uf,uf_sigla \
     -simplify 1.5% keep-shapes \
     -filter-fields cd_rgint,nm_rgint,cd_uf,uf_sigla \
-    -o format=topojson quantization=1e5 "$OUT/rgint.topojson"
+    -o format=geojson "$STAGE1"
+limpa_e_publica "$OUT/rgint.topojson" 1e5 cd_rgint
+
+echo "== validando (OGC + triangulação earcut) =="
+.venv/bin/python pipeline/validate_geo.py --edicao "$EDICAO"
 
 echo "== ok =="
 ls -la "$OUT"

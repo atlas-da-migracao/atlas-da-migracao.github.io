@@ -114,6 +114,18 @@ NORTEGO_CD=NORTEGO
 NORTEGO_NM="Norte de Goiás (atual Tocantins)"
 NORTEGO_UF=TO
 
+# HISTÓRICO (pós-1.0.2-1980, achado em produção; revertido em F9.10): o polígono de NORTEGO,
+# dissolvido por -dissolve2, é válido no sentido OGC (GEOS ST_IsValid confirma) mas era
+# complexo/côncavo demais para o earcut que o deck.gl usa para preencher polígonos na GPU --
+# produzia um triângulo espúrio enorme, visível como uma faixa/triângulo cortando o mapa em
+# vez do contorno do Tocantins. A causa raiz, descoberta depois, não era a concavidade em si:
+# era a autointerseção residual que geo/build.sh publicava sem passar por -clean depois de
+# -simplify (mapshaper materializa a simplificação só na escrita -- -clean na MESMA invocação
+# do -simplify desfazia o efeito). geo/build.sh agora roda em duas invocações (simplifica ->
+# grava intermediário -> -clean com snap-interval -> publica), o que resolve NORTEGO junto com
+# o resto da malha sem precisar de tratamento especial aqui -- ver pipeline/validate_geo.py e
+# docs/METODOLOGIA.md. pipeline/gridsplit_geom.py (o recorte em grade que este bloco usava) foi
+# removido.
 npx --yes mapshaper -i "$SHP" -rename-layers base \
     -each "CD_MUN = String(codigo)" \
     -rename-fields NM_MUN=nome \
@@ -136,9 +148,18 @@ npx --yes mapshaper -i "$SHP" -rename-layers base \
       };
       SIGLA_UF = UF_POR_COD[CD_MUN.slice(0,2)]
     " target=base \
-    -merge-layers target=base,nortego force name=municipios \
     -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
     -proj EPSG:4674 \
+    -o target=base format=geojson "$TMP/base.geojson" \
+    -o target=nortego format=geojson "$TMP/nortego.geojson"
+
+# GeoJSON não carrega CRS de origem (já reprojetado acima, para EPSG:4674, antes de exportar) --
+# mapshaper não precisa (nem pode) reprojetar de novo aqui.
+npx --yes mapshaper \
+    -i "$TMP/base.geojson" name=base \
+    -i "$TMP/nortego.geojson" name=nortego \
+    -merge-layers target=base,nortego force name=municipios \
+    -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
     -o format=shapefile encoding=utf8 "$OUT/BR_Municipios_1980.shp"
 
 rm -rf "$TMP"
