@@ -358,6 +358,14 @@ export function MapaAtlas({
     // UF é o único nível cujo contorno "normal" deve se destacar mais (hierarquia
     // figura-fundo): mais escuro/mais grosso que a fronteira municipal.
     const ehUf = campoId === "cd_uf";
+    // Satélite ligado: pedido do usuário -- a transparência vale para TODAS as camadas, não só
+    // o preenchimento dos municípios (a malha já reduzia; espigas, arcos, setas, contornos e
+    // capitais ficavam opacos por cima da foto, competindo com ela em vez de conviver). Um
+    // único multiplicador de alfa, aplicado no canal de cor de cada camada -- não um `opacity`
+    // por camada (deck.gl multiplica isso pelo alfa por-objeto de qualquer forma; fica mais
+    // simples ter uma função e aplicar no mesmo lugar que já monta a cor de cada uma).
+    const alfaSat = mostrarSatelite ? 0.6 : 1;
+    const comAlfaSat = (a: number) => Math.round(a * alfaSat);
     // F5 (mapa-representação), ajuste pedido pelo usuário: `contorno` acima foi calibrado
     // contra o COROPLÉTICO (onde a própria variação de cor já entrega a estrutura espacial;
     // um traço quase invisível é uma escolha deliberada ali). Sob o preenchimento neutro das
@@ -434,9 +442,9 @@ export function MapaAtlas({
       lineJointRounded: true,
       getLineWidth: ehUf ? 1.1 : 0.3,
       getLineColor: ehUf
-        ? (escuro ? [150, 150, 145, 220] : [120, 118, 108, 220])
-        : (metricaContagem ? [...contornoMunContagem, 210] : [...contorno, 180]),
-      updateTriggers: { getLineColor: [escuro, ehUf, metricaContagem], getLineWidth: [ehUf] },
+        ? [...(escuro ? [150, 150, 145] as RGB : [120, 118, 108] as RGB), comAlfaSat(220)] as [number, number, number, number]
+        : [...(metricaContagem ? contornoMunContagem : contorno), comAlfaSat(metricaContagem ? 210 : 180)] as [number, number, number, number],
+      updateTriggers: { getLineColor: [escuro, ehUf, metricaContagem, mostrarSatelite], getLineWidth: [ehUf] },
     });
 
     // Contorno de seleção e de núcleo de RM: continuam desenhados por feição (precisam da
@@ -457,12 +465,13 @@ export function MapaAtlas({
       },
       getLineColor: (f: Feature<Geometry, Record<string, string>>) => {
         const cd = f.properties[campoId];
-        if (cd === selecionado) return escuro ? [255, 255, 255, 255] : [11, 11, 11, 255];
-        if (nucleo && cd === nucleo) return escuro ? [255, 255, 255, 220] : [11, 11, 11, 220];
+        const base: RGB = escuro ? [255, 255, 255] : [11, 11, 11];
+        if (cd === selecionado) return [...base, comAlfaSat(255)] as [number, number, number, number];
+        if (nucleo && cd === nucleo) return [...base, comAlfaSat(220)] as [number, number, number, number];
         return [0, 0, 0, 0];
       },
       updateTriggers: {
-        getLineColor: [selecionado, escuro, nucleo, campoId],
+        getLineColor: [selecionado, escuro, nucleo, campoId, mostrarSatelite],
         getLineWidth: [selecionado, nucleo, campoId],
       },
     });
@@ -477,8 +486,8 @@ export function MapaAtlas({
       lineWidthUnits: "pixels",
       lineJointRounded: true,
       getLineWidth: 2.5,
-      getLineColor: escuro ? [255, 255, 255, 235] : [11, 11, 11, 235],
-      updateTriggers: { getLineColor: [escuro] },
+      getLineColor: [...(escuro ? [255, 255, 255] as RGB : [11, 11, 11] as RGB), comAlfaSat(235)] as [number, number, number, number],
+      updateTriggers: { getLineColor: [escuro, mostrarSatelite] },
     });
 
     // F5 (mapa-representação): espigas bipolares -- só quando a métrica ativa é de contagem
@@ -505,7 +514,7 @@ export function MapaAtlas({
         const cor = d.corChave === "ganho" || d.corChave === "entrada"
           ? (escuro ? ARC_IN_ESCURO : ARC_IN_CLARO)
           : (escuro ? ARC_OUT_ESCURO : ARC_OUT_CLARO);
-        return [...cor, 210] as [number, number, number, number];
+        return [...cor, comAlfaSat(210)] as [number, number, number, number];
       },
       onClick: (info: PickingInfo) => {
         const d = info.object as PontoEspiga | undefined;
@@ -514,7 +523,7 @@ export function MapaAtlas({
       },
       updateTriggers: {
         getPolygon: [vista.zoom, maiorAbsolutoEspiga],
-        getFillColor: [escuro],
+        getFillColor: [escuro, mostrarSatelite],
       },
     });
 
@@ -553,18 +562,18 @@ export function MapaAtlas({
         // ponta de origem: cinza neutro em todo arco direcionado (entrada/saída) ou sem
         // direção conhecida; a tipologia intra-RM (corRgb) continua colorida nas duas pontas,
         // só com alfa menor na origem -- é uma cor de CATEGORIA do fluxo, não de direção.
-        if (d.corRgb) return [...d.corRgb, d.cruza ? 90 : 200] as [number, number, number, number];
+        if (d.corRgb) return [...d.corRgb, comAlfaSat(d.cruza ? 90 : 200)] as [number, number, number, number];
         const origem = escuro ? ORIGEM_ESCURO : ORIGEM_CLARO;
-        return [...origem, d.cruza ? 90 : 190] as [number, number, number, number];
+        return [...origem, comAlfaSat(d.cruza ? 90 : 190)] as [number, number, number, number];
       },
       getTargetColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
-        if (d.corRgb) return [...d.corRgb, d.cruza ? 40 : 90] as [number, number, number, number];
+        if (d.corRgb) return [...d.corRgb, comAlfaSat(d.cruza ? 40 : 90)] as [number, number, number, number];
         const cor = arcCor(d);
-        if (cor) return [...cor, d.cruza ? 90 : 230] as [number, number, number, number];
+        if (cor) return [...cor, comAlfaSat(d.cruza ? 90 : 230)] as [number, number, number, number];
         // sem direção conhecida (ex.: maioresFluxos da vista Brasil sem seleção): as duas
         // pontas ficam neutras, em vez de herdar a cor de "entrada" por padrão.
         const origem = escuro ? ORIGEM_ESCURO : ORIGEM_CLARO;
-        return [...origem, d.cruza ? 60 : 170] as [number, number, number, number];
+        return [...origem, comAlfaSat(d.cruza ? 60 : 170)] as [number, number, number, number];
       },
       getWidth: (d: Fluxo) => larguraDoArco(d.total),
       widthMinPixels: LARGURA_MIN,
@@ -582,7 +591,9 @@ export function MapaAtlas({
         if (f) aoSelecionarFluxo(f.origem, f.destino);
         return true;
       },
-      updateTriggers: { getSourceColor: [escuro], getTargetColor: [escuro], getWidth: [maiorVolume] },
+      updateTriggers: {
+        getSourceColor: [escuro, mostrarSatelite], getTargetColor: [escuro, mostrarSatelite], getWidth: [maiorVolume],
+      },
     });
 
     // Ponta de seta na chegada de cada arco (pedido do usuário: "os fluxos devem ser setas,
@@ -604,12 +615,12 @@ export function MapaAtlas({
       filled: true,
       getPolygon: (d) => poligonoSeta(d.x_o!, d.y_o!, d.x_d!, d.y_d!, metrosPorPixel(vista.zoom)) ?? [[0, 0], [0, 0], [0, 0]],
       getFillColor: (d) => {
-        if (d.corRgb) return [...d.corRgb, d.cruza ? 90 : 235] as [number, number, number, number];
+        if (d.corRgb) return [...d.corRgb, comAlfaSat(d.cruza ? 90 : 235)] as [number, number, number, number];
         const cor = arcCor(d);
         const base = cor ?? (escuro ? ORIGEM_ESCURO : ORIGEM_CLARO);
-        return [...base, d.cruza ? 110 : 235] as [number, number, number, number];
+        return [...base, comAlfaSat(d.cruza ? 110 : 235)] as [number, number, number, number];
       },
-      updateTriggers: { getPolygon: [vista.zoom], getFillColor: [escuro] },
+      updateTriggers: { getPolygon: [vista.zoom], getFillColor: [escuro, mostrarSatelite] },
     });
 
     // Rótulos de capital, sempre visíveis (pedido do usuário) -- no topo da pilha de camadas,
@@ -625,11 +636,12 @@ export function MapaAtlas({
       getPosition: (d) => [d.x, d.y],
       radiusUnits: "pixels",
       getRadius: 2.6,
-      getFillColor: escuro ? [255, 255, 255, 235] : [17, 17, 17, 235],
+      getFillColor: [...(escuro ? [255, 255, 255] as RGB : [17, 17, 17] as RGB), comAlfaSat(235)] as [number, number, number, number],
       stroked: true,
-      getLineColor: escuro ? [17, 17, 17, 235] : [255, 255, 255, 235],
+      getLineColor: [...(escuro ? [17, 17, 17] as RGB : [255, 255, 255] as RGB), comAlfaSat(235)] as [number, number, number, number],
       lineWidthUnits: "pixels",
       getLineWidth: 1,
+      updateTriggers: { getFillColor: [escuro, mostrarSatelite], getLineColor: [escuro, mostrarSatelite] },
     });
     const capitalRotulos = new TextLayer<Capital & { x: number; y: number }>({
       id: "capitais-rotulos",
@@ -651,13 +663,13 @@ export function MapaAtlas({
       characterSet: "auto",
       fontSettings: { sdf: true },
       outlineWidth: 3,
-      outlineColor: escuro ? [13, 13, 13, 255] : [249, 249, 247, 255],
-      getColor: escuro ? [237, 235, 228, 255] : [26, 26, 24, 255],
+      outlineColor: [...(escuro ? [13, 13, 13] as RGB : [249, 249, 247] as RGB), comAlfaSat(255)] as [number, number, number, number],
+      getColor: [...(escuro ? [237, 235, 228] as RGB : [26, 26, 24] as RGB), comAlfaSat(255)] as [number, number, number, number],
       getTextAnchor: "start",
       getAlignmentBaseline: "center",
       getPixelOffset: [7, 0],
       fontWeight: 600,
-      updateTriggers: { getColor: [escuro], outlineColor: [escuro] },
+      updateTriggers: { getColor: [escuro, mostrarSatelite], outlineColor: [escuro, mostrarSatelite] },
     });
 
     return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos, setas,
