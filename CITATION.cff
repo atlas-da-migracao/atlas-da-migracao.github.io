@@ -3,11 +3,11 @@ message: "Se você usar este atlas, seus dados ou seu código, cite-o desta form
 title: "Atlas da migração interna no Brasil"
 type: dataset
 authors:
-  - family-names: "Pessini"
+  - family-names: "Pessini Sobreira"
     given-names: "Daniel"
     orcid: "https://orcid.org/0000-0002-6632-3991"
 year: 2026
-version: "2026-09-06"
+version: "2026-09-17"
 url: "https://atlas-da-migracao.github.io"
 repository-code: "https://github.com/atlas-da-migracao/atlas-da-migracao.github.io"
 license: "CC-BY-4.0"
@@ -18,33 +18,38 @@ identifiers:
     description: "DOI conceitual: resolve sempre para a versão mais recente. Use esta para citar o projeto em geral."
   - type: doi
     value: "10.5281/zenodo.22469792"
-    description: "DOI da versão v1.0.0 (esta release)."
+    description: "DOI da versão v1.0.0 (2026-09-06, só o Censo 2022)."
 keywords:
   - migração interna
-  - censo 2022
+  - censo demográfico
   - ibge
   - demografia
   - brasil
   - migração de retorno
   - deslocamento pendular
   - regiões metropolitanas
+  - análise comparativa entre censos
 abstract: >-
   Atlas interativo dos fluxos de migração interna, deslocamento pendular e do módulo
-  metropolitano do Brasil no quinquênio 2017-2022, a partir do quesito de migração de
-  data fixa dos microdados da amostra do Censo Demográfico 2022 do IBGE (acesso
-  controlado). Publica indicadores e fluxos agregados, já aprovados por um gate de
-  controle estatístico de revelação, por município, região imediata, região
-  intermediária, UF e região metropolitana/RIDE.
+  metropolitano do Brasil, cobrindo cinco edições do Censo Demográfico (1980, 1991,
+  2000, 2010 e 2022), a partir dos microdados da amostra do IBGE (acesso controlado;
+  1980 via fonte secundária pública, com proxy de data fixa). Publica indicadores e
+  fluxos agregados, já aprovados por um gate de controle estatístico de revelação, por
+  município, região imediata, região intermediária, UF e região metropolitana/RIDE, e
+  uma seção de análise comparativa entre censos ("Ao longo dos censos") com medidas do
+  sistema (CMI, SMI, MEI agregado, ANMR, β de Fielding, D de Duncan) e tipologia de
+  rotatividade/absorção/evasão.
 preferred-citation:
   type: dataset
   title: "Atlas da migração interna no Brasil"
   authors:
-    - family-names: "Pessini"
+    - family-names: "Pessini Sobreira"
       given-names: "Daniel"
       orcid: "https://orcid.org/0000-0002-6632-3991"
   year: 2026
   url: "https://atlas-da-migracao.github.io"
   doi: "10.5281/zenodo.22469791"
   notes: >-
-    Dados do Censo Demográfico 2022 (IBGE), microdados da amostra (acesso controlado).
-    Versão dos dados indicada no site em /dados/ e em data/processed/meta.json.
+    Dados dos Censos Demográficos 1980-2022 (IBGE), microdados da amostra (acesso
+    controlado; 1980 via fonte secundária pública). Versão dos dados indicada no site
+    em /dados/ e em data/processed/meta.json.

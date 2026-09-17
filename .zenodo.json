@@ -1,21 +1,23 @@
 {
-  "title": "Atlas da migração interna no Brasil — Censo Demográfico 2022 (migração de data fixa 2017–2022)",
+  "title": "Atlas da migração interna no Brasil — Censos Demográficos 1980–2022",
   "upload_type": "software",
-  "description": "<p>Atlas interativo e conjunto de dados agregados sobre a migração intermunicipal no Brasil entre 2017 e 2022, a partir do quesito de data fixa dos microdados da amostra do Censo Demográfico 2022 (IBGE, acesso controlado). Inclui saldos, taxas e índice de eficácia migratória para os 5.570 municípios, a matriz de fluxos origem→destino com perfil dos migrantes (status migratório, escolaridade, renda domiciliar per capita, idade e sexo), um módulo metropolitano com fluxos intrametropolitanos, deslocamento pendular para trabalho e estudo e o cruzamento entre migração e local de trabalho, além de páginas estáticas por unidade territorial.</p><p>Os microdados originais <strong>não</strong> estão incluídos e permanecem sob os termos de acesso controlado do IBGE. Todos os agregados passaram por controle estatístico de revelação (limiar mínimo de observações, supressão complementar, arredondamento e faixas de contagem amostral), documentado no repositório. As estimativas são de responsabilidade do autor, sujeitas a erro amostral, e podem divergir das tabulações oficiais do IBGE.</p><p>Código sob licença MIT; dados agregados e conteúdo textual sob CC BY 4.0, com atribuição ao IBGE como fonte primária. Site: <a href=\"https://atlas-da-migracao.github.io\">https://atlas-da-migracao.github.io</a>.</p>",
+  "description": "<p>Atlas interativo e conjunto de dados agregados sobre a migração intermunicipal no Brasil, cobrindo cinco edições do Censo Demográfico (1980, 1991, 2000, 2010 e 2022), a partir dos microdados da amostra (IBGE, acesso controlado; 1980 a partir de fonte secundária pública, com proxy de data fixa). Inclui saldos, taxas e índice de eficácia migratória para os municípios de cada edição, a matriz de fluxos origem→destino com perfil dos migrantes (status migratório, escolaridade, renda domiciliar per capita, idade e sexo), um módulo metropolitano com fluxos intrametropolitanos, deslocamento pendular para trabalho e estudo e o cruzamento entre migração e local de trabalho, páginas estáticas por unidade territorial, e uma nova seção de análise comparativa (\"Ao longo dos censos\") que lê as cinco edições juntas -- medidas do sistema (CMI, SMI, MEI agregado, ANMR, β de Fielding, D de Duncan), tipologia de rotatividade/absorção/evasão, e uma leitura simplificada do tipo de fluxo migratório predominante (curta/longa distância × intra/interestadual) -- sem amálgama de municípios (AMC): a base territorial de 2022 é comparada retroativamente, com genealogia municipal como metadado.</p><p>Os microdados originais <strong>não</strong> estão incluídos e permanecem sob os termos de acesso controlado do IBGE. Todos os agregados passaram por controle estatístico de revelação (limiar mínimo de observações, supressão complementar, arredondamento e faixas de contagem amostral), documentado no repositório. As estimativas são de responsabilidade do autor, sujeitas a erro amostral, e podem divergir das tabulações oficiais do IBGE.</p><p>Código sob licença MIT; dados agregados e conteúdo textual sob CC BY 4.0, com atribuição ao IBGE como fonte primária. Site: <a href=\"https://atlas-da-migracao.github.io\">https://atlas-da-migracao.github.io</a>.</p>",
   "creators": [
-    { "name": "Pessini, Daniel" }
+    { "name": "Pessini Sobreira, Daniel", "orcid": "0000-0002-6632-3991" }
   ],
   "license": "CC-BY-4.0",
-  "access_right": "open",
+  "access_right": "restricted",
+  "access_conditions": "Tabulações agregadas derivadas de microdados de acesso controlado do IBGE (Censo Demográfico 2022). Acesso temporariamente restrito enquanto se confirma a modalidade de disseminação com o IBGE -- ver a nota do registro. Solicitações de acesso são avaliadas caso a caso pelo autor.",
   "language": "por",
   "keywords": [
-    "migração interna", "migração intermunicipal", "Censo Demográfico 2022", "IBGE", "data fixa",
+    "migração interna", "migração intermunicipal", "censo demográfico", "IBGE", "data fixa",
     "saldo migratório", "fluxos migratórios", "deslocamento pendular", "regiões metropolitanas",
-    "demografia", "Brasil", "internal migration", "census", "commuting", "Brazil"
+    "análise comparativa entre censos", "demografia", "Brasil",
+    "internal migration", "census", "commuting", "Brazil"
   ],
   "related_identifiers": [
     { "identifier": "https://atlas-da-migracao.github.io", "relation": "isSupplementedBy", "resource_type": "other", "scheme": "url" },
     { "identifier": "https://www.ibge.gov.br/estatisticas/sociais/populacao/22827-censo-demografico-2022.html", "relation": "isDerivedFrom", "resource_type": "dataset", "scheme": "url" }
   ],
-  "notes": "Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado). O arquivo depositado contém o código do pipeline e do front-end, os agregados publicados (data/processed) e a documentação metodológica; não contém microdados."
+  "notes": "Fonte primária: IBGE, Censos Demográficos 1980-2022, microdados da amostra (acesso controlado; 1980 via fonte secundária pública). O arquivo depositado contém o código do pipeline e do front-end, os agregados publicados (data/processed, incluindo a série comparativa entre censos) e a documentação metodológica; não contém microdados. Nota (setembro de 2026): acesso aos arquivos temporariamente restrito por precaução, aguardando confirmação do IBGE sobre a modalidade de disseminação; a resposta recebida (protocolo 20260906003) já autoriza a disseminação de agregados municipais com mapas, condicionada ao controle estatístico de confidencialidade já implementado (gate R1-R9). Este registro não é um produto do IBGE."
 }
