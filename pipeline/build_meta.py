@@ -37,7 +37,7 @@ def _maior_fluxo(ed) -> int:
 # têm suas próprias (pipeline/build_paginas.py), mantidas em sincronia manualmente.
 DOI_CONCEITO = "10.5281/zenodo.22469791"  # resolve sempre para a versão mais recente
 DOI_VERSAO = "10.5281/zenodo.22469792"    # esta versão (v1.0.0)
-AUTOR_NOME = "Daniel Pessini"
+AUTOR_NOME = "Daniel Pessini Sobreira"
 AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
 
 ROTULOS = {

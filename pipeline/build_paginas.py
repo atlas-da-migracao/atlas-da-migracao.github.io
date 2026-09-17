@@ -45,7 +45,7 @@ DESCRICAO_SITE = ("Saldos e fluxos migratórios entre os municípios brasileiros
 # licenças do projeto -- dados/conteúdo em CC BY 4.0 (com atribuição obrigatória ao IBGE
 # como fonte primária) e código em MIT. O DOI é um placeholder explícito até a publicação
 # no Zenodo (não inventar um número).
-AUTOR_NOME = "Daniel Pessini"
+AUTOR_NOME = "Daniel Pessini Sobreira"
 AUTOR_GITHUB_USER = "Damnielps"
 AUTOR_GITHUB_URL = f"https://github.com/{AUTOR_GITHUB_USER}"
 AUTOR_EMAIL_PUBLICO = "129672935+Damnielps@users.noreply.github.com"
@@ -60,7 +60,7 @@ DOI_PLACEHOLDER = f"https://doi.org/{DOI_CONCEITO}"  # usado no texto de "como c
 AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
 ATRIBUICAO_PADRAO = (
     "Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso "
-    "controlado). Estimativas: Daniel Pessini, Atlas da migração interna no Brasil."
+    "controlado). Estimativas: Daniel Pessini Sobreira, Atlas da migração interna no Brasil."
 )
 
 # ============================== metadados públicos ==============================

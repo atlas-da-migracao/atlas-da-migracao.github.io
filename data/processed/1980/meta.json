@@ -98,13 +98,13 @@
     }
   },
   "citacao": {
-    "autor": "Daniel Pessini",
+    "autor": "Daniel Pessini Sobreira",
     "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
     "doi_conceito": "10.5281/zenodo.22469791",
     "doi_versao": "10.5281/zenodo.22469792",
     "licenca": "CC BY 4.0",
     "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
-    "texto": "Daniel Pessini. Atlas da migração interna no Brasil. Dados do Censo Demográfico 1980 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
+    "texto": "Daniel Pessini Sobreira. Atlas da migração interna no Brasil. Dados do Censo Demográfico 1980 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
   },
   "aviso": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 1980 (IBGE, dados públicos), sujeitas a controle estatístico de revelação, publicadas sem estimativa de erro amostral (a fonte não permite calculá-lo); podem divergir das tabulações oficiais do IBGE (SIDRA).",
   "aviso_proxy": "Esta edição não tem quesito de data fixa: a migração é um proxy (tempo de residência no município + município de residência anterior), calibrado contra a data fixa do Censo 1991. Ele capta 100% dos migrantes, acerta a origem municipal de 89% deles e reproduz as taxas líquidas com correlação de 0,98; em troca, infla o volume em cerca de 7%, atenua os saldos em 6% a 9% e subestima a migração interestadual em cerca de 2 pontos percentuais. Como a calibração foi feita em 1991, esses desvios são um piso. Entre edições, compare composição, direção e hierarquia dos fluxos — não o nível.",

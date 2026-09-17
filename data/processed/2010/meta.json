@@ -110,13 +110,13 @@
     }
   },
   "citacao": {
-    "autor": "Daniel Pessini",
+    "autor": "Daniel Pessini Sobreira",
     "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
     "doi_conceito": "10.5281/zenodo.22469791",
     "doi_versao": "10.5281/zenodo.22469792",
     "licenca": "CC BY 4.0",
     "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
-    "texto": "Daniel Pessini. Atlas da migração interna no Brasil. Dados do Censo Demográfico 2010 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
+    "texto": "Daniel Pessini Sobreira. Atlas da migração interna no Brasil. Dados do Censo Demográfico 2010 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
   },
   "aviso": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 2010 (IBGE, dados públicos), sujeitas a controle estatístico de revelação e a erro amostral; podem divergir das tabulações oficiais do IBGE (SIDRA).",
   "aviso_proxy": null,

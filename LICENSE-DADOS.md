@@ -20,7 +20,7 @@ apropriada**, indique se houve alterações, e forneça um link para a licença.
 Texto de atribuição padrão (usado em todas as páginas do site):
 
 > Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso
-> controlado). Estimativas: Daniel Pessini, Atlas da migração interna no Brasil.
+> controlado). Estimativas: Daniel Pessini Sobreira, Atlas da migração interna no Brasil.
 
 Para citação formal, ver `CITATION.cff` e a seção "Como citar" do `README.md`.
 

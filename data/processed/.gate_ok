@@ -1,5 +1,6 @@
 {
   "arquivos": {
+    ".DS_Store": "8c367ea738850c4a656693fa7bfaf5f80bdbb72b201594604e14540874c8cebd",
     "fluxos.parquet": "62803324eeeaae0cb0a26ac52a6d1210dabaef83a08639567485853e6422f5b1",
     "fluxos_rgi.parquet": "07e0d91abc121704be8ccc28d6a41625dca88960319b3f5d9671d59a01e4a960",
     "fluxos_rgint.parquet": "cff1994e80f6008cad0c8950c54c1b1c676deb7dd9e2ba19a3739fae68e069d0",
@@ -17,7 +18,7 @@
     "geo/rgint_albers.topojson": "20b62b6b28443a66ab7e88d09d6a8188bfd5c350c8a517cfae3c701b6ee2594f",
     "geo/uf.topojson": "7089399a5a52e409e5b1e02b062c00540984bce6bfbd1160bc9d962c138fe06f",
     "geo/uf_albers.topojson": "5c275f81b86eccde7fb19bf81a8e372dd24838bee40754161b9a05ec264b100a",
-    "meta.json": "ddd06b055a7be51098cdc9df790ed1c77961320b5a8d9358cb724ec1ddc048a0",
+    "meta.json": "df5f876d83c77ef8e48f7e1bfb9e3df63b099e38cbf40a80cdf695425db1b768",
     "municipios.parquet": "87303103cc5e021d6bf5988bfc9050ad79fb1bf4553e3878f4e6e98f2c2e76f9",
     "municipios_dim.parquet": "2808d9c810ecd638fcc9a429fe6022c3e979b97044904f25defd409879529513",
     "municipios_mapa.json": "078a956408b976e3a2ef101cbff4333a577b0ef6306f88361edc06622dadf7fe",
@@ -35,6 +36,6 @@
     "rm_resumo.parquet": "6fe6f87faf404e471dfce86770e0f913ce0af05086d293e586585f33c6e828ca"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-16T17:28:38.561538",
-  "versao_dados": "2026-09-16c"
+  "timestamp": "2026-09-17T16:10:11.720127",
+  "versao_dados": "2026-09-17"
 }

@@ -36,7 +36,7 @@ function fakeMeta(censo: Censo): Meta {
     },
     rotulos: { status: { nao_natural: "Não nasceu no município nem no exterior" } },
     citacao: {
-      autor: "Daniel Pessini", autor_orcid: "https://orcid.org/0000-0002-6632-3991",
+      autor: "Daniel Pessini Sobreira", autor_orcid: "https://orcid.org/0000-0002-6632-3991",
       doi_conceito: "10.5281/zenodo.22469791", doi_versao: "10.5281/zenodo.22469792",
       licenca: "CC BY 4.0", licenca_url: "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
       texto: "",
