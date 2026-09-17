@@ -93,10 +93,18 @@ def _parse_municipios_ods(filepath):
     return municipios
 
 
-# Caminho do arquivo ODS
+# Caminho do arquivo ODS -- fonte pública do IBGE (divisão territorial, não microdado), mas
+# vive dentro do symlink `data/raw2010`, presente só na máquina do titular do acesso. Em
+# qualquer outro clone (CI, colaborador sem os microdados) o arquivo não existe: o parse
+# fica vazio em vez de derrubar o import, e quem usa `MUNICIPIOS_2010` decide o que fazer
+# (ver `pipeline/tests/test_edicao_2010.py`, que pula os testes quando o dicionário está vazio).
 _div_ods = Path(__file__).parent.parent / "data/raw2010/Documentaá∆o/Divis∆o Territorial do Brasil/Unidades da Federaá∆o, Mesorregi‰es, microrregi‰es e munic°pios 2010.ods"
-MUNICIPIOS_2010 = _parse_municipios_ods(_div_ods)
-"""Dicionário de municípios do Censo 2010. Mapeamento: cod_7dig -> info_dict."""
+try:
+    MUNICIPIOS_2010 = _parse_municipios_ods(_div_ods)
+except FileNotFoundError:
+    MUNICIPIOS_2010 = {}
+"""Dicionário de municípios do Censo 2010. Mapeamento: cod_7dig -> info_dict. Vazio se
+`data/raw2010` não estiver disponível nesta máquina."""
 
 
 if __name__ == "__main__":

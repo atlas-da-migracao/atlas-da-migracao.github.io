@@ -18,6 +18,13 @@ sys.path.insert(0, str(ROOT / "pipeline"))
 import labels_2010  # noqa: E402
 from edicoes import edicao as get_edicao  # noqa: E402
 
+if not labels_2010.MUNICIPIOS_2010:
+    # `data/raw2010` (fonte pública do IBGE, divisão territorial) não está disponível nesta
+    # máquina -- CI e clones sem os microdados nunca têm esse symlink. Achado em produção
+    # (2026-09-17): sem este guard, `import labels_2010` derruba a coleta do pytest inteira
+    # (erro antes de qualquer `pytest.skip` rodar), o que quebrava o CI de publicação.
+    pytest.skip("data/raw2010 indisponível nesta máquina -- rótulos do Censo 2010 não carregados", allow_module_level=True)
+
 ED = get_edicao("2010")
 INTERIM = ROOT / ED.interim
 PROCESSED = ROOT / ED.processed
