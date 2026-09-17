@@ -129,6 +129,43 @@ export function classificarIem(
   return forte ? "evasao_forte" : "evasao";
 }
 
+/** Tipo de fluxo migratório predominante: leitura simplificada e legível que combina as duas
+ *  medidas de alcance já publicadas no Bloco 1 -- distância média (`distancia_media`, em METROS)
+ *  e % que cruza a UF (`pct_interestadual`) -- num único rótulo categórico, em vez de dois
+ *  números lidos separadamente. Não é uma nova estimativa a partir de microdados: é só uma
+ *  classificação de exibição sobre valores já calculados e já auditados.
+ *
+ *  Limiares fixos, editoriais (não calibrados estatisticamente contra a distribuição dos
+ *  municípios) -- documentados no glossário (`tipo_fluxo_predominante`):
+ *  - `LIMIAR_DISTANCIA_LONGA_KM = 200`: acima disso, "longa distância"; abaixo, "curta distância".
+ *  - `LIMIAR_INTERESTADUAL_PCT = 50`: maioria simples do volume cruzando UF = "interestadual"
+ *    predominante; do contrário, "intraestadual" predominante. Esta parte não é arbitrária --
+ *    é maioria de um total que já soma 100%. */
+export const LIMIAR_DISTANCIA_LONGA_KM = 200;
+export const LIMIAR_INTERESTADUAL_PCT = 50;
+
+export type TipoFluxoPredominante = "curta_intra" | "curta_inter" | "longa_intra" | "longa_inter";
+
+export const ROTULO_TIPO_FLUXO: Record<TipoFluxoPredominante, string> = {
+  curta_intra: "Curta distância, intraestadual",
+  curta_inter: "Curta distância, interestadual",
+  longa_intra: "Longa distância, intraestadual",
+  longa_inter: "Longa distância, interestadual",
+};
+
+export function tipoFluxoPredominante(
+  distanciaMediaMetros: number | null | undefined,
+  pctInterestadual: number | null | undefined,
+): { chave: TipoFluxoPredominante; rotulo: string } | null {
+  if (distanciaMediaMetros == null || pctInterestadual == null) return null;
+  const longa = distanciaMediaMetros / 1000 >= LIMIAR_DISTANCIA_LONGA_KM;
+  const interestadual = pctInterestadual >= LIMIAR_INTERESTADUAL_PCT;
+  const chave: TipoFluxoPredominante = longa
+    ? (interestadual ? "longa_inter" : "longa_intra")
+    : (interestadual ? "curta_inter" : "curta_intra");
+  return { chave, rotulo: ROTULO_TIPO_FLUXO[chave] };
+}
+
 // --------------------------------------------------------------------------------------
 // Harmonização de vocabulário (porte parcial: só `status`, o único usado hoje pelo front)
 // --------------------------------------------------------------------------------------

@@ -3,13 +3,15 @@
  *  do país e os três achados-chave já validados na pesquisa (números fixos, checados
  *  contra a metodologia -- não uma consulta ao vivo, porque cruzam bases distintas). */
 import { useEffect, useState } from "react";
-import { capaBrasil, maioresFluxos, type CapaBrasil } from "../db/queries";
+import { alcanceNacional, capaBrasil, maioresFluxos, type CapaBrasil } from "../db/queries";
 import type { Fluxo, Meta } from "../lib/types";
 import { num, num1 } from "../lib/format";
 import { rotuloRecorte } from "../lib/paletas";
 import { useStore } from "../state/store";
 import { edicao } from "../lib/edicoes";
 import { AvisoProxy } from "./AvisoProxy";
+import { tipoFluxoPredominante } from "../lib/serie";
+import { Termo } from "./Termo";
 
 interface Props {
   aoSelecionarFluxo: (o: string, d: string) => void;
@@ -21,6 +23,7 @@ interface Props {
 export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props) {
   const [capa, setCapa] = useState<CapaBrasil | null>(null);
   const [top5, setTop5] = useState<Fluxo[]>([]);
+  const [alcance, setAlcance] = useState<{ distancia_media: number | null; pct_interestadual: number | null } | null>(null);
   const censo = useStore((s) => s.censo);
   const irPara = useStore((s) => s.irPara);
   const ed = edicao(censo);
@@ -32,6 +35,13 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
     let vivo = true;
     setCapa(null);
     capaBrasil().then((c) => { if (vivo) setCapa(c); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [censo]);
+
+  useEffect(() => {
+    let vivo = true;
+    setAlcance(null);
+    alcanceNacional().then((a) => { if (vivo) setAlcance(a); }).catch(() => {});
     return () => { vivo = false; };
   }, [censo]);
 
@@ -71,6 +81,16 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
           </p>
         </>
       )}
+
+      {(() => {
+        const tipo = alcance ? tipoFluxoPredominante(alcance.distancia_media, alcance.pct_interestadual) : null;
+        return tipo && (
+          <p className="muted-pequeno">
+            <Termo chave="tipo_fluxo_predominante">Padrão migratório predominante no país</Termo>:
+            {" "}<strong>{tipo.rotulo.toLowerCase()}</strong>.
+          </p>
+        );
+      })()}
 
       {top5.length > 0 && (
         <section className="secao">

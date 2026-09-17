@@ -121,6 +121,16 @@ export const GLOSSARIO: Record<string, TermoGlossario> = {
       "É uma aplicação simplificada de Plane e Mulligan (1997): o índice é calculado com a fórmula de Gini sobre o vetor de volumes por parceiro da unidade, e não na forma matricial completa do artigo original, que mede o foco espacial do sistema inteiro. Além disso, entra na conta apenas o que é publicado: a cauda de pares pequenos suprimida por sigilo (cerca de 30% do volume, em todas as edições) fica de fora.",
   },
 
+  tipo_fluxo_predominante: {
+    termo: "Tipo de fluxo migratório predominante",
+    definicao:
+      "Leitura simplificada que combina as duas medidas de alcance geográfico acima -- distância média e % que cruza a UF -- num único rótulo: curta ou longa distância, cruzada com intraestadual ou interestadual (ex.: “longa distância, intraestadual”, típico de um estado de território extenso).",
+    interpretacao:
+      "Não é uma medida nova: é uma forma de ler as duas de uma vez, sem abrir os dois números separadamente. “Longa distância” é distância média igual ou maior que 200 km; “interestadual” é quando pelo menos metade do volume de migração cruza a fronteira do estado (maioria simples). As quatro combinações aparecem na prática: “curta distância, interestadual” é comum perto de divisas estaduais; “longa distância, intraestadual” é comum em estados de grande extensão territorial.",
+    limitacoes:
+      "Os dois cortes (200 km e 50%) são editoriais, escolhidos pela legibilidade do rótulo, não calibrados estatisticamente contra a distribuição dos municípios -- uma unidade com distância média de 199 km e outra com 201 km caem em classes diferentes por uma margem pequena. Herda todas as ressalvas de distância média e de % que cruza a UF, incluindo a supressão da cauda de pares pequenos e a aproximação de 1980.",
+  },
+
   // -------------------------------------------------------------------------------------
   // Bloco 2 — medidas do sistema (o conjunto de unidades de um nível)
   // -------------------------------------------------------------------------------------

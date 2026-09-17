@@ -287,6 +287,31 @@ export const capaBrasil = () =>
            COUNT(*) AS n_municipios
     FROM municipios`).then((r) => r[0] ?? null);
 
+export interface AlcanceNacional { distancia_media: number | null; pct_interestadual: number | null }
+
+/** Distância média ponderada e % interestadual do país inteiro (todos os pares de `fluxos`,
+ *  exceto autoloop), na mesma fórmula de `pipeline/medidas.py::distancia_media_ponderada` e
+ *  `pct_interestadual` -- aqui recalculada no navegador porque essas duas medidas só são
+ *  publicadas por unidade (município etc.), não como agregado nacional único. Alimenta
+ *  `lib/serie.ts::tipoFluxoPredominante` na capa nacional (mesma tipologia do Bloco 1 de
+ *  "Ao longo dos censos"). `distancia_media` sai em METROS, como no restante do atlas. */
+export const alcanceNacional = () =>
+  consultar<AlcanceNacional>(`
+    WITH cent AS (SELECT cd_mun, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')),
+    f AS (
+      SELECT fl.total, ro.uf AS uf_o, rd.uf AS uf_d,
+             SQRT(POWER(co.x_albers - cd_.x_albers, 2) + POWER(co.y_albers - cd_.y_albers, 2)) AS dist
+      FROM fluxos fl
+      JOIN municipios_ref ro ON ro.cd_mun = fl.origem
+      JOIN municipios_ref rd ON rd.cd_mun = fl.destino
+      JOIN cent co ON co.cd_mun = fl.origem
+      JOIN cent cd_ ON cd_.cd_mun = fl.destino
+      WHERE fl.origem <> fl.destino
+    )
+    SELECT SUM(total * dist) / NULLIF(SUM(total), 0) AS distancia_media,
+           100.0 * SUM(CASE WHEN uf_o <> uf_d THEN total ELSE 0 END) / NULLIF(SUM(total), 0) AS pct_interestadual
+    FROM f`).then((r) => r[0] ?? null);
+
 /** Maiores fluxos entre UFs, para a matriz de acordes. */
 export const fluxosEntreUFs = () =>
   consultar<{ origem: string; destino: string; total: number }>(`

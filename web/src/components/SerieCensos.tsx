@@ -17,7 +17,7 @@ import {
 } from "../db/queries";
 import {
   classificarIem, edicaoAnterior, filtrarEdicoes, fraseSintese, harmonizarStatus, rotuloEdicao,
-  rotuloIntervalo, tramaDoEstado, PALAVRA_ESTADO,
+  rotuloIntervalo, tipoFluxoPredominante, tramaDoEstado, PALAVRA_ESTADO,
   type EdicaoSerie, type EntradaFrase, type EstadoCelula, type NivelSerie, type PontoFrase,
 } from "../lib/serie";
 import { num, num1, num2, sinal } from "../lib/format";
@@ -30,9 +30,9 @@ import { GraficosSistema } from "./GraficosSistema";
  *  O conteúdo vem de `lib/glossario.ts` (fonte única do projeto) -- não duplicar texto aqui. */
 const CHAVES_GLOSSARIO_SERIE = [
   "saldo", "taxa_liquida", "eficacia_iem", "rotatividade", "distancia_media",
-  "pct_interestadual", "gini", "cmi", "smi", "mei_agregado", "anmr", "beta_fielding",
-  "duncan_d", "n_unidades", "posto", "cv", "precisao", "n_faixa", "status_migratorio",
-  "escolaridade", "renda_domiciliar", "idade_sexo",
+  "pct_interestadual", "gini", "tipo_fluxo_predominante", "cmi", "smi", "mei_agregado", "anmr",
+  "beta_fielding", "duncan_d", "n_unidades", "posto", "cv", "precisao", "n_faixa",
+  "status_migratorio", "escolaridade", "renda_domiciliar", "idade_sexo",
 ] as const;
 
 
@@ -174,6 +174,32 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
                 </tr>
               );
             })}
+            <tr>
+              <td><Termo chave="tipo_fluxo_predominante">Tipo de fluxo predominante</Termo></td>
+              <td className="serie-spark-cel">—</td>
+              {edicoes.map((e) => {
+                const l = porEdicao.get(e);
+                const estado = estadoDoPonto(l);
+                if (estado !== "numero") {
+                  const trama = tramaDoEstado(estado);
+                  return (
+                    <td key={e} className={`serie-celula-vazia${trama ? ` trama-${trama}` : ""}`}>
+                      {PALAVRA_ESTADO[estado]}
+                    </td>
+                  );
+                }
+                const tipo = tipoFluxoPredominante(l?.distancia_media, l?.pct_interestadual);
+                if (!tipo) {
+                  return (
+                    <td key={e} className="serie-celula-vazia trama-cruzada"
+                        title="Não foi possível calcular esta medida para esta unidade/edição.">
+                      não publicado
+                    </td>
+                  );
+                }
+                return <td key={e}>{tipo.rotulo}</td>;
+              })}
+            </tr>
           </tbody>
         </table>
       </div>
