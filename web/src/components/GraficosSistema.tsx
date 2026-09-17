@@ -25,7 +25,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as Plot from "@observablehq/plot";
 import { serieCourgeau } from "../db/queries";
-import { EDICOES_SERIE, rotuloEdicao, type EdicaoSerie, type NivelSerie } from "../lib/serie";
+import { rotuloEdicao, rotuloIntervalo, slotEdicao, type EdicaoSerie, type NivelSerie } from "../lib/serie";
 import { AZUL, cor as corDaPaleta } from "../lib/paletas";
 import { num, num2 } from "../lib/format";
 import { baixarCSV, baixarSvgComoPng } from "../lib/exportar";
@@ -83,7 +83,7 @@ function normalizar(linhas: Record<string, unknown>[]): LinhaSistema[] {
 }
 
 /** (a) Plano MEI×CMI com trajetória, seção 3.2-a. 420x320px. */
-function PlanoMeiCmi({ linhas }: { linhas: LinhaSistema[] }) {
+function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: readonly EdicaoSerie[] }) {
   const pontos = linhas.filter((l) => l.cmi != null && l.mei != null);
   const { containerRef, svgRef } = useFigura(() => {
     if (pontos.length === 0) return null;
@@ -97,12 +97,15 @@ function PlanoMeiCmi({ linhas }: { linhas: LinhaSistema[] }) {
         .map((cmi) => ({ cmi, mei: (100 * k) / cmi, k }))
         .filter((p) => p.mei <= meiMax);
     });
-    // segmento 1980->1991 tracejado (proxy), separado do resto (sólido) -- Plot.line não
-    // aceita um acessor por-segmento para strokeDasharray, então a linha é desenhada em duas
-    // séries: os dois primeiros pontos (tracejado) e o restante (sólido), com o ponto de 1991
-    // repetido nas duas para não deixar um vão na trajetória.
-    const segmentoProxy = pontos.filter((p) => p.edicao === "1980" || p.edicao === "1991");
-    const segmentoResto = pontos.filter((p) => p.edicao !== "1980");
+    // segmento 1980->edição seguinte tracejado (proxy), separado do resto (sólido) -- Plot.line
+    // não aceita um acessor por-segmento para strokeDasharray, então a linha é desenhada em
+    // duas séries: os dois primeiros pontos (tracejado) e o restante (sólido), com o ponto
+    // seguinte repetido nas duas para não deixar um vão na trajetória. Só existe segmento
+    // tracejado quando o PRIMEIRO ponto da trajetória é "1980" -- se 1980 não está marcada,
+    // não há trecho de proxy a destacar (não há segmento órfão).
+    const primeiroEhProxy = pontos.length > 0 && pontos[0].edicao === "1980";
+    const segmentoProxy = primeiroEhProxy ? pontos.slice(0, 2) : [];
+    const segmentoResto = primeiroEhProxy ? pontos.slice(1) : pontos;
     return Plot.plot({
       width: 420, height: 320, marginRight: 40,
       x: { label: "CMI (%) →", domain: [0, cmiMax] },
@@ -138,7 +141,8 @@ function PlanoMeiCmi({ linhas }: { linhas: LinhaSistema[] }) {
       <BotoesExportar nome="plano-mei-cmi" svgRef={svgRef} linhas={() => pontos.map((p) => ({ ...p }))} />
       <p className="muted-pequeno">
         A intensidade (CMI) cresce com o número de unidades; parte do deslocamento para a
-        direita entre 1980 e 2022 é malha mais fina, não comportamento — ver figura de Courgeau.
+        direita entre {rotuloIntervalo(edicoes)} é malha mais fina, não comportamento — ver
+        figura de Courgeau.
       </p>
     </figure>
   );
@@ -146,7 +150,7 @@ function PlanoMeiCmi({ linhas }: { linhas: LinhaSistema[] }) {
 
 /** (b) Dispersão de Fielding -- ver desvio documentado no cabeçalho do arquivo: sem nuvem de
  *  pontos por unidade (dado não publicado ao front), só β±erro-padrão e leitura em palavras. */
-function DispersaoFielding({ linhas }: { linhas: LinhaSistema[] }) {
+function DispersaoFielding({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: readonly EdicaoSerie[] }) {
   const leitura = (beta: number | null, ep: number | null): string => {
     if (beta == null || ep == null) return "sem dado";
     if (Math.abs(beta) < 2 * ep) return "equilíbrio";
@@ -174,9 +178,10 @@ function DispersaoFielding({ linhas }: { linhas: LinhaSistema[] }) {
       />
       <p className="muted-pequeno">
         Reta ajustada por MQO ponderado por população sobre as unidades existentes em cada
-        edição. Em 1980 a taxa líquida é proxy. A nuvem de pontos por unidade não está
-        publicada ao front nesta fase (depende de publicar população/área por unidade em
-        `data/processed/series` -- decisão de pipeline/metodologia fora de escopo aqui).
+        edição.{edicoes.includes("1980") && " Em 1980 a taxa líquida é proxy."} A nuvem de
+        pontos por unidade não está publicada ao front nesta fase (depende de publicar
+        população/área por unidade em `data/processed/series` -- decisão de pipeline/
+        metodologia fora de escopo aqui).
       </p>
     </figure>
   );
@@ -184,24 +189,25 @@ function DispersaoFielding({ linhas }: { linhas: LinhaSistema[] }) {
 
 /** (c) Figura de Courgeau -- CMI de todos os níveis, na mesma edição, 5 linhas (uma por
  *  edição). 360x240px. */
-function FiguraCourgeau({ nivelAtivo }: { nivelAtivo: NivelSerie }) {
+function FiguraCourgeau({ nivelAtivo, edicoes }: { nivelAtivo: NivelSerie; edicoes: readonly EdicaoSerie[] }) {
   const [porEdicao, setPorEdicao] = useState<Record<EdicaoSerie, { nivel: NivelSerie; n_unidades: number; cmi: number | null }[]>>(
     {} as Record<EdicaoSerie, { nivel: NivelSerie; n_unidades: number; cmi: number | null }[]>,
   );
   useEffect(() => {
     let vivo = true;
-    Promise.all(EDICOES_SERIE.map((e) => serieCourgeau(e).then((r) => [e, r] as const))).then((resultados) => {
+    Promise.all(edicoes.map((e) => serieCourgeau(e).then((r) => [e, r] as const))).then((resultados) => {
       if (!vivo) return;
       const obj = Object.fromEntries(resultados) as typeof porEdicao;
       setPorEdicao(obj);
     }).catch(() => {});
     return () => { vivo = false; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edicoes.join(",")]);
 
-  const dados = useMemo(() => EDICOES_SERIE.flatMap((e) =>
+  const dados = useMemo(() => edicoes.flatMap((e) =>
     (porEdicao[e] ?? []).filter((l) => l.cmi != null && l.n_unidades > 0)
       .map((l) => ({ ...l, edicao: e, log_n: Math.log10(l.n_unidades) })),
-  ), [porEdicao]);
+  ), [porEdicao, edicoes]);
 
   const { containerRef, svgRef } = useFigura(() => {
     if (dados.length === 0) return null;
@@ -213,15 +219,15 @@ function FiguraCourgeau({ nivelAtivo }: { nivelAtivo: NivelSerie }) {
       marks: [
         Plot.line(dados, {
           x: "log_n", y: "cmi", z: "edicao", curve: "linear",
-          stroke: (d) => corDaPaleta(AZUL(EDICOES_SERIE.indexOf(d.edicao)), false),
+          stroke: (d) => corDaPaleta(AZUL(slotEdicao(d.edicao)), false),
         }),
         Plot.dot(dados, {
           x: "log_n", y: "cmi",
-          fill: (d) => corDaPaleta(AZUL(EDICOES_SERIE.indexOf(d.edicao)), false),
+          fill: (d) => corDaPaleta(AZUL(slotEdicao(d.edicao)), false),
           r: (d) => (d.nivel === nivelAtivo ? 4 : 2.5),
         }),
         Plot.text(
-          EDICOES_SERIE.map((e) => dados.filter((d) => d.edicao === e).sort((a, b) => b.log_n - a.log_n)[0])
+          edicoes.map((e) => dados.filter((d) => d.edicao === e).sort((a, b) => b.log_n - a.log_n)[0])
             .filter((d): d is NonNullable<typeof d> => Boolean(d)),
           { x: "log_n", y: "cmi", text: "edicao", dx: 18, fontSize: 9 },
         ),
@@ -245,15 +251,16 @@ function FiguraCourgeau({ nivelAtivo }: { nivelAtivo: NivelSerie }) {
 interface Props {
   nivel: NivelSerie;
   linhasSistema: Record<string, unknown>[];
+  edicoes: readonly EdicaoSerie[];
 }
 
-export function GraficosSistema({ nivel, linhasSistema }: Props) {
+export function GraficosSistema({ nivel, linhasSistema, edicoes }: Props) {
   const linhas = useMemo(() => normalizar(linhasSistema), [linhasSistema]);
   return (
     <div className="serie-graficos-sistema">
-      <PlanoMeiCmi linhas={linhas} />
-      <DispersaoFielding linhas={linhas} />
-      <FiguraCourgeau nivelAtivo={nivel} />
+      <PlanoMeiCmi linhas={linhas} edicoes={edicoes} />
+      <DispersaoFielding linhas={linhas} edicoes={edicoes} />
+      <FiguraCourgeau nivelAtivo={nivel} edicoes={edicoes} />
     </div>
   );
 }

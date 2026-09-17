@@ -14,8 +14,8 @@ import {
   serieDaUnidade, serieDosPares, serieDoSistema, serieFilhosDoMunicipio, seriePerfil,
 } from "../db/queries";
 import {
-  EDICOES_SERIE, classificarIem, fraseSintese, harmonizarStatus, rotuloEdicao, tramaDoEstado,
-  PALAVRA_ESTADO,
+  classificarIem, edicaoAnterior, filtrarEdicoes, fraseSintese, harmonizarStatus, rotuloEdicao,
+  rotuloIntervalo, tramaDoEstado, PALAVRA_ESTADO,
   type EdicaoSerie, type EntradaFrase, type EstadoCelula, type NivelSerie, type PontoFrase,
 } from "../lib/serie";
 import { num, num1, num2, sinal } from "../lib/format";
@@ -119,8 +119,9 @@ const MEDIDAS_BLOCO1: MedidaTabela[] = [
   { chave: "gini_linha", rotulo: "Concentração origens (Gini)", unidade: "", campo: "gini_linha", formatar: num2 },
 ];
 
-function BlocoUnidade({ nivel, codigo, linhas, escuro }: {
+function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
   nivel: NivelSerie; codigo: string; linhas: LinhaUnidadeSerie[]; escuro: boolean;
+  edicoes: readonly EdicaoSerie[];
 }) {
   const porEdicao = new Map(linhas.map((l) => [l.edicao, l]));
   return (
@@ -132,12 +133,12 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro }: {
             <tr>
               <th>Medida</th>
               <th>tend.</th>
-              {EDICOES_SERIE.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}
+              {edicoes.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}
             </tr>
           </thead>
           <tbody>
             {MEDIDAS_BLOCO1.map((m) => {
-              const valores = EDICOES_SERIE.map((e) => {
+              const valores = edicoes.map((e) => {
                 const l = porEdicao.get(e);
                 const estado = estadoDoPonto(l);
                 const v = l ? (l[m.campo] as number | null) : null;
@@ -147,7 +148,7 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro }: {
                 <tr key={m.chave}>
                   <td>{m.rotulo}</td>
                   <LinhaSpark valores={valores} />
-                  {EDICOES_SERIE.map((e, i) => (
+                  {edicoes.map((e, i) => (
                     <Celula key={e} valor={valores[i]} estado={estadoDoPonto(porEdicao.get(e))}
                             formatar={m.formatar} />
                   ))}
@@ -158,21 +159,26 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro }: {
         </table>
       </div>
       <p className="muted-pequeno">
-        Coluna "tend." = sparkline 1980→2022. 1980 leva o selo de proxy (ver aviso no topo da seção).
+        Coluna "tend." = sparkline {rotuloIntervalo(edicoes)}.
+        {edicoes.includes("1980") && " 1980 leva o selo de proxy (ver aviso no topo da seção)."}
       </p>
-      <MapaSerieCensos nivel={nivel} codigo={codigo} escuro={escuro} />
+      <MapaSerieCensos nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} />
     </section>
   );
 }
 
-function BlocoSistema({ nivel }: { nivel: NivelSerie }) {
+function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly EdicaoSerie[] }) {
   const [linhas, setLinhas] = useState<Record<string, unknown>[] | null>(null);
   useEffect(() => {
     let vivo = true;
     serieDoSistema(nivel).then((r) => { if (vivo) setLinhas(r); }).catch(() => { if (vivo) setLinhas([]); });
     return () => { vivo = false; };
-  }, [nivel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nivel, edicoes.join(",")]);
   if (!linhas) return <p className="muted">Carregando o sistema…</p>;
+  const linhasFiltradas = filtrarEdicoes(
+    linhas as (Record<string, unknown> & { edicao: string })[], edicoes,
+  );
   return (
     <section className="secao serie-bloco" id="bloco-2" aria-labelledby="bloco-2-titulo">
       <h3 id="bloco-2-titulo">Bloco 2 · O sistema de {ROTULO_NIVEL[nivel]}s em que esta unidade está</h3>
@@ -180,10 +186,13 @@ function BlocoSistema({ nivel }: { nivel: NivelSerie }) {
         Estes números descrevem o conjunto de unidades do nível, não a unidade selecionada. Eles
         mudam com o número de unidades e só podem ser comparados dentro do mesmo nível.
       </p>
-      {nivel !== "rm" && <GraficosSistema nivel={nivel} linhasSistema={linhas} />}
+      {nivel !== "rm" && <GraficosSistema nivel={nivel} linhasSistema={linhasFiltradas} edicoes={edicoes} />}
       {(() => {
-        const duncans = linhas
-          .filter((l) => l.duncan_d_ant != null)
+        const duncans = linhasFiltradas
+          .filter((l) => {
+            const anterior = edicaoAnterior(l.edicao as EdicaoSerie);
+            return l.duncan_d_ant != null && anterior != null && edicoes.includes(anterior);
+          })
           .map((l) => `${rotuloEdicao(l.edicao as EdicaoSerie)} ${num2(l.duncan_d_ant as number)}`);
         return duncans.length > 0 ? (
           <p className="muted-pequeno" title="Índice de Duncan D: fração dos fluxos que teria de mudar de par origem-destino para a estrutura de um censo ficar igual à do anterior.">
@@ -198,18 +207,27 @@ function BlocoSistema({ nivel }: { nivel: NivelSerie }) {
                 <th>MEI (%)</th><th>ANMR (%)</th><th>β Fielding</th><th>Duncan D (ant.)</th></tr>
           </thead>
           <tbody>
-            {linhas.map((l) => (
-              <tr key={String(l.edicao)}>
-                <td>{rotuloEdicao(l.edicao as EdicaoSerie)}</td>
-                <td>{num(l.n_unidades as number)}</td>
-                <td>{num1(l.cmi as number)}</td>
-                <td>{num1(l.smi as number)}</td>
-                <td>{num1(l.mei as number)}</td>
-                <td>{num1(l.anmr as number)}</td>
-                <td>{l.beta_fielding != null ? `${num2(l.beta_fielding as number)} ± ${num2(l.ep_beta as number)}` : "—"}</td>
-                <td>{l.duncan_d_ant != null ? num2(l.duncan_d_ant as number) : "—"}</td>
-              </tr>
-            ))}
+            {linhasFiltradas.map((l) => {
+              const anterior = edicaoAnterior(l.edicao as EdicaoSerie);
+              const anteriorMarcada = anterior != null && edicoes.includes(anterior);
+              return (
+                <tr key={String(l.edicao)}>
+                  <td>{rotuloEdicao(l.edicao as EdicaoSerie)}</td>
+                  <td>{num(l.n_unidades as number)}</td>
+                  <td>{num1(l.cmi as number)}</td>
+                  <td>{num1(l.smi as number)}</td>
+                  <td>{num1(l.mei as number)}</td>
+                  <td>{num1(l.anmr as number)}</td>
+                  <td>{l.beta_fielding != null ? `${num2(l.beta_fielding as number)} ± ${num2(l.ep_beta as number)}` : "—"}</td>
+                  <td>{
+                    l.duncan_d_ant == null ? "—"
+                      : !anteriorMarcada
+                        ? <span title={`A edição anterior (${anterior}) não está marcada.`}>—</span>
+                        : num2(l.duncan_d_ant as number)
+                  }</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -236,22 +254,23 @@ function agruparPorParceiro(linhas: Record<string, unknown>[], ladoVariavel: "or
   return porParceiro;
 }
 
-function TabelaParceiros({ titulo, porParceiro }: {
+function TabelaParceiros({ titulo, porParceiro, edicoes }: {
   titulo: string;
   porParceiro: Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>;
+  edicoes: readonly EdicaoSerie[];
 }) {
   if (porParceiro.size === 0) return <p className="muted-pequeno">{titulo}: nenhum par publicado.</p>;
   return (
     <div className="tabela-scroll">
       <table className="tabela-serie">
         <thead>
-          <tr><th>{titulo}</th>{EDICOES_SERIE.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}</tr>
+          <tr><th>{titulo}</th>{edicoes.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}</tr>
         </thead>
         <tbody>
           {[...porParceiro.entries()].slice(0, 12).map(([codigoParceiro, { nome, linhas }]) => (
             <tr key={codigoParceiro}>
               <td>{nome}</td>
-              {EDICOES_SERIE.map((e) => {
+              {edicoes.map((e) => {
                 const p = linhas[e];
                 if (!p || p.posto == null) {
                   const motivo = p?.motivo_ausencia as string | undefined;
@@ -272,7 +291,25 @@ function TabelaParceiros({ titulo, porParceiro }: {
   );
 }
 
-function BlocoFluxos({ nivel, codigo }: { nivel: NivelSerie; codigo: string }) {
+/** Mantém só os parceiros com `posto <= 10` em pelo menos uma das edições MARCADAS -- o
+ *  destaque vindo do SQL considera as cinco edições fixas; aqui refiltra sobre o subconjunto
+ *  exibido, para não listar parceiros que só se destacavam numa edição desmarcada. */
+function filtrarParceirosDestaque(
+  porParceiro: Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>,
+  edicoes: readonly EdicaoSerie[],
+) {
+  const saida = new Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>();
+  for (const [codigo, v] of porParceiro) {
+    const destaque = edicoes.some((e) => {
+      const p = v.linhas[e];
+      return p != null && (p.posto as number | null) != null && (p.posto as number) <= 10;
+    });
+    if (destaque) saida.set(codigo, v);
+  }
+  return saida;
+}
+
+function BlocoFluxos({ nivel, codigo, edicoes }: { nivel: NivelSerie; codigo: string; edicoes: readonly EdicaoSerie[] }) {
   const [origens, setOrigens] = useState<Record<string, unknown>[] | null>(null);
   const [destinos, setDestinos] = useState<Record<string, unknown>[] | null>(null);
   useEffect(() => {
@@ -287,13 +324,15 @@ function BlocoFluxos({ nivel, codigo }: { nivel: NivelSerie; codigo: string }) {
     return () => { vivo = false; };
   }, [nivel, codigo]);
   if (!origens || !destinos) return <p className="muted">Carregando fluxos…</p>;
-  const porOrigem = agruparPorParceiro(origens, "origem");
-  const porDestino = agruparPorParceiro(destinos, "destino");
+  const origensFiltradas = filtrarEdicoes(origens as (Record<string, unknown> & { edicao: string })[], edicoes);
+  const destinosFiltradas = filtrarEdicoes(destinos as (Record<string, unknown> & { edicao: string })[], edicoes);
+  const porOrigem = filtrarParceirosDestaque(agruparPorParceiro(origensFiltradas, "origem"), edicoes);
+  const porDestino = filtrarParceirosDestaque(agruparPorParceiro(destinosFiltradas, "destino"), edicoes);
   return (
     <section className="secao serie-bloco" id="bloco-3" aria-labelledby="bloco-3-titulo">
       <h3 id="bloco-3-titulo">Bloco 3 · De onde vieram e para onde foram</h3>
-      <TabelaParceiros titulo="Principais origens" porParceiro={porOrigem} />
-      <TabelaParceiros titulo="Principais destinos" porParceiro={porDestino} />
+      <TabelaParceiros titulo="Principais origens" porParceiro={porOrigem} edicoes={edicoes} />
+      <TabelaParceiros titulo="Principais destinos" porParceiro={porDestino} edicoes={edicoes} />
       <p className="muted-pequeno">
         Posto (grande) e volume (pequeno) por edição, ordenado pela edição mais recente com número.
       </p>
@@ -301,7 +340,9 @@ function BlocoFluxos({ nivel, codigo }: { nivel: NivelSerie; codigo: string }) {
   );
 }
 
-function BlocoPerfil({ nivel, codigo, escuro }: { nivel: NivelSerie; codigo: string; escuro: boolean }) {
+function BlocoPerfil({ nivel, codigo, escuro, edicoes }: {
+  nivel: NivelSerie; codigo: string; escuro: boolean; edicoes: readonly EdicaoSerie[];
+}) {
   const [linhas, setLinhas] = useState<Awaited<ReturnType<typeof seriePerfil>> | null>(null);
   useEffect(() => {
     let vivo = true;
@@ -311,7 +352,7 @@ function BlocoPerfil({ nivel, codigo, escuro }: { nivel: NivelSerie; codigo: str
   }, [nivel, codigo]);
   if (!linhas) return <p className="muted">Carregando perfil…</p>;
 
-  const series: SeriePerfil[] = EDICOES_SERIE.map((edicao) => {
+  const series: SeriePerfil[] = edicoes.map((edicao) => {
     const doAno = linhas.filter((l) => l.edicao === edicao && l.direcao === "imig");
     const brutos: Record<string, number | null> = {};
     for (const l of doAno) brutos[l.categoria] = l.valor;
@@ -345,9 +386,10 @@ interface Props {
   nome: string;
   escuro: boolean;
   aoFechar: () => void;
+  edicoes: readonly EdicaoSerie[];
 }
 
-export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar }: Props) {
+export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar, edicoes }: Props) {
   const fecharRef = useRef<HTMLButtonElement>(null);
   const gatilho = useRef<Element | null>(null);
   const [linhas, setLinhas] = useState<LinhaUnidadeSerie[] | null>(null);
@@ -376,7 +418,8 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar }: Props) {
   }, [nivel, codigo]);
 
   const porEdicao = new Map((linhas ?? []).map((l) => [l.edicao, l]));
-  const pontos: PontoFrase[] = EDICOES_SERIE.map((edicao) => {
+  const linhasFiltradas = filtrarEdicoes(linhas ?? [], edicoes);
+  const pontos: PontoFrase[] = edicoes.map((edicao) => {
     const l = porEdicao.get(edicao);
     const estado = l ? estadoDoPonto(l) : "nao_medido";
     return {
@@ -391,12 +434,12 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar }: Props) {
       coberturaPop: null,
     };
   });
-  const primeiraMae = (linhas ?? []).find((l) => l.cd_mun_mae);
+  const primeiraMae = linhasFiltradas.find((l) => l.cd_mun_mae);
   const entrada: EntradaFrase = {
     nome, nivel, pontos,
     mae: primeiraMae ? {
       nome: primeiraMae.nm_mun_mae ?? primeiraMae.cd_mun_mae!,
-      edicoes: (linhas ?? []).filter((l) => l.cd_mun_mae).map((l) => l.edicao),
+      edicoes: linhasFiltradas.filter((l) => l.cd_mun_mae).map((l) => l.edicao),
       agregada: primeiraMae.cd_mun_mae === "NORTEGO",
     } : undefined,
     filhos: filhos.length > 0 ? { nomes: filhos, ultimaEdicaoJunto: "2010" } : undefined,
@@ -421,10 +464,10 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar }: Props) {
         ) : (
           <>
             <p className="serie-frase serie-frase-completa">{frase}</p>
-            <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} />
-            <BlocoSistema nivel={nivel} />
-            <BlocoFluxos nivel={nivel} codigo={codigo} />
-            <BlocoPerfil nivel={nivel} codigo={codigo} escuro={escuro} />
+            <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} edicoes={edicoes} />
+            <BlocoSistema nivel={nivel} edicoes={edicoes} />
+            <BlocoFluxos nivel={nivel} codigo={codigo} edicoes={edicoes} />
+            <BlocoPerfil nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} />
           </>
         )}
         <section className="secao">

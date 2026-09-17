@@ -201,17 +201,22 @@ async function iniciarSerie(): Promise<duckdb.AsyncDuckDBConnection> {
     "municipios_ref_2022.parquet", `${baseEdicao2022}municipios_ref.parquet`,
     duckdb.DuckDBDataProtocol.HTTP, false,
   );
+  // `uf_sigla` (F13.1): preenchida em mun/rgi/rgint/uf -- RGI e RGInt não cruzam UF, por isso
+  // `ANY_VALUE` sobre o `GROUP BY` código/nome basta; UF já É a sigla. RM fica NULL: uma
+  // RIDE pode cruzar UF, então não há uma sigla única para atribuir à unidade.
   await con.query(`
     CREATE OR REPLACE VIEW unidades_nomes AS
-    SELECT 'mun' AS nivel, cd_mun AS codigo, nm_mun AS nome FROM read_parquet('municipios_ref_2022.parquet')
+    SELECT 'mun' AS nivel, cd_mun AS codigo, nm_mun AS nome, uf_sigla FROM read_parquet('municipios_ref_2022.parquet')
     UNION ALL
-    SELECT DISTINCT 'rgi', cd_rgi, nm_rgi FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rgi IS NOT NULL
+    SELECT 'rgi', cd_rgi, nm_rgi, ANY_VALUE(uf_sigla) FROM read_parquet('municipios_ref_2022.parquet')
+    WHERE cd_rgi IS NOT NULL GROUP BY cd_rgi, nm_rgi
     UNION ALL
-    SELECT DISTINCT 'rgint', cd_rgint, nm_rgint FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rgint IS NOT NULL
+    SELECT 'rgint', cd_rgint, nm_rgint, ANY_VALUE(uf_sigla) FROM read_parquet('municipios_ref_2022.parquet')
+    WHERE cd_rgint IS NOT NULL GROUP BY cd_rgint, nm_rgint
     UNION ALL
-    SELECT DISTINCT 'uf', uf, uf_nome FROM read_parquet('municipios_ref_2022.parquet') WHERE uf IS NOT NULL
+    SELECT DISTINCT 'uf', uf, uf_nome, uf_sigla FROM read_parquet('municipios_ref_2022.parquet') WHERE uf IS NOT NULL
     UNION ALL
-    SELECT DISTINCT 'rm', cd_rm, nm_rm FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rm IS NOT NULL
+    SELECT DISTINCT 'rm', cd_rm, nm_rm, NULL FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rm IS NOT NULL
   `);
   return con;
 }

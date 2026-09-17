@@ -605,3 +605,31 @@ export const serieCourgeau = (edicao: EdicaoSerie) =>
     SELECT nivel, n_unidades, cmi FROM sistema_serie
     WHERE edicao = ${lit(edicao)} AND nivel <> 'rm'
     ORDER BY n_unidades`);
+
+// ============ F13.1: busca unificada do modo "Ao longo dos censos" ============
+
+export interface UnidadeBusca {
+  nivel: NivelSerie; codigo: string; nome: string; uf_sigla: string | null; peso: number;
+}
+
+let cacheUnidadesBusca: Promise<UnidadeBusca[]> | null = null;
+
+/** Todas as unidades dos cinco níveis (base territorial 2022) para a busca unificada do modo
+ *  "Ao longo dos censos". `peso` = imig+emig de 2022 (`unidades_serie` não publica população;
+ *  o movimento total de 2022 é um proxy suficiente para ordenar resultados de busca). ~6,3 mil
+ *  linhas, carregada uma única vez e memoizada; em erro o cache é zerado (mesmo padrão de
+ *  `conectarSerie`). */
+export function serieUnidadesParaBusca(): Promise<UnidadeBusca[]> {
+  if (!cacheUnidadesBusca) {
+    cacheUnidadesBusca = consultarSerie<UnidadeBusca>(`
+      SELECT n.nivel, n.codigo, n.nome, n.uf_sigla,
+             COALESCE(u.imig, 0) + COALESCE(u.emig, 0) AS peso
+      FROM unidades_nomes n
+      LEFT JOIN unidades_serie u ON u.nivel = n.nivel AND u.codigo = n.codigo AND u.edicao = '2022'
+    `).catch((e: unknown) => {
+      cacheUnidadesBusca = null;
+      throw e;
+    });
+  }
+  return cacheUnidadesBusca;
+}

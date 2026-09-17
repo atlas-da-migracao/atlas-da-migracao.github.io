@@ -27,6 +27,62 @@ export type NivelSerie = (typeof NIVEIS_SERIE)[number];
 
 export const rotuloEdicao = (e: EdicaoSerie): string => (e === "1980" ? "1980 (proxy)" : e);
 
+/** Número mínimo de edições marcadas na seção "Ao longo dos censos": abaixo disso não há
+ *  o que comparar (F13). */
+export const MIN_EDICOES_SERIE = 2;
+
+const isEdicaoSerie = (e: string): e is EdicaoSerie =>
+  (EDICOES_SERIE as readonly string[]).includes(e);
+
+/** Ordena cronologicamente (índice em `EDICOES_SERIE`) e remove duplicatas e valores que não
+ *  são `EdicaoSerie` -- usada para sanear o que vem da URL antes de guardar no estado. */
+export function ordenarEdicoes(eds: Iterable<string>): EdicaoSerie[] {
+  const unicas = new Set<EdicaoSerie>();
+  for (const e of eds) if (isEdicaoSerie(e)) unicas.add(e);
+  return EDICOES_SERIE.filter((e) => unicas.has(e));
+}
+
+/** Marca/desmarca uma edição do subconjunto ativo. Se desmarcar deixaria menos de
+ *  `MIN_EDICOES_SERIE` edições marcadas, devolve `atuais` INALTERADO (mesma referência) --
+ *  a seção nunca fica com uma comparação impossível. O resultado é sempre cronológico. */
+export function alternarEdicao(atuais: readonly EdicaoSerie[], e: EdicaoSerie): EdicaoSerie[] {
+  const marcada = atuais.includes(e);
+  if (marcada && atuais.length <= MIN_EDICOES_SERIE) return atuais as EdicaoSerie[];
+  const proximas = marcada ? atuais.filter((a) => a !== e) : [...atuais, e];
+  return ordenarEdicoes(proximas);
+}
+
+/** Filtra as linhas de qualquer consulta da série ao subconjunto de edições marcado,
+ *  preservando a ordem de entrada das linhas. */
+export function filtrarEdicoes<T extends { edicao: string }>(
+  linhas: T[], edicoes: readonly EdicaoSerie[],
+): T[] {
+  const marcadas = new Set<string>(edicoes);
+  return linhas.filter((l) => marcadas.has(l.edicao));
+}
+
+/** Edição imediatamente anterior na série COMPLETA (1991 -> 1980; 1980 -> null) --
+ *  independente do subconjunto marcado, usada para localizar o ponto de comparação anterior
+ *  na cronologia real. */
+export function edicaoAnterior(e: EdicaoSerie): EdicaoSerie | null {
+  const i = EDICOES_SERIE.indexOf(e);
+  return i > 0 ? EDICOES_SERIE[i - 1] : null;
+}
+
+/** Slot de cor de uma edição: seu índice na constante COMPLETA `EDICOES_SERIE`, nunca no
+ *  subconjunto marcado -- garante que a cor de cada edição não muda quando outras são
+ *  marcadas/desmarcadas. */
+export const slotEdicao = (e: EdicaoSerie): number => EDICOES_SERIE.indexOf(e);
+
+/** Rótulo do intervalo marcado: "1991→2022" (primeira -> última edição marcada). Uma só
+ *  edição marcada devolve só ela: "2022". */
+export function rotuloIntervalo(edicoes: readonly EdicaoSerie[]): string {
+  if (edicoes.length === 0) return "";
+  const primeira = edicoes[0];
+  const ultima = edicoes[edicoes.length - 1];
+  return primeira === ultima ? primeira : `${primeira}→${ultima}`;
+}
+
 // --------------------------------------------------------------------------------------
 // Tipologia de Baeninger sobre o IEM (porte de comparabilidade_regras.py)
 // --------------------------------------------------------------------------------------

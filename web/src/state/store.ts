@@ -1,19 +1,14 @@
 /** Estado da aplicação, espelhado na URL para permitir compartilhar uma vista. */
 import { create } from "zustand";
 import type { Metrica } from "../lib/types";
-import { DIMENSOES } from "../lib/paletas";
-import { CENSOS, CENSO_PADRAO, edicao, type Censo } from "../lib/edicoes";
+import { edicao, type Censo } from "../lib/edicoes";
+import { MIN_EDICOES_SERIE, ordenarEdicoes, type EdicaoSerie } from "../lib/serie";
+import { lerUrl, montarQuery, type EstadoUrl, type Modo, type UnidadeSerieSel } from "./url";
 
+export type { Modo, UnidadeSerieSel };
 export type AbaRM = "mig" | "trab" | "estudo";
 /** F6: nível de agregação do mapa/painéis. "mun" (ausente na URL) é o padrão. */
 export type Nivel = "mun" | "rgi" | "rgint" | "uf";
-const NIVEIS: Nivel[] = ["mun", "rgi", "rgint", "uf"];
-// o recorte vira nome de coluna no SQL: só aceita pares dimensão__categoria conhecidos (a
-// validação por edição -- ex.: "status__primeira_saida" não existe em 2010 -- fica a cargo de
-// quem monta as opções do seletor (Filtro.tsx), não daqui; aqui só garante que é um par
-// dimensão__categoria conhecido em ALGUMA edição, evitando SQL arbitrário vindo da URL)
-const RECORTES = new Set(Object.entries(DIMENSOES).flatMap(([dim, d]) =>
-  d.categorias.map((c) => `${dim}__${c.chave}`)));
 
 interface Estado {
   /** edição do Censo ativa; trocar PRESERVA o recorte territorial selecionado e limpa só o
@@ -58,12 +53,25 @@ interface Estado {
    *  (ver `.filtro-fluxo` em App.tsx). Como o toggle de fluxos, não afeta as consultas nem o
    *  painel lateral -- só o que o mapa desenha. */
   limiarFluxo: number;
-  /** F12.5: resumo da série ("Ao longo dos censos") expandido dentro do painel ativo
-   *  (`?serie=1`). A seção COMPLETA (`?pagina=serie`) é roteada à parte, no mesmo padrão de
-   *  `PaginaMetodologia` -- ver App.tsx -- porque ocupa a tela inteira; este campo só
-   *  controla a camada 1 embutida no painel (ResumoSerie.tsx). Independente de edição/nível:
-   *  a série nunca muda com a edição ativa (docs/design_serie_censos.md, 1.1). */
-  serieExpandida: boolean;
+  /** F13: modo ativo da aplicação -- ver `state/url.ts` para por que é BINÁRIO
+   *  ("mapa"|"censos") e não um enum de três valores ("brasil"|"rm"|"censos"): o modo RM
+   *  continua sendo `rm != null` + `pedindoRM` (estado local de App.tsx), não um valor de
+   *  `modo`. Um terceiro valor "rm" criaria estado inválido (`modo === "rm"` sem RM
+   *  escolhida, ou `rm` preenchido com `modo !== "rm"`) -- duas fontes de verdade para a
+   *  mesma coisa. `nivelEfetivo`, `setCenso`, `setNivel` e o cabeçalho continuam derivando só
+   *  de `rm`/`pedindoRM`; `modo` só decide se a tela mostra o mapa ou a aba "Ao longo dos
+   *  censos". */
+  modo: Modo;
+  /** F13: território escolhido na aba "Ao longo dos censos", independente de
+   *  `nivel`/`municipio`/`selecao`/`rm` do mapa -- aceita `nivel: "rm"`, que não é um `Nivel`
+   *  do mapa (o mapa nunca seleciona uma RM como unidade própria, só entra no módulo
+   *  metropolitano). Trocar de modo não mexe aqui nem lá: voltar a "Brasil" preserva a
+   *  seleção do mapa, e voltar a "Ao longo dos censos" preserva a unidade da série. */
+  unidadeSerie: UnidadeSerieSel | null;
+  /** F13: subconjunto de censos marcado na aba "Ao longo dos censos" -- sempre cronológico
+   *  (`EDICOES_SERIE`), 2 a 5 edições, padrão as 5. Independente da edição ativa do mapa
+   *  (`censo`): a série nunca muda com ela (docs/design_serie_censos.md, 1.1). */
+  edicoesSerie: EdicaoSerie[];
   /** troca de edição do Censo; mantém nível, município, unidade, RM e aba, e limpa o fluxo
    *  selecionado e o recorte por característica (ver a implementação para o porquê) */
   setCenso: (censo: Censo) => void;
@@ -83,74 +91,32 @@ interface Estado {
   setMostrarFluxos: (v: boolean) => void;
   setMostrarSatelite: (v: boolean) => void;
   setLimiarFluxo: (v: number) => void;
-  setSerieExpandida: (v: boolean) => void;
+  setModo: (m: Modo) => void;
+  /** F13: entra no modo "Ao longo dos censos". NÃO limpa `rm`/`municipio`/`selecao`/`nivel`
+   *  do mapa -- ao voltar para "Brasil" o mapa continua exatamente como estava (ver
+   *  `modo` acima). `edicoes` ausente MANTÉM o subconjunto já marcado (ex.: reabrir a aba
+   *  depois de já ter desmarcado 1980); passe `EDICOES_SERIE` explicitamente para as 5
+   *  (é o que o atalho "Ver a série completa" dos painéis faz). */
+  entrarModoCensos: (unidade: UnidadeSerieSel | null, edicoes?: readonly EdicaoSerie[]) => void;
+  setUnidadeSerie: (u: UnidadeSerieSel | null) => void;
+  /** Ordena cronologicamente e remove duplicatas; IGNORA (não altera o estado) se o
+   *  resultado tiver menos de `MIN_EDICOES_SERIE` -- a seção nunca fica com uma comparação
+   *  impossível (mesma invariante de `alternarEdicao`, lib/serie.ts). */
+  setEdicoesSerie: (eds: readonly EdicaoSerie[]) => void;
   /** F6 leva 2: aplica várias peças de estado de uma vez (ex.: o link de um "achado-chave"
    *  da capa nacional, que precisa entrar em modo RM, trocar de aba E selecionar um fluxo
    *  na mesma navegação -- as ações individuais acima limpam campos umas das outras). */
   irPara: (patch: Partial<Pick<Estado,
-    "municipio" | "selecao" | "nivel" | "origem" | "destino" | "rm" | "aba" | "cruzar">>) => void;
+    "municipio" | "selecao" | "nivel" | "origem" | "destino" | "rm" | "aba" | "cruzar"
+    | "modo" | "unidadeSerie" | "edicoesSerie">>) => void;
 }
 
-function daUrl() {
-  const p = new URLSearchParams(location.search);
-  const m = p.get("m") as Metrica | null;
-  const aba = p.get("aba") as AbaRM | null;
-  const n = p.get("n") as Nivel | null;
-  const censoUrl = p.get("censo") as Censo | null;
-  const censo = (censoUrl && CENSOS.includes(censoUrl) ? censoUrl : CENSO_PADRAO) as Censo;
-  return {
-    censo,
-    municipio: p.get("mun"),
-    selecao: p.get("sel"),
-    nivel: (n && NIVEIS.includes(n) ? n : "mun") as Nivel,
-    origem: p.get("o"),
-    destino: p.get("d"),
-    // como ?rm=/?aba= abaixo: ignora ?f=renda__* vindo de um link para uma edição sem essa
-    // dimensão (hoje só 1980, ver lib/edicoes.ts `recursos.renda`) -- a coluna larga
-    // correspondente nem existe no parquet publicado dessa edição.
-    filtro: RECORTES.has(p.get("f") ?? "") && (edicao(censo).recursos.renda || !p.get("f")?.startsWith("renda__"))
-      ? p.get("f") : null,
-    metrica: (m && ["saldo", "tlm", "imig", "emig", "iem"].includes(m) ? m : "tlm") as Metrica,
-    topN: Number(p.get("top") ?? 15),
-    // módulo metropolitano: ignora ?rm= vindo de um link para uma edição sem esse recurso
-    // (ver lib/edicoes.ts) -- nunca chega a chamar as consultas de RM, que dariam erro de
-    // "tabela não encontrada" na conexão DuckDB dessa edição (ver db/duckdb.ts).
-    rm: edicao(censo).recursos.rm ? p.get("rm") : null,
-    // como ?rm=, ignora ?aba=trab|estudo vindo de um link para uma edição sem deslocamento
-    // pendular (ver lib/edicoes.ts) -- nunca chega a chamar as consultas pendulares, que
-    // dariam erro de "tabela não encontrada" na conexão DuckDB dessa edição (ver db/duckdb.ts).
-    aba: (edicao(censo).recursos.pendular && aba && ["mig", "trab", "estudo"].includes(aba)
-      ? aba : "mig") as AbaRM,
-    cruzar: p.get("cruzar") === "1",
-    mostrarFluxos: p.get("fluxos") !== "0",
-    mostrarSatelite: p.get("sat") === "1",
-    limiarFluxo: Math.min(1, Math.max(0, Number(p.get("fmin") ?? 0) || 0)),
-    serieExpandida: p.get("serie") === "1",
-  };
+function daUrl(): EstadoUrl {
+  return lerUrl(new URLSearchParams(location.search));
 }
 
-function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | "destino" | "metrica" | "topN"
-                              | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos"
-                              | "mostrarSatelite" | "limiarFluxo" | "serieExpandida">) {
-  const p = new URLSearchParams();
-  if (e.censo !== CENSO_PADRAO) p.set("censo", e.censo);
-  if (e.rm) {
-    p.set("rm", e.rm);
-    if (e.aba !== "mig") p.set("aba", e.aba);
-    if (e.cruzar) p.set("cruzar", "1");
-  }
-  if (e.nivel !== "mun") p.set("n", e.nivel);
-  if (e.municipio) p.set("mun", e.municipio);
-  if (e.selecao) p.set("sel", e.selecao);
-  if (e.origem && e.destino) { p.set("o", e.origem); p.set("d", e.destino); }
-  if (e.metrica !== "tlm") p.set("m", e.metrica);
-  if (e.topN !== 15) p.set("top", String(e.topN));
-  if (e.filtro) p.set("f", e.filtro);
-  if (!e.mostrarFluxos) p.set("fluxos", "0");
-  if (e.mostrarSatelite) p.set("sat", "1");
-  if (e.limiarFluxo > 0) p.set("fmin", e.limiarFluxo.toFixed(2));
-  if (e.serieExpandida) p.set("serie", "1");
-  const qs = p.toString();
+function paraUrl(e: EstadoUrl) {
+  const qs = montarQuery(e);
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
 
@@ -248,7 +214,23 @@ export const useStore = create<Estado>((set, get) => ({
     paraUrl({ ...get(), limiarFluxo });
   },
   irPara: (patch) => { set(patch); paraUrl({ ...get(), ...patch }); },
-  setSerieExpandida: (v) => { set({ serieExpandida: v }); paraUrl({ ...get(), serieExpandida: v }); },
+  setModo: (modo) => { set({ modo }); paraUrl({ ...get(), modo }); },
+  entrarModoCensos: (unidade, edicoes) => {
+    const patch = {
+      modo: "censos" as Modo,
+      unidadeSerie: unidade,
+      edicoesSerie: edicoes ? ordenarEdicoes(edicoes) : get().edicoesSerie,
+    };
+    set(patch);
+    paraUrl({ ...get(), ...patch });
+  },
+  setUnidadeSerie: (u) => { set({ unidadeSerie: u }); paraUrl({ ...get(), unidadeSerie: u }); },
+  setEdicoesSerie: (eds) => {
+    const edicoesSerie = ordenarEdicoes(eds);
+    if (edicoesSerie.length < MIN_EDICOES_SERIE) return;
+    set({ edicoesSerie });
+    paraUrl({ ...get(), edicoesSerie });
+  },
 }));
 
 /** true quando a interface está renderizando em modo escuro. */

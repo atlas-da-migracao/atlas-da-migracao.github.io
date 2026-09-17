@@ -86,7 +86,7 @@ export default function App() {
   const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
           mostrarFluxos, mostrarSatelite, limiarFluxo, setLimiarFluxo, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo,
           setNivel, setMetrica, setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos,
-          setMostrarSatelite } = useStore();
+          setMostrarSatelite, edicoesSerie } = useStore();
   const recursos = edicao(censo).recursos;
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
@@ -931,7 +931,7 @@ export default function App() {
         {paginaMetodologia && <PaginaMetodologia meta={meta} aoFechar={fecharMetodologia} />}
         {paginaSerie && serieUnidade && (
           <SerieCensos nivel={serieUnidade.nivel} codigo={serieUnidade.codigo} nome={serieUnidade.nome}
-                       escuro={escuro} aoFechar={fecharSerie} />
+                       escuro={escuro} aoFechar={fecharSerie} edicoes={edicoesSerie} />
         )}
       </Suspense>
 

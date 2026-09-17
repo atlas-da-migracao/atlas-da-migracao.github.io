@@ -33,7 +33,7 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Topology } from "topojson-specification";
 import { basePath, type Censo } from "../lib/edicoes";
 import {
-  EDICOES_SERIE, QUEBRAS_FIXAS, rotuloEdicao, tramaDoEstado,
+  ordenarEdicoes, QUEBRAS_FIXAS, rotuloEdicao, tramaDoEstado,
   type EdicaoSerie, type NivelSerie,
 } from "../lib/serie";
 import { corMedidaSerie, corDoSlotLegenda, LEGENDA_MEDIDA_SERIE, type MedidaMapaSerie } from "../lib/escalas";
@@ -219,18 +219,23 @@ interface Props {
   nivel: NivelSerie;
   codigo: string;
   escuro: boolean;
+  edicoes: readonly EdicaoSerie[];
 }
 
-/** Mapa comparativo do Bloco 1 -- 5 small multiples, um por edição, mesma medida/quebras/
- *  enquadramento nos cinco (seção 4). No nível `mun`, carrega sob pedido (botão); nos demais
- *  níveis, carrega direto (malhas pequenas). Nível `rm` não tem mapa comparativo nesta fase
- *  (a malha de RM/RIDE não integra o conjunto de níveis do mapa principal -- ver CAMPO_ID em
- *  App.tsx, que também não inclui "rm"; documentado como fora de escopo, não omissão). */
-export function MapaSerieCensos({ nivel, codigo, escuro }: Props) {
+/** Mapa comparativo do Bloco 1 -- small multiples, um por edição marcada, mesma medida/
+ *  quebras/enquadramento entre eles (seção 4). No nível `mun`, carrega sob pedido (botão); nos
+ *  demais níveis, carrega direto (malhas pequenas). Nível `rm` não tem mapa comparativo nesta
+ *  fase (a malha de RM/RIDE não integra o conjunto de níveis do mapa principal -- ver CAMPO_ID
+ *  em App.tsx, que também não inclui "rm"; documentado como fora de escopo, não omissão). */
+export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
   const [medida, setMedida] = useState<MedidaMapaSerie>("iem");
   const [hover, setHover] = useState<string | null>(null);
   const [pedidoMun, setPedidoMun] = useState(false);
   const carregar = nivel !== "mun" || pedidoMun;
+
+  // A malha de 2022 é SEMPRE carregada -- o enquadramento (bbox) do mapa depende dela, mesmo
+  // que 2022 não esteja marcada para exibição (ver `bbox` abaixo).
+  const edicoesComMalha = useMemo(() => ordenarEdicoes([...edicoes, "2022"]), [edicoes]);
 
   const [linhasSerie, setLinhasSerie] = useState<LinhaMapaSerie[]>([]);
   useEffect(() => {
@@ -241,16 +246,16 @@ export function MapaSerieCensos({ nivel, codigo, escuro }: Props) {
     return () => { vivo = false; };
   }, [nivel, carregar]);
 
-  /** Agrupa uma única vez por edição -- os cinco painéis leem cada um o seu `Map`, sem
-   *  refiltrar a lista inteira a cada render (importante no nível `mun`, até 5.570 x 5). */
+  /** Agrupa uma única vez por edição -- cada painel lê o seu `Map`, sem refiltrar a lista
+   *  inteira a cada render (importante no nível `mun`, até 5.570 x edições). */
   const valoresPorEdicaoENivel = useMemo(() => {
     const porEdicao = new Map<EdicaoSerie, Map<string, LinhaMapaSerie>>();
-    for (const e of EDICOES_SERIE) porEdicao.set(e, new Map());
+    for (const e of edicoesComMalha) porEdicao.set(e, new Map());
     for (const l of linhasSerie) porEdicao.get(l.edicao)?.set(l.codigo, l);
     return porEdicao;
-  }, [linhasSerie]);
+  }, [linhasSerie, edicoesComMalha]);
 
-  const { malhas } = useMalhasPorEdicao(nivel === "rm" ? "uf" : nivel, carregar ? EDICOES_SERIE : []);
+  const { malhas } = useMalhasPorEdicao(nivel === "rm" ? "uf" : nivel, carregar ? edicoesComMalha : []);
   const malha2022 = malhas["2022"] ?? null;
   const campoId = CAMPO_ID[nivel];
 
@@ -295,12 +300,12 @@ export function MapaSerieCensos({ nivel, codigo, escuro }: Props) {
       </div>
       {!carregar ? (
         <button className="link-serie" onClick={() => setPedidoMun(true)}>
-          Carregar os mapas municipais das cinco edições
+          Carregar os mapas municipais das {edicoes.length} edições marcadas
         </button>
       ) : (
         <>
           <div className="serie-mapa-paineis">
-            {EDICOES_SERIE.map((e) => (
+            {edicoes.map((e) => (
               <PainelMapaEdicao
                 key={e} edicao={e} malha={malhas[e] ?? null} campoId={campoId} proj={proj}
                 selecionado={codigo} hover={hover} aoPassarMouse={setHover}
@@ -311,7 +316,7 @@ export function MapaSerieCensos({ nivel, codigo, escuro }: Props) {
           </div>
           <Legenda medida={medida} escuro={escuro} />
           <p className="muted-pequeno">
-            Quebras fixas (mesmas nas cinco edições): {QUEBRAS_FIXAS[medida].join(" · ")}
+            Quebras fixas (mesmas em todas as edições): {QUEBRAS_FIXAS[medida].join(" · ")}
             {medida === "iem" ? " (índice, não %)" : " ‰"}.
           </p>
         </>

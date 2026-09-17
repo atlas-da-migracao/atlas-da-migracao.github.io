@@ -76,9 +76,14 @@ interface Props {
   /** true quando o município é mãe de algum desmembramento (nota `municipio_mae`, seção 1.2). */
   aoAbrirSerieCompleta: () => void;
   aoAbrirMae?: (cdMae: string) => void;
+  /** Subconjunto de edições a exibir (F13) -- default: as cinco, para não quebrar os usos
+   *  existentes em `PainelMunicipio`/`PainelUnidade`, que ainda não passam esta prop. */
+  edicoes?: readonly EdicaoSerie[];
 }
 
-export function ResumoSerie({ nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrirMae }: Props) {
+export function ResumoSerie({
+  nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrirMae, edicoes = EDICOES_SERIE,
+}: Props) {
   const [linhas, setLinhas] = useState<LinhaUnidadeSerie[] | null>(null);
   const [filhos, setFilhos] = useState<string[]>([]);
 
@@ -102,7 +107,7 @@ export function ResumoSerie({ nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrir
   if (linhas.length === 0) return null;
 
   const porEdicao = new Map(linhas.map((l) => [l.edicao, l]));
-  const pontos: PontoFrase[] = EDICOES_SERIE.map((edicao) => {
+  const pontos: PontoFrase[] = edicoes.map((edicao) => {
     const l = porEdicao.get(edicao);
     if (!l) return { edicao, estado: "nao_medido", iem: null, seIem: null, tipo: null,
                       imig: null, emig: null, saldo: null, tlm: null, coberturaPop: null };
@@ -178,7 +183,7 @@ export function ResumoSerie({ nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrir
         </div>
       )}
       <p className="muted-pequeno serie-legenda-spark">
-        {EDICOES_SERIE.map(rotuloEdicao).join(" · ")}
+        {edicoes.map(rotuloEdicao).join(" · ")}
       </p>
     </section>
   );

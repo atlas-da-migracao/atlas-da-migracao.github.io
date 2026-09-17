@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   classificarIem, seIem, harmonizarStatus, fraseSintese, tramaDoEstado,
-  classeSequencial, QUEBRAS_FIXAS, type EntradaFrase, type PontoFrase, type EdicaoSerie,
+  classeSequencial, QUEBRAS_FIXAS, ordenarEdicoes, alternarEdicao, filtrarEdicoes,
+  edicaoAnterior, slotEdicao, rotuloIntervalo, type EntradaFrase, type PontoFrase, type EdicaoSerie,
 } from "../serie";
 
 const ponto = (p: Partial<PontoFrase> & { edicao: EdicaoSerie }): PontoFrase => ({
@@ -213,5 +214,209 @@ describe("fraseSintese", () => {
       ponto({ edicao: "2022", iem: 0.12, tipo: "rotatividade", imig: 50, emig: 40 }),
     ]);
     expect(fraseSintese(entrada)).not.toContain("0,00");
+  });
+
+  it("com subconjunto [1991, 2000, 2022] T1 mudança: contém 'Entre' com intervalo", () => {
+    const entrada = base([
+      ponto({ edicao: "1991", iem: 0.4, tipo: "absorcao_forte", imig: 500, emig: 300 }),
+      ponto({ edicao: "2000", iem: 0.4, tipo: "absorcao_forte", imig: 550, emig: 320 }),
+      ponto({ edicao: "2022", iem: 0.03, tipo: "rotatividade", imig: 600, emig: 350 }),
+    ]);
+    const frase = fraseSintese(entrada);
+    expect(frase).not.toContain("proxy");
+    expect(frase).toContain("Entre 1991 e 2022");
+  });
+
+  it("com subconjunto [1980, 2022] e Δ IEM < 0,10: T8 dispara mesmo em subconjunto", () => {
+    const entrada = base([
+      ponto({ edicao: "1980", iem: 0.18, tipo: "absorcao", imig: 500, emig: 320 }),
+      ponto({ edicao: "2022", iem: 0.24, tipo: "absorcao", imig: 600, emig: 350 }),
+    ]);
+    const frase = fraseSintese(entrada);
+    expect(frase).toContain("proxy");
+    expect(frase).toContain("não é seguro afirmar tendência");
+  });
+
+  it("com subconjunto [2000, 2010] mesma classe T2: sem 1980 nem proxy", () => {
+    const entrada = base([
+      ponto({ edicao: "2000", iem: 0.2, tipo: "absorcao", imig: 400, emig: 250 }),
+      ponto({ edicao: "2010", iem: 0.22, tipo: "absorcao", imig: 450, emig: 280 }),
+    ]);
+    const frase = fraseSintese(entrada);
+    expect(frase).not.toContain("1980");
+    expect(frase).not.toContain("proxy");
+    expect(frase).toContain("2000");
+    expect(frase).toContain("absorção");
+  });
+});
+
+describe("ordenarEdicoes", () => {
+  it("ordena cronologicamente e remove duplicatas", () => {
+    const resultado = ordenarEdicoes(["2022", "1980", "1980", "2010"]);
+    expect(resultado).toEqual(["1980", "2010", "2022"]);
+  });
+
+  it("remove valores inválidos", () => {
+    const resultado = ordenarEdicoes(["2022", "1980", "x", "2000"]);
+    expect(resultado).toEqual(["1980", "2000", "2022"]);
+  });
+
+  it("array vazio devolve array vazio", () => {
+    expect(ordenarEdicoes([])).toEqual([]);
+  });
+
+  it("um único valor válido", () => {
+    expect(ordenarEdicoes(["2010"])).toEqual(["2010"]);
+  });
+});
+
+describe("alternarEdicao", () => {
+  it("marcar uma edição ausente a adiciona e reordena cronologicamente", () => {
+    const atuais: EdicaoSerie[] = ["1991", "2022"];
+    const resultado = alternarEdicao(atuais, "2010");
+    expect(resultado).toEqual(["1991", "2010", "2022"]);
+  });
+
+  it("desmarcar uma edição presente a remove", () => {
+    const atuais: EdicaoSerie[] = ["1991", "2010", "2022"];
+    const resultado = alternarEdicao(atuais, "2010");
+    expect(resultado).toEqual(["1991", "2022"]);
+  });
+
+  it("desmarcar quando restariam MIN_EDICOES_SERIE devolve a MESMA REFERÊNCIA", () => {
+    const atuais: EdicaoSerie[] = ["1980", "2022"];
+    const resultado = alternarEdicao(atuais, "2022");
+    expect(resultado).toBe(atuais);
+    expect(resultado).toEqual(atuais);
+  });
+
+  it("resultado sempre cronológico mesmo marcando fora de ordem", () => {
+    const atuais: EdicaoSerie[] = ["2022"];
+    const resultado = alternarEdicao(atuais, "1980");
+    expect(resultado).toEqual(["1980", "2022"]);
+  });
+
+  it("marcar múltiplas edições em sequência mantém ordem cronológica", () => {
+    let atuais: EdicaoSerie[] = ["2022"];
+    atuais = alternarEdicao(atuais, "1980");
+    atuais = alternarEdicao(atuais, "2010");
+    atuais = alternarEdicao(atuais, "1991");
+    expect(atuais).toEqual(["1980", "1991", "2010", "2022"]);
+  });
+});
+
+describe("filtrarEdicoes", () => {
+  it("preserva ordem de entrada das linhas", () => {
+    const linhas = [
+      { edicao: "2022", valor: 10 },
+      { edicao: "1980", valor: 5 },
+      { edicao: "2010", valor: 8 },
+    ];
+    const resultado = filtrarEdicoes(linhas, ["1980", "2022"]);
+    expect(resultado).toEqual([
+      { edicao: "2022", valor: 10 },
+      { edicao: "1980", valor: 5 },
+    ]);
+  });
+
+  it("remove linhas cuja edicao não está no subconjunto", () => {
+    const linhas = [
+      { edicao: "1980", valor: 5 },
+      { edicao: "1991", valor: 6 },
+      { edicao: "2022", valor: 10 },
+    ];
+    const resultado = filtrarEdicoes(linhas, ["1980", "2022"]);
+    expect(resultado).toEqual([
+      { edicao: "1980", valor: 5 },
+      { edicao: "2022", valor: 10 },
+    ]);
+  });
+
+  it("array vazio de edições devolve resultado vazio", () => {
+    const linhas = [
+      { edicao: "2022", valor: 10 },
+      { edicao: "1980", valor: 5 },
+    ];
+    const resultado = filtrarEdicoes(linhas, []);
+    expect(resultado).toEqual([]);
+  });
+
+  it("linhas vazio devolve vazio", () => {
+    const resultado = filtrarEdicoes([], ["1980", "2022"]);
+    expect(resultado).toEqual([]);
+  });
+});
+
+describe("edicaoAnterior", () => {
+  it("1980 devolve null", () => {
+    expect(edicaoAnterior("1980")).toBeNull();
+  });
+
+  it("1991 devolve 1980", () => {
+    expect(edicaoAnterior("1991")).toBe("1980");
+  });
+
+  it("2000 devolve 1991", () => {
+    expect(edicaoAnterior("2000")).toBe("1991");
+  });
+
+  it("2010 devolve 2000", () => {
+    expect(edicaoAnterior("2010")).toBe("2000");
+  });
+
+  it("2022 devolve 2010", () => {
+    expect(edicaoAnterior("2022")).toBe("2010");
+  });
+});
+
+describe("slotEdicao", () => {
+  it("1980 tem slot 0", () => {
+    expect(slotEdicao("1980")).toBe(0);
+  });
+
+  it("1991 tem slot 1", () => {
+    expect(slotEdicao("1991")).toBe(1);
+  });
+
+  it("2000 tem slot 2", () => {
+    expect(slotEdicao("2000")).toBe(2);
+  });
+
+  it("2010 tem slot 3", () => {
+    expect(slotEdicao("2010")).toBe(3);
+  });
+
+  it("2022 tem slot 4", () => {
+    expect(slotEdicao("2022")).toBe(4);
+  });
+
+  it("índice não muda com qualquer subconjunto", () => {
+    const slot2022 = slotEdicao("2022");
+    expect(slot2022).toBe(4);
+    // Confirmar que mesmo filtrando por subconjunto menor, slotEdicao retorna o mesmo
+    const resultado = slotEdicao("2022");
+    expect(resultado).toBe(slot2022);
+  });
+});
+
+describe("rotuloIntervalo", () => {
+  it("intervalo [1991, 2000, 2022] devolve '1991→2022'", () => {
+    expect(rotuloIntervalo(["1991", "2000", "2022"])).toBe("1991→2022");
+  });
+
+  it("uma só edição [2022] devolve '2022'", () => {
+    expect(rotuloIntervalo(["2022"])).toBe("2022");
+  });
+
+  it("array vazio devolve string vazia", () => {
+    expect(rotuloIntervalo([])).toBe("");
+  });
+
+  it("duas edições [1980, 2010] devolve '1980→2010'", () => {
+    expect(rotuloIntervalo(["1980", "2010"])).toBe("1980→2010");
+  });
+
+  it("todas as cinco edições", () => {
+    expect(rotuloIntervalo(["1980", "1991", "2000", "2010", "2022"])).toBe("1980→2022");
   });
 });
