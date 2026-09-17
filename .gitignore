@@ -15,6 +15,10 @@ data/geo/raw/
 # exceção: tabela de configuração do projeto (núcleo de cada RM), derivada de códigos
 # públicos do IBGE e de agregados populacionais — não contém microdado algum
 !pipeline/rm_nucleo.csv
+# exceção: genealogia municipal (F12.1), derivada só de malhas municipais públicas do IBGE
+# (data/geo/raw/**) por sobreposição espacial — metadado de comparabilidade territorial, não
+# microdado algum. Ver pipeline/build_genealogia.py e docs/genealogia.md.
+!pipeline/genealogia_municipios.csv
 *.txt.gz
 docs/termos/*
 !docs/termos/README.md

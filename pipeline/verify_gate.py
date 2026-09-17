@@ -52,7 +52,15 @@ FAIXAS_VALIDAS = {rot for _, _, rot in R.FAIXAS_N} | {"<5"}
 # Colunas "n_*" que NÃO são contagem amostral de pessoas (por isso ficam de fora do R5):
 # n_municipios (rm_resumo.parquet) é a contagem de municípios de uma região metropolitana --
 # informação geográfica pública do recorte do IBGE, não uma contagem amostral de pessoas.
-COLUNAS_N_ESTRUTURAIS = {"n_municipios"}
+# n_mun_edicao/n_mun_2022 (F12, unidades_serie.parquet) são contagens de MUNICÍPIOS presentes
+# numa edição/no total de 2022 -- cobertura territorial, dado já público em municipios_ref.
+# n_parceiros (F12, unidades_serie.parquet) é o número de pares origem-destino DISTINTOS já
+# publicados em fluxos*.parquet -- uma contagem de células publicadas, não de pessoas.
+# n_unidades (F12, sistema_serie.parquet) é o número de unidades territoriais (municípios/
+# RGI/RGInt/UF) num nível de agregação naquela edição -- também geografia, não amostra.
+COLUNAS_N_ESTRUTURAIS = {
+    "n_municipios", "n_mun_edicao", "n_mun_2022", "n_parceiros", "n_unidades",
+}
 
 # R4 -- colunas de contagem ponderada que `publish.py` arredonda com R.sql_arredonda(),
 # levantadas diretamente do código-fonte (grep por "sql_arredonda(" em pipeline/publish.py).
@@ -71,6 +79,15 @@ COLUNAS_ARREDONDADAS_EXATAS = {
 # Colunas de detalhe por categoria (fluxos.parquet): "<dimensao>__<categoria>" e
 # "<dimensao>__outros", também arredondadas (ver publish.py::expr_categorias).
 PREFIXOS_DIM = tuple(f"{dim}__" for dim in R.DIMENSOES)
+
+# Exceção por arquivo: "valor" é nome genérico usado tanto para contagem ponderada de pessoas
+# (ex.: municipios_dim.parquet, perfil_serie.parquet) quanto, em loglinear_serie.parquet (F12),
+# para os parâmetros T/O/D/OD da decomposição log-linear (Willekens 1983) -- números contínuos
+# (razões, médias geométricas), não contagens de pessoas, e por isso não são arredondados a
+# múltiplos de R.ARREDONDAMENTO. Mapeamento nome-do-arquivo -> colunas isentas da checagem c4.
+ARQUIVOS_COLUNAS_NAO_ARREDONDADAS = {
+    "loglinear_serie.parquet": {"valor"},
+}
 
 
 def sha256_arquivo(caminho: pathlib.Path) -> str:
@@ -223,8 +240,11 @@ class Verificador:
                     total_faixa_invalida += len(fora)
 
             # c4: colunas de contagem ponderada em múltiplos de 5 (R4)
+            excecoes_arquivo = ARQUIVOS_COLUNAS_NAO_ARREDONDADAS.get(f.name, set())
             for c in cols:
                 if not eh_coluna_arredondada(c):
+                    continue
+                if c.lower() in {e.lower() for e in excecoes_arquivo}:
                     continue
                 v = con.execute(
                     f'SELECT COUNT(*) FROM read_parquet(\'{f}\') WHERE "{c}" IS NOT NULL '
