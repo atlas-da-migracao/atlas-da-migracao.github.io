@@ -797,6 +797,7 @@ export default function App() {
                 </button>
               )}
               <button className={modo === "censos" ? "ativo" : ""} aria-pressed={modo === "censos"}
+                      data-tour="modo-censos"
                       onClick={() => { setPedindoRM(false); entrarModoCensos(unidadeDaSelecao ?? unidadeSerie); }}>
                 Ao longo dos censos
               </button>

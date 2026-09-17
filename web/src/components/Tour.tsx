@@ -42,6 +42,14 @@ const PASSOS: Passo[] = [
     texto: "Este modo troca o recorte para dentro de uma região metropolitana: migração intra-RM e, " +
       "conforme o censo selecionado, deslocamento pendular de trabalho e estudo.",
   },
+  {
+    alvo: '[data-tour="modo-censos"]',
+    titulo: "Ao longo dos censos",
+    texto: "Compare um mesmo território -- município, região imediata, região intermediária, UF ou " +
+      "região metropolitana -- entre dois ou mais censos (1980 a 2022). Busque o território, marque " +
+      "os censos que quer comparar e veja fluxos, saldos, medidas e o perfil dos migrantes lado a " +
+      "lado, com um mapa comparativo e a evolução em gráficos.",
+  },
 ];
 
 interface Props { aoFechar: () => void }
