@@ -25,7 +25,9 @@ import type { FluxoUF } from "./lib/acordes";
 import { cor as corPaleta, FLUXO_MAPA, hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
 import { basePath, CENSOS, edicao } from "./lib/edicoes";
+import { EDICOES_SERIE, type NivelSerie } from "./lib/serie";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
+import type { UnidadeSerieSel } from "./state/url";
 
 // F6 leva 2: módulos fora do caminho crítico da primeira pintura viram chunks separados --
 // o tour, a página de metodologia e o módulo metropolitano (que arrasta d3-sankey) só são
@@ -33,8 +35,9 @@ import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
 // tamanho do bundle antes/depois.
 const Tour = lazy(() => import("./components/Tour").then((m) => ({ default: m.Tour })));
 const PaginaMetodologia = lazy(() => import("./components/PaginaMetodologia").then((m) => ({ default: m.PaginaMetodologia })));
-// F12.5: "Ao longo dos censos" (?pagina=serie) -- mesma razão de ser um chunk separado.
-const SerieCensos = lazy(() => import("./components/SerieCensos").then((m) => ({ default: m.SerieCensos })));
+// F13: "Ao longo dos censos" é um modo inteiro (`?modo=censos`), não mais um overlay -- mesma
+// razão de ser um chunk separado (arrasta SerieCensos + Busca + o próprio código do modo).
+const ModoCensos = lazy(() => import("./components/ModoCensos").then((m) => ({ default: m.ModoCensos })));
 const PainelRM = lazy(() => import("./components/PainelRM").then((m) => ({ default: m.PainelRM })));
 const PainelPendular = lazy(() => import("./components/PainelPendular").then((m) => ({ default: m.PainelPendular })));
 // PainelUnidade carrega d3-chord/d3-shape (matriz de acordes UF x UF) -- só usado fora do
@@ -86,7 +89,7 @@ export default function App() {
   const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
           mostrarFluxos, mostrarSatelite, limiarFluxo, setLimiarFluxo, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo,
           setNivel, setMetrica, setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos,
-          setMostrarSatelite, edicoesSerie } = useStore();
+          setMostrarSatelite, modo, setModo, unidadeSerie, entrarModoCensos } = useStore();
   const recursos = edicao(censo).recursos;
   const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
   const escuro = usarModoEscuro();
@@ -200,31 +203,6 @@ export default function App() {
   };
   useEffect(() => {
     const aoNavegar = () => setPaginaMetodologia(new URLSearchParams(location.search).get("pagina") === "metodologia");
-    window.addEventListener("popstate", aoNavegar);
-    return () => window.removeEventListener("popstate", aoNavegar);
-  }, []);
-
-  // F12.5: seção completa "Ao longo dos censos", roteada por ?pagina=serie (mesmo padrão da
-  // metodologia). O território/nível NÃO entram nesta URL própria -- continuam em ?n/?mun/?sel
-  // (docs/design_serie_censos.md, 1.1): a seção lê a unidade selecionada no momento em que abre.
-  const [paginaSerie, setPaginaSerie] = useState(
-    () => new URLSearchParams(location.search).get("pagina") === "serie",
-  );
-  const abrirSerie = () => {
-    setPaginaSerie(true);
-    const p = new URLSearchParams(location.search);
-    p.set("pagina", "serie");
-    history.pushState(null, "", `?${p.toString()}`);
-  };
-  const fecharSerie = () => {
-    setPaginaSerie(false);
-    const p = new URLSearchParams(location.search);
-    p.delete("pagina");
-    const qs = p.toString();
-    history.pushState(null, "", qs ? `?${qs}` : location.pathname);
-  };
-  useEffect(() => {
-    const aoNavegar = () => setPaginaSerie(new URLSearchParams(location.search).get("pagina") === "serie");
     window.addEventListener("popstate", aoNavegar);
     return () => window.removeEventListener("popstate", aoNavegar);
   }, []);
@@ -647,15 +625,17 @@ export default function App() {
     && Boolean(selecao) && !unidadeSelecionada;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
 
-  // F12.5: unidade que a seção "Ao longo dos censos" abre quando `abrirSerie()` é chamado --
-  // deriva da seleção atual (município, unidade agregada ou RM), nunca da URL própria da seção.
-  const serieUnidade = rm
-    ? { nivel: "rm" as const, codigo: rm, nome: rmsCabecalho.find((r) => r.cd_rm === rm)?.nm_rm ?? rm }
-    : nivelEfetivo !== "mun" && unidadeSelecionada
-    ? { nivel: nivelEfetivo as "rgi" | "rgint" | "uf", codigo: unidadeSelecionada.codigo, nome: unidadeSelecionada.nome }
-    : selecionado
-    ? { nivel: "mun" as const, codigo: selecionado.cd_mun, nome: `${selecionado.nm_mun}/${selecionado.uf_sigla}` }
+  // F13: unidade que o atalho "Ver a série completa"/"Ao longo dos censos" leva ao modo censos
+  // -- deriva da seleção atual do MAPA (município, unidade agregada ou RM), nunca da URL do
+  // modo censos (que tem sua própria unidade, `unidadeSerie`, preservada ao trocar de modo).
+  const unidadeDaSelecao: UnidadeSerieSel | null = rm
+    ? { nivel: "rm", codigo: rm }
+    : nivelEfetivo !== "mun" && selecao
+    ? { nivel: nivelEfetivo as NivelSerie, codigo: selecao }
+    : municipio
+    ? { nivel: "mun", codigo: municipio }
     : null;
+  const abrirSerie = () => entrarModoCensos(unidadeDaSelecao, [...EDICOES_SERIE]);
   const aoSelecionarNoMapa = nivelEfetivo === "mun" ? selecionarMunicipio : selecionarUnidade;
   // rótulo da dica flutuante do mapa (nome/UF), pelo código da feição sob o cursor
   const rotuloDaFeicao = useCallback((cd: string): string | null => {
@@ -684,6 +664,10 @@ export default function App() {
   // F6 leva 2: título da aba reflete a seleção atual, para o histórico e leitores de tela
   useEffect(() => {
     const base = "Atlas da migração interna";
+    if (modo === "censos") {
+      document.title = "Ao longo dos censos — Atlas da migração interna no Brasil";
+      return;
+    }
     if (origem && destino) {
       const o = porCodigo.get(origem)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === origem)?.nome;
       const d = porCodigo.get(destino)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === destino)?.nome;
@@ -698,7 +682,7 @@ export default function App() {
     } else {
       document.title = base;
     }
-  }, [origem, destino, selecionado, unidadeSelecionada, rm, rmsCabecalho, porCodigo, unidadesAtivas]);
+  }, [modo, origem, destino, selecionado, unidadeSelecionada, rm, rmsCabecalho, porCodigo, unidadesAtivas]);
 
   const fallbackPainel = <aside className="painel"><p className="muted">Carregando…</p></aside>;
 
@@ -715,7 +699,8 @@ export default function App() {
       <Suspense fallback={fallbackPainel}>
         <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro} meta={meta}
                   aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
-                  aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo} />
+                  aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo}
+                  aoAbrirSerie={abrirSerie} />
       </Suspense>
     )
   ) : nivelEfetivo !== "mun" ? (
@@ -767,11 +752,17 @@ export default function App() {
         <div className="cabecalho-linha1">
           <div className="marca">
             <h1>Atlas da migração interna no Brasil</h1>
-            <span className="muted marca-subtitulo-completo"> · {edicao(censo).subtitulo}</span>
-            <span className="muted marca-subtitulo-curto"> · {edicao(censo).rotulo}</span>
+            {modo === "censos" ? (
+              <span className="muted marca-subtitulo-completo"> · Ao longo dos censos, 1980–2022</span>
+            ) : (
+              <>
+                <span className="muted marca-subtitulo-completo"> · {edicao(censo).subtitulo}</span>
+                <span className="muted marca-subtitulo-curto"> · {edicao(censo).rotulo}</span>
+              </>
+            )}
           </div>
           <div className="utilidades">
-            {CENSOS.length > 1 && (
+            {modo === "mapa" && CENSOS.length > 1 && (
               <div className="segmentado segmentado-censo" role="group" aria-label="Edição do Censo">
                 {CENSOS.map((c) => (
                   <button key={c} className={censo === c ? "ativo" : ""} aria-pressed={censo === c}
@@ -793,21 +784,27 @@ export default function App() {
         <div className="cabecalho-linha2">
           <div className="barra-ferramentas" role="toolbar" aria-label="Modo e nível do mapa">
             <div className="segmentado" role="group" aria-label="Modo do atlas" data-tour="modo-rm">
-              <button className={!rm ? "ativo" : ""} aria-pressed={!rm}
-                      onClick={() => { setPedindoRM(false); sairModoRM(); }}>
+              <button className={modo === "mapa" && !rm && !pedindoRM ? "ativo" : ""}
+                      aria-pressed={modo === "mapa" && !rm && !pedindoRM}
+                      onClick={() => { setPedindoRM(false); sairModoRM(); setModo("mapa"); }}>
                 Brasil
               </button>
               {recursos.rm && (
-                <button className={rm ? "ativo" : ""} aria-pressed={Boolean(rm)}
-                        onClick={() => setPedindoRM(true)}>
+                <button className={modo === "mapa" && (Boolean(rm) || pedindoRM) ? "ativo" : ""}
+                        aria-pressed={modo === "mapa" && (Boolean(rm) || pedindoRM)}
+                        onClick={() => { setModo("mapa"); setPedindoRM(true); }}>
                   Regiões metropolitanas
                 </button>
               )}
+              <button className={modo === "censos" ? "ativo" : ""} aria-pressed={modo === "censos"}
+                      onClick={() => { setPedindoRM(false); entrarModoCensos(unidadeDaSelecao ?? unidadeSerie); }}>
+                Ao longo dos censos
+              </button>
             </div>
-            {recursos.rm && (pedindoRM || rm) && (
+            {modo === "mapa" && recursos.rm && (pedindoRM || rm) && (
               <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
             )}
-            {!rm && (
+            {modo === "mapa" && !rm && (
               <div className="segmentado" role="group" aria-label="Nível de agregação">
                 {(["mun", "rgi", "rgint", "uf"] as Nivel[]).map((n) => (
                   <button key={n} className={nivel === n ? "ativo" : ""} aria-pressed={nivel === n}
@@ -817,7 +814,7 @@ export default function App() {
                 ))}
               </div>
             )}
-            {!rm && (
+            {modo === "mapa" && !rm && (
               <button type="button" className="botao-filtros" onClick={() => setFiltrosAbertos(true)}
                       aria-haspopup="dialog" aria-expanded={filtrosAbertos} aria-controls="folha-filtros">
                 Filtros{filtro ? " •" : ""}
@@ -825,7 +822,7 @@ export default function App() {
             )}
           </div>
 
-          {!rm && (
+          {modo === "mapa" && !rm && (
             <>
               <div className={`filtros-backdrop${filtrosAbertos ? " aberto" : ""}`}
                    onClick={() => setFiltrosAbertos(false)} aria-hidden="true" />
@@ -858,6 +855,11 @@ export default function App() {
       <EstadoDados />
       {avisoNivel && <div className="aviso-nivel" role="status">{avisoNivel}</div>}
 
+      {modo === "censos" ? (
+        <Suspense fallback={null}>
+          <ModoCensos escuro={escuro} aoAbrirMetodologia={abrirMetodologia} />
+        </Suspense>
+      ) : (
       <main className="conteudo" id="conteudo-principal">
         <div className="mapa" data-tour="mapa">
           {!malhaAtiva && !erro && <div className="carregando">Carregando o mapa…</div>}
@@ -925,19 +927,16 @@ export default function App() {
         </div>
         {painelDireita}
       </main>
+      )}
 
       <Suspense fallback={null}>
         {mostrarTour && <Tour aoFechar={() => setMostrarTour(false)} />}
         {paginaMetodologia && <PaginaMetodologia meta={meta} aoFechar={fecharMetodologia} />}
-        {paginaSerie && serieUnidade && (
-          <SerieCensos nivel={serieUnidade.nivel} codigo={serieUnidade.codigo} nome={serieUnidade.nome}
-                       escuro={escuro} aoFechar={fecharSerie} edicoes={edicoesSerie} />
-        )}
       </Suspense>
 
       {meta && (
         <footer className="rodape">
-          <p>{meta.aviso} Dados de {meta.versao_dados}. <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button></p>
+          <p>{meta.aviso} Dados {modo === "censos" ? "dos Censos Demográficos 1980–2022" : `de ${meta.versao_dados}`}. <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button></p>
           {meta.citacao && (
             <p className="rodape-citacao">
               Como citar: {meta.citacao.autor} <em>(<a href={meta.citacao.autor_orcid}>ORCID</a>)</em>.

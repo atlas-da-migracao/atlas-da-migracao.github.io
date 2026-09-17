@@ -12,6 +12,7 @@ import type { Fluxo, Meta } from "../lib/types";
 import { calcularRankingSaldoIntraRM, prepararSankey } from "../lib/rm";
 import { CLASSE_ESTUDO, CLASSE_TRAB, TIPOLOGIA_INTRA_RM, cor } from "../lib/paletas";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
+import { ResumoSerie } from "./ResumoSerie";
 import { Sankey } from "./Sankey";
 import { ComparativoRM } from "./ComparativoRM";
 import { AvisoProxy } from "./AvisoProxy";
@@ -31,6 +32,7 @@ interface Props {
   aoSair: () => void;
   aoEscolherRM: (cd_rm: string) => void;
   aoSelecionarFluxo: (o: string, d: string) => void;
+  aoAbrirSerie?: () => void;
 }
 
 function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
@@ -95,6 +97,7 @@ function RankingDivergente({ itens, rotuloValor }: {
 
 export function PainelRM({
   cdRm, aba, cruzar, topN, escuro, meta, aoMudarAba, aoMudarCruzar, aoSair, aoEscolherRM, aoSelecionarFluxo,
+  aoAbrirSerie,
 }: Props) {
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
@@ -258,6 +261,10 @@ export function PainelRM({
             <Kpi rotulo="Núcleo → periferia" valor={`${num1((resumo.nucleo_periferia / totalIntra) * 100)}%`}
                  detalhe={num(resumo.nucleo_periferia)} />
           </div>
+
+          {aoAbrirSerie && (
+            <ResumoSerie nivel="rm" codigo={cdRm} nome={resumo.nm_rm} aoAbrirSerieCompleta={aoAbrirSerie} />
+          )}
 
           <h3 className="secao-titulo">Matriz núcleo × periferia</h3>
           <table className="matriz-np">

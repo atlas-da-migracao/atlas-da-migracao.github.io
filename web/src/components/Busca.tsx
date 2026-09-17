@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
  *  (`itens`) de acordo com o nível de agregação ativo. */
 const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-export interface ItemBusca { codigo: string; rotulo: string; peso: number }
+export interface ItemBusca { codigo: string; rotulo: string; peso: number; detalhe?: string }
 
 export function Busca({ itens, placeholder = "Buscar município…", aoEscolher }: {
   itens: ItemBusca[]; placeholder?: string; aoEscolher: (codigo: string) => void;
@@ -48,6 +48,7 @@ export function Busca({ itens, placeholder = "Buscar município…", aoEscolher 
             <li key={r.codigo}>
               <button onMouseDown={() => { aoEscolher(r.codigo); setTexto(""); setAberto(false); }}>
                 {r.rotulo}
+                {r.detalhe && <span className="busca-detalhe"> · {r.detalhe}</span>}
               </button>
             </li>
           ))}

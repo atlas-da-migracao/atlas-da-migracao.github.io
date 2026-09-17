@@ -9,7 +9,7 @@
  *  números (mesmos dados, mesma fonte, sem a peça visual). `@observablehq/plot` já é
  *  dependência do projeto para isso ser completado depois sem nova biblioteca.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   serieDaUnidade, serieDosPares, serieDoSistema, serieFilhosDoMunicipio, seriePerfil,
 } from "../db/queries";
@@ -24,7 +24,7 @@ import { DIMENSOES } from "../lib/paletas";
 import { MapaSerieCensos } from "./MapaSerieCensos";
 import { GraficosSistema } from "./GraficosSistema";
 
-const ROTULO_NIVEL: Record<NivelSerie, string> = {
+export const ROTULO_NIVEL: Record<NivelSerie, string> = {
   mun: "município", rgi: "região imediata", rgint: "região intermediária", uf: "UF", rm: "região metropolitana",
 };
 
@@ -385,27 +385,13 @@ interface Props {
   codigo: string;
   nome: string;
   escuro: boolean;
-  aoFechar: () => void;
+  aoAbrirMetodologia: () => void;
   edicoes: readonly EdicaoSerie[];
 }
 
-export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar, edicoes }: Props) {
-  const fecharRef = useRef<HTMLButtonElement>(null);
-  const gatilho = useRef<Element | null>(null);
+export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, edicoes }: Props) {
   const [linhas, setLinhas] = useState<LinhaUnidadeSerie[] | null>(null);
   const [filhos, setFilhos] = useState<string[]>([]);
-
-  useEffect(() => {
-    gatilho.current = document.activeElement;
-    fecharRef.current?.focus();
-    const aoTeclar = (e: KeyboardEvent) => { if (e.key === "Escape") aoFechar(); };
-    window.addEventListener("keydown", aoTeclar);
-    return () => {
-      window.removeEventListener("keydown", aoTeclar);
-      (gatilho.current as HTMLElement | null)?.focus?.();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     let vivo = true;
@@ -447,47 +433,41 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoFechar, edicoes }: 
   const frase = linhas ? fraseSintese(entrada) : "";
 
   return (
-    <div className="pagina-cheia" role="dialog" aria-modal="true" aria-labelledby="serie-titulo">
-      <header className="pagina-cheia-topo">
-        <h2 id="serie-titulo">Ao longo dos censos — {nome}</h2>
-        <button ref={fecharRef} className="fechar" onClick={aoFechar} aria-label="Fechar a série completa">×</button>
-      </header>
-      <div className="pagina-cheia-corpo">
-        <nav className="serie-indice" aria-label="Blocos da série">
-          <a href="#bloco-1">Bloco 1</a><a href="#bloco-2">Bloco 2</a>
-          <a href="#bloco-3">Bloco 3</a><a href="#bloco-4">Bloco 4</a>
-        </nav>
-        {linhas === null ? (
-          <p className="muted">Carregando a série…</p>
-        ) : linhas.length === 0 ? (
-          <p className="muted">Não há série publicada para esta unidade.</p>
-        ) : (
-          <>
-            <p className="serie-frase serie-frase-completa">{frase}</p>
-            <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} edicoes={edicoes} />
-            <BlocoSistema nivel={nivel} edicoes={edicoes} />
-            <BlocoFluxos nivel={nivel} codigo={codigo} edicoes={edicoes} />
-            <BlocoPerfil nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} />
-          </>
-        )}
-        <section className="secao">
-          <h3>Glossário</h3>
-          <dl className="serie-glossario">
-            <dt id="gl-iem">IEM (MEI)</dt>
-            <dd>Índice de eficácia migratória: diferença entre quem chegou e quem saiu, dividida
-                pela soma dos dois. Vai de −1 (só saída) a +1 (só entrada).</dd>
-            <dt id="gl-cmi">CMI</dt>
-            <dd>Taxa bruta de intensidade migratória: % da população que mudou de município no
-                período, no conjunto de unidades do nível.</dd>
-            <dt id="gl-cv">CV</dt>
-            <dd>Coeficiente de variação: erro-padrão dividido pela estimativa, em %. Acima de 25%
-                o número é impreciso.</dd>
-          </dl>
-          <p className="muted-pequeno">
-            Metodologia completa: <a href="?pagina=metodologia">ver ?pagina=metodologia</a>.
-          </p>
-        </section>
-      </div>
+    <div className="serie-conteudo">
+      <nav className="serie-indice" aria-label="Blocos da série">
+        <a href="#bloco-1">Bloco 1</a><a href="#bloco-2">Bloco 2</a>
+        <a href="#bloco-3">Bloco 3</a><a href="#bloco-4">Bloco 4</a>
+      </nav>
+      {linhas === null ? (
+        <p className="muted">Carregando a série…</p>
+      ) : linhas.length === 0 ? (
+        <p className="muted">Não há série publicada para esta unidade.</p>
+      ) : (
+        <>
+          <p className="serie-frase serie-frase-completa">{frase}</p>
+          <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} edicoes={edicoes} />
+          <BlocoSistema nivel={nivel} edicoes={edicoes} />
+          <BlocoFluxos nivel={nivel} codigo={codigo} edicoes={edicoes} />
+          <BlocoPerfil nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} />
+        </>
+      )}
+      <section className="secao">
+        <h3>Glossário</h3>
+        <dl className="serie-glossario">
+          <dt id="gl-iem">IEM (MEI)</dt>
+          <dd>Índice de eficácia migratória: diferença entre quem chegou e quem saiu, dividida
+              pela soma dos dois. Vai de −1 (só saída) a +1 (só entrada).</dd>
+          <dt id="gl-cmi">CMI</dt>
+          <dd>Taxa bruta de intensidade migratória: % da população que mudou de município no
+              período, no conjunto de unidades do nível.</dd>
+          <dt id="gl-cv">CV</dt>
+          <dd>Coeficiente de variação: erro-padrão dividido pela estimativa, em %. Acima de 25%
+              o número é impreciso.</dd>
+        </dl>
+        <p className="muted-pequeno">
+          Metodologia completa: <button className="link-serie" onClick={aoAbrirMetodologia}>metodologia completa</button>.
+        </p>
+      </section>
     </div>
   );
 }
