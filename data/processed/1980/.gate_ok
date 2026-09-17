@@ -35,6 +35,6 @@
     "rm_resumo.parquet": "afb194f0ce5edc2dae9e5ed2030204a393ebc74ee9150bc14be0753d6d924b69"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-17T16:10:19.955468",
-  "versao_dados": "2026-09-17"
+  "timestamp": "2026-09-17T16:24:17.968892",
+  "versao_dados": "1.0.6-1980"
 }

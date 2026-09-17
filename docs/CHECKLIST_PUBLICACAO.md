@@ -58,11 +58,15 @@ uma declaração do titular, não uma checagem automática.
 
 - [x] **Nenhum arquivo de `data/raw`/`data/interim` no histórico do git.** Conferi com
       `git log --all --name-only | sort -u | grep -E '^(data/raw/|data/interim/)|\.(csv|CSV)$'`
-      (excluindo `pipeline/rm_nucleo.csv`) -- lista vazia. Se o repositório já teve algum
-      desses arquivos commitado em algum momento (mesmo removido depois), o histórico
-      precisa ser reescrito (`git filter-repo` ou equivalente) **antes** de tornar o
-      repositório público, porque remover num commit novo não apaga do histórico.
+      (excluindo `pipeline/rm_nucleo.csv` e `pipeline/genealogia_municipios.csv`, esta
+      última derivada só de malhas municipais públicas do IBGE, sem microdado algum --
+      ver `docs/genealogia.md` e `pipeline/build_genealogia.py`) -- lista vazia. Se o
+      repositório já teve algum desses arquivos commitado em algum momento (mesmo
+      removido depois), o histórico precisa ser reescrito (`git filter-repo` ou
+      equivalente) **antes** de tornar o repositório público, porque remover num commit
+      novo não apaga do histórico.
       **Verificado pela sessão em 2026-09-06:** busca no histórico completo (`git log --all --name-only`) sem nenhum arquivo em `data/raw/`, `data/interim/` ou `*.csv` (exceto `pipeline/rm_nucleo.csv`); o job `verificar` do CI repete essa checagem a cada push.
+      **Atualizado pela sessão em 2026-09-17 (branch `comparacao-censos`):** a F12.1 acrescentou `pipeline/genealogia_municipios.csv` como segunda exceção documentada (`.gitignore`, hook `pre-commit` e job `verificar` do CI atualizados juntos) -- checagem repetida no histórico completo, sem nenhum outro arquivo de dado bruto/intermediário fora das duas exceções.
 
 - [x] **E-mail no-reply nos commits.** O autor Git configurado usa o e-mail público
       `129672935+Damnielps@users.noreply.github.com` (ou outro e-mail no-reply do GitHub),
