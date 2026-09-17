@@ -38,6 +38,7 @@ ela, não a duplica.
 | Formato de origem legado | Quando os microdados não vêm em texto de largura fixa, a conversão é uma **etapa separada e anterior ao pipeline** (`scripts/prep_<edicao>.py`), que grava TXT de largura fixa em `data/interim/<edicao>/raw_txt/`; o SQL da edição continua lendo só texto. Modelo: `scripts/prep_1991.py` (27 DBF dBase III → TXT de 492 bytes). | Ler o formato legado direto do DuckDB, ou converter para Parquet | Isolar a conversão deixa o `01_extract.sql` da edição igual ao das outras e torna a etapa frágil (offsets, registros deletados, encoding) testável sozinha, UF a UF, contra a documentação pública do censo. Converter para Parquet pularia a checagem de largura fixa contra o layout do IBGE, que é justamente o que pega erro de posição. |
 | Módulo inteiro ausente na edição | Flag booleana própria na dataclass `Edicao` (`pendular: bool`), **distinta** de `rotulos_pendular`: `pendular=False` remove o módulo pendular inteiro (tabelas, colunas do contrato e o submódulo pendular de RM), enquanto `rotulos_pendular` só apaga dimensões *dentro* de um módulo que existe. Primeiro uso: 1991. | Deduzir a ausência do módulo de `pula_scripts`, ou de `rotulos_pendular` todo nulo | `pula_scripts` é instrução de orquestração (qual SQL não roda) e não expressa o fato metodológico; e derivar "não tem módulo" de "todos os rótulos são nulos" confunde duas coisas diferentes — uma edição pode ter pendular sem ter as dimensões de tempo/modo/frequência, que é exatamente o caso de 2000. A flag declara o fato uma vez, e o pipeline e o front consultam a mesma declaração. |
 | Núcleo metropolitano ausente na edição | Fallback aplicado **na edição**, não no CSV: quando o `cd_nucleo` de `pipeline/rm_nucleo.csv` não existe na malha do censo, o núcleo passa a ser o **município mais populoso entre os presentes naquela edição** — a mesma regra que `build_rm_nucleo.py` usa quando não há homônimo. Primeiro caso: RM do Sul do Estado (RR) em 1991, núcleo Rorainópolis → São João da Baliza. Em 1980 o fallback **não** foi necessário: das 81 regiões, 78 têm municípios na malha do censo e todas as 78 têm o núcleo do CSV presente (as 3 ausentes — Palmas, Gurupi e Sul do Estado — não aparecem de forma alguma na edição). | Mudar o CSV compartilhado, ou deixar a RM sem núcleo | O CSV é compartilhado por todas as edições de propósito (uma RM não troca de núcleo quando o usuário troca de censo); alterá-lo por causa de uma edição antiga mudaria o núcleo também em 2022. Sem núcleo, todos os pares intra-RM cairiam em `periferia_periferia`, que é um dado errado e silencioso. O fallback fica restrito às RMs afetadas e é declarado em `docs/METODOLOGIA.md`. |
+| Comparabilidade entre edições (série) | Uma **fonte única** de regras, `pipeline/comparabilidade_regras.py`, devolve para cada combinação (medida × edição × nível) um estado — `comparavel`, `comparavel_com_ressalva`, `nao_comparavel` — e uma **chave de nota** que o front resolve em tooltip; ela gera `data/processed/series/comparabilidade.json`. No mesmo módulo ficam: o **limiar de cobertura** das agregações (**0,90** da população de 2022 da unidade), a **regra dura de escala** (CMI/SMI/ANMR/taxas/distâncias/conectividade/Gini/Duncan/log-linear **não** se comparam entre níveis; IEM/MEI e composições, sim), os **fatores de calibração do proxy de 1980** (volume ÷1,073; saldo ÷0,941 e ÷0,912 na UF), a **harmonização de vocabulário** (`status`, `idade_sexo`, `edu`, `renda`) e a **tipologia de Baeninger** sobre o IEM (0,15 e 1/3). | Espalhar `if (censo === ...)` pelos componentes da série; ou decidir a comparabilidade dentro de `build_series.py` | Uma seção que compara cinco censos tem uma decisão metodológica por célula; deixá-las no código do gráfico garante que elas divirjam entre gráficos e que ninguém consiga auditá-las. Com a matriz declarada num módulo só, uma edição nova é uma linha em `CAPACIDADES` mais as exceções que ela exigir, e o teste `validar()` recusa nota órfã ou combinação sem regra. Ver `docs/METODOLOGIA.md`, seção "Comparação entre censos (F12)". |
 
 ## Avisos de comparabilidade: o que cada edição antiga encontrou (2000, 1991, 1980)
 
@@ -48,7 +49,9 @@ em dois casos (avisos 2 e 6) o que estava escrito por antecipação estava **err
 seis foram fechados depois de implementar a edição 1980** (F9.7), que era a edição para a qual eles
 tinham sido escritos. Onde ainda falavam de 1980 no futuro, agora falam do que se verificou de fato,
 com o ponteiro para onde a decisão está registrada. A edição 1980 ainda **abriu um sétimo aviso**,
-sobre depender de uma fonte que não é a do IBGE.
+sobre depender de uma fonte que não é a do IBGE. O aviso 1 foi **reaberto e fechado em definitivo na
+F12**, a seção "Ao longo dos censos": ele era o único aviso cuja pergunta (AMC ou código?) não
+pertencia a uma edição, e sim à comparação entre elas.
 
 Os avisos **continuam valendo** como método: uma edição ainda mais antiga (1970) deve lê-los como o
 histórico do que quebra e de quanto custa cada quebra, não como a resposta pronta — em 1980, três
@@ -92,6 +95,58 @@ dos seis (1, 2 e 6) se resolveram de um jeito que nenhuma edição anterior tinh
    `pipeline/sql/1980/MAPEAMENTO_02_classify.md` §3. **A lacuna é só do lado da residência**: quem
    saiu de lá tem origem e destino conhecidos, e esses fluxos são publicados numa tabela própria,
    sob uma origem agregada — ver a lição 8 abaixo.
+
+   ***Desfecho definitivo (F12, seção "Ao longo dos censos").*** A AMC voltou à mesa uma **terceira**
+   vez — agora não por causa de uma edição, mas da comparação entre as cinco — e foi descartada de
+   novo. **O que muda é que desta vez a decisão não é "sem AMC e pronto": é "sem AMC, com genealogia
+   como metadado e limiar de cobertura como contrapartida".** Considere a questão encerrada; uma
+   edição futura deve herdar este desfecho, não reabri-lo.
+
+   - **Por que foi descartada outra vez.** O motivo principal é o mesmo das duas anteriores: uma AMC
+     mudaria a unidade de análise das **cinco** edições ao mesmo tempo, inclusive a de 2022, que é a
+     que o público procura — o atlas deixaria de falar de municípios para falar de blocos sem nome
+     oficial, e a perda de resolução é maior justamente na fronteira agrícola, que é o objeto
+     migratório mais interessante do período (Ehrl 2017; a crítica de Silva & Bacha 2011 sobre o
+     Norte). E havia, em F12, uma razão a mais, de custo: como a AMC teria de existir **antes** de
+     qualquer agregação, ela entraria em `municipios_ref` e viraria nível novo em `03/04/07` — ou
+     seja, **reprocessar o pipeline inteiro nas cinco edições e recarimbar os cinco gates**, cada um
+     exigindo microdados de acesso controlado. A comparação entre censos, como foi construída, lê
+     **apenas** `data/processed[/<edição>]/`, que já passou pelo gate: nenhum arquivo de edição é
+     reescrito e nenhum gate é tocado.
+   - **O que foi construído no lugar.** Duas peças, e nenhuma delas é uma unidade de análise.
+     (i) A **genealogia**: `pipeline/build_genealogia.py` → `pipeline/genealogia_municipios.csv`
+     (`cd_mun_2022, edicao, existia, cd_mun_mae, nm_mun_mae, metodo`), obtida por sobreposição das
+     malhas públicas do IBGE. Ela registra **de qual território um município de hoje saiu**, sem
+     fundir nada: não entra em `municipios_ref`, não entra no SQL do pipeline, e é lida só por
+     `build_series.py` e pelo front. Quando o território vem de mais de um pai, marca
+     `metodo = 'multiplos_pais'` (281 casos em 1980, 277 em 1991, 22 em 2000, 1 em 2010) e a
+     interface diz "parte do território de X e outros"; `NORTEGO` é pai legítimo dos 139 municípios
+     do atual Tocantins em 1980. Em números, a genealogia dá, medida contra a **malha** de cada
+     edição, 1.631 municípios de 2022 ausentes em 1980, 1.079 em 1991, 63 em 2000 e 5 em 2010.
+     (ii) O **limiar de cobertura** das agregações, **0,90 da população de 2022 da unidade**
+     (`comparabilidade_regras.LIMIAR_COBERTURA`): abaixo dele a célula de RGI/RGInt/UF/RM diz
+     "cobertura insuficiente" em vez de número, e cobertura zero diz "sem cobertura". O valor foi
+     calibrado, não arbitrado — na faixa 0,85–0,90 a distorção mediana da taxa bruta de imigração é
+     de 14,1%, da ordem do próprio sinal que a série existe para mostrar (15% a 23% entre censos
+     consecutivos), enquanto na faixa 0,90–0,95 cai a 7,2%.
+   - **O custo assumido, explicitamente.** No nível municipal fica o **viés de fronteira**: a série
+     de um município criado depois **trunca** (a célula nomeia o mãe e oferece a série dele, sem
+     nunca somar nem emendar as duas), e a série do **município-mãe** vem enviesada — parte da queda
+     de população e de fluxo entre dois censos é perda de área, e a mudança entre a sede e o
+     distrito que viraria município autônomo, que no censo antigo era intramunicipal (isto é, não
+     era migração), passa a contar como migração depois da emancipação, produzindo um salto de
+     rotatividade puramente cartográfico. Nos níveis agregados o viés quase desaparece, por um
+     motivo estrutural: um desmembramento **dentro** da mesma região não altera a imigração nem a
+     emigração dela. O que sobra ali é cobertura, e é o limiar que a mede — ele corta 81 RGIs, 13
+     RGInts, 4 RMs e 1 UF em 1980 e 39 RGIs, 3 RGInts e 2 RMs em 1991, contra nenhum corte em 2010.
+     A contrapartida é obrigatória e é de interface: nenhuma queda de volume causada por fronteira
+     pode ser exibida como tendência migratória sem o aviso correspondente.
+   - **Onde está registrado.** `docs/genealogia.md` (contagens por edição, múltiplos pais, cobertura
+     de RGI/RGInt/RM, casos-âncora e o tratamento de `NORTEGO`) e `docs/METODOLOGIA.md`, seção
+     **"Comparação entre censos (F12)"**, itens 1 a 3 — base territorial, custo do viés de fronteira
+     com a bibliografia de AMC, e a calibração do limiar de cobertura. **Uma edição nova não redecide
+     nada disto**: roda `pipeline/build_genealogia.py` de novo (ela precisa de linha para cada
+     município de 2022) e depois `pipeline/build_series.py`, conforme o passo 10 do checklist.
 2. **A variável de data fixa muda de definição.** *(Corrigido depois de implementar a edição 1991
    — a redação anterior, "o Censo 1991 pergunta apenas a UF ou o país de residência 5 anos antes,
    sem o município, o que inviabiliza a matriz origem→destino municipal", estava **factualmente
@@ -369,6 +424,15 @@ conteúdo deles — leia-os e faça o análogo.
 9. **Front-end.** `npm run sync-data` já copia todas as edições e recusa se o gate de qualquer uma
    delas não estiver válido. Verifique que nenhum componente novo precisou de condicional por censo
    — se precisou, a informação provavelmente deveria estar em `edicoes.ts`.
-10. **Páginas estáticas de SEO.** Hoje `pipeline/build_paginas.py` gera páginas apenas para a
+10. **Série "Ao longo dos censos".** Declare a edição em
+    `pipeline/comparabilidade_regras.CAPACIDADES` (o que ela mede: pendular e suas dimensões,
+    renda, erro amostral, vocabulário de `status`, limiar de revelação, data fixa ou proxy) e
+    acrescente as exceções por medida que ela exigir, com a **nota** correspondente em `NOTAS`.
+    Rode `python pipeline/comparabilidade_regras.py`: ele recusa nota órfã e combinação sem
+    regra. Rode de novo `pipeline/build_genealogia.py` (a edição nova precisa de linha para cada
+    município de 2022) e `pipeline/build_series.py`. Nenhuma decisão de comparabilidade deve ir
+    para o front nem para o SQL — o módulo é a fonte única. Ver `docs/METODOLOGIA.md`, seção
+    "Comparação entre censos (F12)".
+11. **Páginas estáticas de SEO.** Hoje `pipeline/build_paginas.py` gera páginas apenas para a
     edição 2022 (não recebe `--edicao`). Se a edição nova também deve ter páginas estáticas, isso é
     trabalho adicional a planejar — ver `docs/SEO.md`.

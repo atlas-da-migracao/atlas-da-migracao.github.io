@@ -1031,6 +1031,18 @@ três formas com direção conhecida:
 O **proxy decenal** — usar todo o universo do quesito, `v517` de 0 a 9 anos — foi testado e
 rejeitado: os falsos positivos saltariam de 118.815 para 1.301.806.
 
+**O método e a advertência têm respaldo na literatura brasileira, e é a mesma fonte que dá os
+dois.** Cunha, J.M.P. (2005), "Migração e urbanização no Brasil: alguns desafios metodológicos para
+análise", *São Paulo em Perspectiva* 19(4):3–17, DOI 10.1590/S0102-88392005000400001, registra que
+(a) o Censo 1980 traz apenas a **última etapa** e o Censo 2000 apenas a **data fixa**, de modo que
+não existe um quesito comum às duas pontas da série; (b) o paliativo consagrado para aproximar 1980
+do conceito de data fixa é exatamente o que o atlas faz — **combinar a última etapa com o tempo de
+residência inferior a cinco anos**; e (c) essa aproximação "compromete teoricamente" a comparação,
+porque a pessoa que migrou em mais de uma etapa no período entra com a origem da última delas. A
+citação vale, portanto, para os dois lados da decisão: ela autoriza o método e proíbe apresentá-lo
+como equivalente. É a referência do selo `proxy_data_fixa` (`pipeline/edicoes.py`) e da nota
+`proxy_1980_volume` de `pipeline/comparabilidade_regras.py`.
+
 **Ressalva que não pode ser omitida:** a calibração foi feita em **1991**. Ela mede o erro do
 *conceito*, não o erro *desta* edição. Se a migração de retorno e de etapas múltiplas foi mais
 intensa em 1975–1980 — o período de auge das fronteiras agrícolas e das migrações sazonais — do que
@@ -1448,6 +1460,469 @@ números (3.940 polígonos no nível municipal, 489 RGIs, 130 RGInts, 27 UFs em
 | Limiar de detalhe R2 | `n ≥ 20` | **`n ≥ 50`** | sim — 11.295 pares com detalhe, faixa das outras: 10.814–14.095 |
 | Cobertura territorial | Brasil inteiro | Brasil inteiro (100% da população recenseada), mas com o território do atual Tocantins publicado como **uma unidade agregada** de 52 municípios, sem detalhe interno e sem RGI/RGInt: 3.939 municípios + 1 unidade | com nota |
 
+## Comparação entre censos (F12)
+
+As cinco edições do atlas são publicadas em conexões isoladas e, por construção, nunca se cruzam.
+A seção "Ao longo dos censos" é a primeira peça que as lê juntas: para um território selecionado
+— município, região imediata, região intermediária, UF ou região metropolitana — ela mostra a
+trajetória migratória de 1980 a 2022. Esta seção registra as decisões que tornam essa leitura
+honesta, e elas são de quatro tipos: **sobre que território** se compara (itens 1 e 2), **quando um
+número não pode ser mostrado** (item 3), **o que não pode ser comparado com o quê** (itens 4 e 5) e
+**como os vocabulários se encontram** (itens 6 a 8). A fonte única em código é
+`pipeline/comparabilidade_regras.py`, que gera `data/processed/series/comparabilidade.json`; nenhuma
+regra descrita aqui deve ser reimplementada no front ou no SQL.
+
+O arcabouço de medidas é o do projeto **IMAGE** — intensidade, distância, conectividade e impacto —
+de Bell, M., Blake, M., Boyle, P., Duke-Williams, O., Rees, P., Stillwell, J. & Hugo, G. (2002),
+"Cross-national comparison of internal migration: issues and measures", *Journal of the Royal
+Statistical Society A* 165(3):435–464, com os desdobramentos de Bell et al. (2015), *Population and
+Development Review* 41(1):33–58; Stillwell, J., Daras, K. & Bell, M. (2016), *Environment and
+Planning A* 48(8):1614–1633; e Rees, P., Bell, M., Kupiszewski, M. et al. (2017), "The impact of
+internal migration on population redistribution: an international comparison", *Population, Space
+and Place* 23(6):e2036. A aplicação latino-americana com o Brasil incluído é Bernard, A., Rowe, F.,
+Bell, M., Ueffing, P. & Charles-Edwards, E. (2017), *PLoS ONE* 12(3):e0173895, e o trabalho
+brasileiro mais próximo do que o atlas faz — comparar matrizes origem→destino entre 1980, 1991,
+2000 e 2010 — é Carvalho, R. & Charles-Edwards, E. (2019), *REBEP* 36:e0083.
+
+### 1. A base territorial: o recorte de 2022, comparado retroativamente
+
+A convenção do atlas — aplicar a divisão de 2022 retroativamente **por código de município**, sem
+áreas mínimas comparáveis — foi confirmada aqui pela terceira vez (as duas anteriores estão na
+seção de 1991, item 10, e na de 1980, item 9). A comparação entre censos **não** reabre a questão:
+ela não constrói AMC, não toca o pipeline e não recarimba nenhum dos cinco gates. Lê apenas
+`data/processed[/<edição>]/`, que já passou pelo controle de revelação.
+
+A consequência é dupla e conhecida. No nível municipal, **1.082 códigos de 2022 não existem em
+1991 e 1.634 não existem em 1980** (contra 8 em 2010 e 66 em 2000); a série desses municípios
+**trunca** nas edições anteriores à criação, e a célula vazia nomeia o município de origem do
+desmembramento, com um atalho para a série dele. As duas séries nunca são somadas nem emendadas —
+emendá-las produziria um degrau de fronteira apresentado como evento migratório. Nos níveis
+agregados, a divisão de 2022 é estável por construção (os códigos são os mesmos nas cinco edições)
+e o que varia é a **cobertura**: quanto do território de hoje estava representado no censo daquela
+época (item 3).
+
+### 2. O custo do viés de fronteira, e por que ele foi assumido em vez de corrigido
+
+Comparar um município de 2022 com o seu próprio passado tem dois modos de errar, e eles são
+simétricos. O **município criado depois** tem série curta: nas edições anteriores à emancipação, o
+seu território estava dentro de outro município, e não há como atribuir-lhe migração sem repartir
+um agregado que o censo não repartiu. O **município-mãe** tem série longa e enviesada: ele aparece
+nas edições antigas com a área que depois cedeu, de modo que parte da queda de população, de
+imigração e de emigração entre dois censos é **perda de território, não perda de gente**. Pior: a
+mudança de residência entre a sede e o distrito que viraria município autônomo era, no censo
+antigo, **mudança intramunicipal** — ou seja, não era migração —, e passa a ser migração
+inter-municipal depois da emancipação. A série do mãe tende, por isso, a mostrar um salto de
+rotatividade que é puramente cartográfico.
+
+A literatura brasileira registra o problema e a solução usual. Reis, E.J., Pimentel, M. & Alvarenga,
+A.I. (2007), "Áreas mínimas comparáveis para os períodos intercensitários de 1872 a 2000"
+(Ipea/Ipeadata), construíram as AMCs que se tornaram padrão no país; Ehrl, P. (2017), "Minimum
+comparable areas for the period 1872–2010: an aggregation of Brazilian municipalities", *Estudos
+Econômicos (São Paulo)* 47(1):215–229, DOI 10.1590/0101-416147128phe, estendeu-as e mediu o preço:
+para chegar a uma unidade constante de 1872 a 2010, a malha se reduz a algumas centenas de
+unidades, e a perda de resolução é maior justamente onde o desmembramento foi mais intenso — a
+fronteira agrícola, que é o objeto migratório mais interessante do período. Silva, R.R. & Bacha,
+C.J.C. (2011), "Polígonos de Voronoi como alternativa aos problemas das áreas mínimas comparáveis:
+uma aplicação à Região Norte do Brasil", *Revista Brasileira de Estudos de População* 28(1):133–151,
+mostram que no Norte a AMC agrega municípios inteiros em blocos do tamanho de estados e propõem uma
+alternativa geométrica — crítica que atinge em cheio o caso do atlas, já que é exatamente ali que
+está `NORTEGO`, a unidade agregada de 52 municípios que representa o atual Tocantins em 1980.
+
+A decisão foi **assumir o viés e sinalizá-lo**, não corrigi-lo, por três razões. (a) Uma AMC mudaria
+a unidade de análise das **cinco** edições ao mesmo tempo, inclusive de 2022, que é a edição que o
+público procura — o atlas deixaria de falar de municípios. (b) O viés é **localizável**: ele afeta
+o nível municipal e, dentro dele, apenas os municípios que cederam ou receberam território, que a
+genealogia de `pipeline/genealogia_municipios.csv` identifica um a um. (c) Nos níveis agregados ele
+**quase desaparece**, e por um motivo estrutural: os indicadores de RGI, RGInt, UF e RM são
+calculados sobre `fluxos_<nível>`, que não tem laço próprio — um desmembramento **dentro** da mesma
+região não altera a imigração nem a emigração da região, porque o fluxo entre os dois pedaços nunca
+atravessou a fronteira dela. O viés de fronteira, nos agregados, só existe quando o território muda
+de unidade ou não tem antecessor nenhum — que é precisamente o que o limiar de cobertura mede.
+
+A contrapartida obrigatória é de interface, e está registrada como requisito: a célula truncada diz
+`não existia` e nomeia o mãe (nota `municipio_nao_existia`), e a série do mãe abre com o aviso de
+que ele era territorialmente maior (nota `municipio_mae`). Nenhuma queda de volume causada por
+fronteira pode ser exibida como tendência migratória sem esse aviso.
+
+### 3. O limiar de cobertura das agregações: 90% da população, sobre duas coberturas distintas
+
+**Duas coberturas, porque há duas perguntas.** Para uma RGI, uma RGInt, uma UF ou uma RM, cada
+edição publica:
+
+- **`cobertura_pop` — cobertura territorial.** Fração da população de 2022 da unidade cujo
+  território está representado, naquela edição, por alguma unidade **da mesma unidade de 2022**: o
+  próprio município, quando existe no censo; senão o município-mãe, quando ele pertence à mesma
+  unidade; em 1980, a unidade agregada `NORTEGO` cobre o território dos 52 municípios **no nível de
+  UF** (ela tem UF `'17'`) e **não cobre** em RGI, RGInt e RM, onde ela é `NULL` por decisão
+  declarada. É a cobertura que vale para tudo que **atravessa a fronteira** da unidade: imigração,
+  emigração, saldo, taxas, IEM, distância, conectividade, Gini.
+- **`cobertura_cod` — cobertura de observação direta.** Fração da população de 2022 em municípios
+  que existem **individualmente** na edição. É a cobertura que vale para tudo que depende da
+  **partição interna**: migração e pendularidade intrametropolitanas, decomposição núcleo ×
+  periferia.
+
+A distinção não é preciosismo: no nível de RGI em 1991, a cobertura por código é de 100% em 165 das
+510 regiões e mediana 0,959, enquanto a cobertura territorial é de 100% em 339 delas e mediana
+1,000 — a diferença é inteiramente composta de municípios criados **dentro** da mesma região, que
+não tiram nada do agregado.
+
+**Calibração do limiar.** O limiar não foi escolhido por ser redondo: foi medido. O experimento usa
+só dados publicados e é o seguinte — para cada unidade de cada nível, recalcular os indicadores de
+2022 **sobre o subconjunto de municípios que existia em cada censo antigo**, e comparar com o valor
+da unidade inteira. Isso isola o efeito do truncamento territorial mantendo o comportamento
+migratório constante (é o efeito de recorte, não o efeito do tempo), e é deliberadamente **o pior
+caso**: o experimento remove o território ausente, enquanto no censo real ele costuma estar dentro
+do município-mãe. Resultado, com as 4 edições × 4 níveis agrupados por faixa de cobertura
+(distorção absoluta do IEM e distorção relativa da taxa bruta de imigração):
+
+| cobertura | unidades | mediana \|ΔIEM\| | p90 \|ΔIEM\| | mediana \|ΔTBI\|/TBI | p90 |
+|---|---:|---:|---:|---:|---:|
+| < 0,30 | 8 | 0,231 | 0,362 | 43,0% | 158% |
+| 0,30–0,50 | 30 | 0,168 | 0,385 | 46,6% | 134% |
+| 0,50–0,60 | 23 | 0,133 | 0,292 | 37,4% | 104% |
+| 0,60–0,70 | 60 | 0,113 | 0,274 | 28,4% | 47% |
+| 0,70–0,75 | 41 | 0,128 | 0,221 | 27,8% | 57% |
+| 0,75–0,80 | 75 | 0,080 | 0,166 | 20,2% | 42% |
+| 0,80–0,85 | 117 | 0,091 | 0,178 | 15,2% | 46% |
+| 0,85–0,90 | 179 | 0,061 | 0,148 | 14,1% | 32% |
+| **0,90–0,95** | **295** | **0,039** | **0,101** | **7,2%** | **20%** |
+| 0,95–1,00 | 432 | 0,018 | 0,052 | 2,2% | 8% |
+
+O critério de corte é a comparação com o **sinal** que a série pede para ler: a mudança típica de
+uma edição para a seguinte. Medida nos dados publicados, entre edições consecutivas e no mesmo
+nível, ela é de **0,06 a 0,19 de \|ΔIEM\|** (mediana por par de censos; 0,10 a 0,16 na maior parte
+dos casos) e de **15% a 23% de variação relativa da taxa bruta de imigração**. Adotou-se a regra de
+que o ruído territorial deve ficar **abaixo da metade do sinal**: metade de 0,12 é 0,06 de IEM, e
+metade de 17% é ~8,5% de taxa. A faixa 0,85–0,90 passa no teste do IEM (0,061) e **reprova no da
+taxa** (14,1%); a faixa 0,90–0,95 passa nos dois (0,039 e 7,2%). O limiar é, portanto:
+
+> **`LIMIAR_COBERTURA = 0,90`.** Abaixo de 90% de cobertura, a célula mostra "cobertura
+> insuficiente" e nenhum número. Cobertura zero mostra "sem cobertura". Entre 90% e 100%, mostra o
+> número com o selo de cobertura ao lado; 100% nas duas coberturas é `plena`.
+
+**O que o limiar custa.** Contagem **final**, apurada sobre `unidades_serie.parquet` já construído
+com a genealogia definitiva da F12.1. (A calibração acima foi feita antes dela, com o município-mãe
+aproximado pelo município presente mais próximo em centroide; como se antecipou, a genealogia mudou
+as contagens — para menos, porque o mãe verdadeiro cobre mais território que o vizinho mais próximo
+— e **não** o limiar, que foi calibrado sobre a relação cobertura→distorção, não sobre elas.)
+Cortada = célula sem número, isto é, `insuficiente` (cobertura abaixo de 0,90) ou `sem_cobertura`
+(nenhum município presente):
+
+| edição | RGI cortadas (de 510) | RGInt (de 133) | UF (de 27) | RM (de 81) |
+|---|---:|---:|---:|---:|
+| 2010 | 0 | 0 | 0 | 0 |
+| 2000 | 0 | 0 | 0 | 0 |
+| 1991 | 18 | 2 | 0 | 1 |
+| 1980 | 53 (32 + **21 vazias**) | 9 (6 + **3 vazias**) | 1 (Tocantins, ver abaixo) | 3 (**as 3 vazias**) |
+
+Com cobertura `parcial` — número publicado, com o selo de cobertura ao lado — ficam, em 1980, 356
+RGIs, 121 RGInts, 68 RMs e 25 UFs; em 1991, 326, 113, 64 e 25; em 2000, 44, 25, 6 e 12; em 2010,
+5, 4, 4 e 3. Em 2022, por definição, tudo é `plena`. Independentemente do critério territorial,
+as **4 RMs unitárias de 1980 e as 3 de 1991** têm os indicadores intrametropolitanos suprimidos, e
+o critério de `cobertura_cod` corta esses mesmos indicadores em 27 RMs em 1980 e 14 em 1991.
+
+As alternativas foram medidas: a 0,95 o corte subiria para 96 RGIs em 1991 e 141 em 1980 (19% e 28%
+do nível) para eliminar uma distorção mediana de 0,039 de IEM — que é um terço do sinal e já vem com
+selo; a 0,80 o corte cairia para 17 e 45, mas passaria a publicar células com distorção mediana de
+20% na taxa, da ordem do próprio sinal. **0,90 é o ponto em que o ruído territorial deixa de
+competir com a variação que a série existe para mostrar.**
+
+O caso do Tocantins em 1980 é o teste da definição: no **nível de UF**, `NORTEGO` cobre o
+território dos 52 municípios e a cobertura territorial da UF `'17'` é praticamente plena, com
+`cobertura_cod = 0` — a UF publica volume e IEM (com a nota `unidade_agregada_1980`) e **não**
+publica nada que dependa da composição interna. Nos níveis de RGI, RGInt e RM, `NORTEGO` não
+participa, e as 11 RGIs, 3 RGInts e 3 RMs correspondentes saem como `sem_cobertura` — que é
+diferente de "sem fluxo" e é assim que a interface as desenha.
+
+**O limiar da RM deve ser mais estrito?** Sim, e não por um número diferente: por medir outra
+coisa. Os indicadores metropolitanos que interessam — fluxo núcleo↔periferia, migração intra-RM,
+pendularidade interna — não dependem do total populacional da região, e sim de a **partição
+interna** existir. Por isso a RM (como qualquer indicador marcado `composicao_interna`) é avaliada
+pelo **mesmo limiar de 0,90 aplicado a `cobertura_cod`**, que é bem mais exigente na prática: em
+1991, 14 das 81 RMs ficam abaixo dele, e em 1980, 27 das 81 — contra 2 e 4 pelo critério
+territorial. Somam-se a isso duas condições incondicionais, que valem **independentemente de
+qualquer limiar**:
+
+1. **RM unitária.** Uma região reduzida a um único município na edição tem `rm_unitaria = true` e
+   **todos** os indicadores intrametropolitanos em `estado_cobertura = 'insuficiente'`, porque eles
+   são **zero por construção, não por medida**: não há par de municípios para haver fluxo interno.
+   São 3 RMs em 1991 (Porto Velho, Santarém e Central/RR) e 4 em 1980 (as mesmas três mais
+   Capital/RR — ver o item 9 da seção de 1980). Publicar zero ali seria afirmar
+   que a região não tem movimento interno, quando a afirmação verdadeira é que a região não tinha
+   interior.
+2. **Núcleo divergente.** Quando o núcleo de `pipeline/rm_nucleo.csv` não existe na malha da edição
+   e o atlas usa o fallback do município mais populoso presente (caso da RM do Sul do Estado/RR em
+   1991, Rorainópolis → São João da Baliza), a decomposição núcleo × periferia daquela edição **não
+   é a mesma medida** das demais e sai como `insuficiente`, com a nota `nucleo_divergente`. O total
+   da RM continua publicado.
+
+### 4. Regra dura de escala: o que não pode ser comparado entre níveis
+
+Rees et al. (2017) mediram, sobre as bases do IMAGE, que a **intensidade migratória (CMI) cresce
+linearmente com o logaritmo do número de unidades** da geografia, enquanto o **índice de eficácia
+(MEI) é estável** em geografias com 20 unidades ou mais. É o problema da unidade de área
+modificável (Openshaw, S. & Taylor, P., 1979) na forma em que ele atinge a migração, já formulado
+por Courgeau, D. (1973), "Migrants et migrations", *Population* 28(1):95–129: uma mudança de
+endereço é migração ou não conforme a malha, e a malha do atlas tem cinco níveis.
+
+A consequência é operacional e a interface a **impede**, não apenas a avisa:
+
+- **Livres de escala** (podem ser comparadas entre níveis): o IEM/MEI, o MEI agregado (com a
+  ressalva de 20+ unidades, sempre satisfeita nos níveis publicados: 510 RGIs, 133 RGInts, 81 RMs,
+  27 UFs) e **todas** as medidas de composição e razão — perfil por escolaridade, renda, status e
+  idade/sexo, idade mediana, razão de sexo, idade no pico, seletividade (razão de chances), posto de
+  um parceiro no ranking. São razões internas à unidade, e por isso também as mais robustas ao
+  truncamento territorial.
+- **Presas ao nível** (só podem ser lidas dentro de um mesmo nível): volumes (imigração, emigração,
+  saldo, rotatividade), todas as taxas brutas, CMI, SMI, ANMR, β de Fielding, distância média e
+  mediana, % interestadual, conectividade, Gini de linha e de coluna, Duncan D e os parâmetros do
+  log-linear. Nota `escala_cmi`.
+
+A compensação é publicar o efeito em vez de escondê-lo: a **figura de Courgeau** (Bell, M. &
+Muhidin, S., 2009, *Cross-national comparisons of internal migration*, UNDP HDR 2009/30, Figura 1)
+plota a CMI de cada edição contra o log do número de unidades de cada nível. A inclinação empírica
+dessa reta, por edição, é o próprio coeficiente de escala do atlas, e é ela que dá a ordem de
+grandeza do artefato no item 5 — sem importar coeficiente de nenhum outro país.
+
+### 5. O `n_unidades` variável do Bloco 2
+
+As medidas do sistema (CMI, SMI, MEI agregado, ANMR, β de Fielding) são calculadas sobre as
+unidades **existentes em cada edição**, não sobre as de 2022: 5.570 municípios em 2022, 5.565 em
+2010, 5.507 em 2000, 4.491 em 1991 e 3.940 em 1980. Calcular sobre as de 2022 seria impossível sem
+AMC; calcular sobre as de cada edição e calar o fato seria apresentar como queda de intensidade o
+que é, em parte, uma malha mais grossa.
+
+As três decisões, nessa ordem:
+
+1. **Publicar `n_unidades` ao lado de cada ponto**, sempre, em `sistema_serie.parquet`.
+2. **Rebaixar a célula** para `comparavel_com_ressalva`, nota `n_unidades_variavel`, sempre que
+   `n_unidades` diferir do de 2022 naquele nível. No nível municipal isso atinge as quatro edições
+   antigas; nos níveis agregados, apenas 1980 (489 RGIs, 130 RGInts e 78 RMs, contra 510/133/81).
+3. **Quantificar o artefato com a inclinação medida na própria figura de Courgeau**: a série publica,
+   ao lado da CMI municipal de cada edição, o deslocamento esperado
+   `Δ = β_courgeau(edição) × [log₁₀(n_2022) − log₁₀(n_edição)]` — que em 1980 corresponde a
+   `log₁₀(5570/3940) = 0,150` de argumento. Esse valor é **anotação**, nunca substitui a CMI medida
+   e nunca entra em nenhum cálculo derivado; ele existe para que o leitor saiba de que tamanho é a
+   parcela de recorte antes de ler a parcela de comportamento.
+
+O mesmo cuidado vale para as duas medidas de estrutura. O **Duncan D** entre duas edições e a
+**decomposição log-linear** são calculados sobre a **matriz comum** às duas edições comparadas —
+pares cuja origem e cujo destino existem nas duas —, com as duas matrizes renormalizadas nesse
+conjunto. Sem isso, os 1.634 municípios que aparecem entre 1980 e 2022 fariam o índice medir criação
+de município como se fosse mudança de padrão migratório, que é exatamente o erro que a seção
+inteira existe para evitar. `build_series.py` publica `n_pares_comuns` e a fração do volume coberta
+pela matriz comum ao lado de cada valor (notas `duncan_matriz_comum` e `loglinear_matriz_comum`).
+
+### 6. Harmonização dos vocabulários de perfil
+
+Os quatro vocabulários de `municipios_dim` estão quase alinhados entre as cinco edições; as quatro
+divergências têm tratamento declarado, e nenhuma delas é resolvida por aproximação silenciosa.
+
+**`status` — a única que exige aritmética.** Só o Censo 2022 coleta o município de nascimento e,
+com ele, separa quem saiu do município natal pela primeira vez (`primeira_saida`) de quem já morava
+fora dele antes do período (`etapas_multiplas`). As outras quatro edições colapsam as duas em
+`nao_natural`, por ausência do quesito (ver o item 1 de 2010, o 3 de 2000 e o 3 de 1991). Na série,
+**2022 é rebaixada ao vocabulário comum**:
+
+```
+nao_natural(2022) = primeira_saida + etapas_multiplas
+```
+
+com três cláusulas de aplicação, expostas em `HARMONIZACAO_STATUS` e em
+`comparabilidade_regras.harmonizar_status()`:
+
+- **Quando.** Sempre que a comparação inclui alguma edição ≤ 2010 — ou seja, sempre, na seção "Ao
+  longo dos censos" e no resumo embutido. O painel de uma edição isolada continua exibindo o
+  vocabulário completo de 2022: a informação não se perde, ela só não é usada para comparar.
+- **Nulos.** Se **qualquer** das duas parcelas estiver suprimida (`NULL` por R1/R3), a célula
+  harmonizada é `NULL` com motivo `suprimido` — nunca a soma parcial, nunca zero. Somar uma parcela
+  presente a uma ausente produziria um número menor que o verdadeiro, apresentado como se fosse
+  exato.
+- **Categorias comuns.** `nao_natural`, `retorno_natal`, `nascido_exterior` e `outros` nas cinco
+  edições. A célula de 2022 sai com `comparavel_com_ressalva`, nota `status_colapsado_2022`, para
+  que o leitor saiba que ali houve agregação — e não a leia como se 2022 tivesse a mesma pergunta
+  das demais.
+
+**`idade_sexo` — o sexo `I`.** O sexo indeterminado só existe em 2022 e pesa **0,0003% dos
+imigrantes, 0,0013% dos emigrantes e 0,024% dos residentes**. A decisão é **não somá-lo a `outros`**,
+e a razão é conceitual: `outros` é o resíduo da supressão complementar R3, isto é, "categorias que
+existiam e não puderam ser publicadas"; jogar ali uma categoria medida faria `outros` significar
+duas coisas ao mesmo tempo e contaminaria a única coluna que o leitor usa para saber quanto foi
+suprimido. A regra depende da **medida derivada**, não da categoria:
+
+- em medidas de **idade** (composição etária, idade mediana, idade no pico, pirâmide por faixa),
+  `XX_YY_I` é somado ao total da sua faixa etária — a faixa fica idêntica às das outras edições;
+- em medidas de **sexo** (razão de sexo, pirâmide lado a lado), o denominador é `M + F` **em todas
+  as cinco edições**, com o peso de `I` declarado ao lado. Dada a magnitude medida, a escolha não
+  desloca a razão de sexo além da quarta casa decimal — mas ela fica registrada porque a regra tem
+  de valer também para uma edição futura em que `I` seja maior.
+
+Nota `sexo_indeterminado_2022`.
+
+**`edu` — `nao_determinado`.** A categoria existe em 1980, 1991, 2000 e 2010 e não existe em 2022;
+em 1991 ela vale 0,03% e em 1980, 0,07%. As participações da série são calculadas sobre o total
+**excluída** essa categoria, nas cinco edições, e `nao_determinado` é reportado à parte como "sem
+declaração" — nunca como classe da distribuição, que é o que faria 2022 parecer ter uma classe a
+menos. Somam-se as ressalvas já conhecidas de derivação: `edu_anos_estudo` em 2000 e 1991 (o nível
+vem de "anos de estudo", o que subestima ligeiramente `superior_completo`) e `edu_reconstruida_1980`
+em 1980 (reconstrução do par série × grau).
+
+**`renda`.** Ausente em 1980 (`nao_comparavel`, nota `sem_renda_1980`) e comparável de 1991 a 2022,
+porque as faixas são **relativas ao salário mínimo de cada censo** — é isso que atravessa o
+Cruzeiro, o Real e a inflação do período. A célula de 1991 sai com ressalva (`sm_implicito_1991`):
+ali o divisor é o salário mínimo implícito nas faixas do próprio IBGE (Cr$ 36.161,60), não o mínimo
+legal vigente.
+
+### 7. A edição 1980 na série: proxy, calibração e o que a calibração não é
+
+1980 entra na série inteira com o selo `proxy_data_fixa` em **toda** célula, pela razão registrada
+no item 2 da seção daquela edição e respaldada por Cunha (2005). Os três fatores de calibração,
+medidos contra a data fixa verdadeira de 1991, ficam em `CALIBRACAO_1980`:
+
+| grandeza | fator | uso | sentido do erro |
+|---|---|---|---|
+| **volume** (imigração, emigração, rotatividade, taxas brutas, CMI, SMI, volume de um par) | **÷ 1,073** | aplicado, exibido ao lado do bruto | o bruto de 1980 **superestima** (falsos positivos de ida-e-volta, +7,3%) |
+| **saldo** (saldo, TLM, ANMR, β de Fielding) | **÷ 0,941** (nível municipal, RGI, RGInt e RM) e **÷ 0,912** (nível de UF) | aplicado, exibido ao lado do bruto | o bruto de 1980 **atenua** o saldo em 6% a 9%; o sinal se inverte em 241 dos 4.491 municípios (5,4%) |
+| **% interestadual** | **+2,11 p.p.** | **documentado, não aplicado** | o bruto de 1980 **subestima** a migração de longa distância (32,96% contra 35,07%) |
+
+Quatro cláusulas, todas necessárias:
+
+1. **O valor calibrado nunca substitui o bruto.** Ele aparece ao lado, marcado como estimativa
+   derivada, e **não entra em nenhum indicador derivado** — IEM, Gini, distâncias, participações e
+   perfis são sempre calculados sobre o dado publicado.
+2. **Os dois fatores de UF e de município do saldo vêm da mesma tabela de calibração** (regressão da
+   taxa líquida do proxy sobre a verdadeira em 1991: 0,941 por município, 0,912 por UF). Os níveis
+   intermediários — RGI, RGInt, RM — **não foram medidos** e usam o coeficiente municipal, que é o
+   mais conservador dos dois (corrige menos). A divergência frente ao valor único sugerido no plano
+   (0,941 para tudo) está declarada aqui de propósito, em vez de aproximada em silêncio.
+3. **O trio calibrado não fecha a identidade.** Dividir imigração e emigração por 1,073 e o saldo
+   por 0,941 produz três números que **não** satisfazem `saldo = imig − emig`, porque cada correção
+   é da sua própria grandeza e as duas fontes de erro são diferentes (inflação simétrica de um lado,
+   atenuação do diferencial de outro). A inconsistência é deliberada e está declarada na constante
+   `CALIBRACAO_1980_NAO_FECHA_IDENTIDADE`; qualquer tentativa de "consertar" o trio produziria uma
+   correção pior que as três medidas.
+4. **A correção é um piso.** A calibração foi feita em 1991 e mede o erro do *conceito*, não o erro
+   *desta* edição; se a migração de ida-e-volta foi mais intensa em 1975–1980, os desvios são
+   maiores. É o que `CALIBRACAO_1980_E_PISO` declara e o que a interface diz ao lado do valor
+   corrigido.
+
+Três ausências de 1980 são `nao_comparavel` e não recebem número em nenhuma célula: **renda**
+(`sem_renda_1980`), **erro amostral** (`sem_estimativa_1980` — a edição não tem chave de domicílio,
+item 8.1 da seção de 1980) e **tempo, frequência e modo do deslocamento pendular**
+(`sem_tempo_freq_modo`, exatamente como em 2000). A **conectividade** de 1980 também é
+`nao_comparavel` (`conectividade_limiar_1980`): a contagem de parceiros publicados depende do limiar
+de revelação, e 1980 é a única edição com limiar próprio (`n ≥ 20`), publicando 11,0% dos pares da
+amostra contra 16,2%–20,4% nas demais. Já a **concentração** (Gini) de 1980 é `comparavel_com_ressalva`, e não `nao_comparavel`, porque a cobertura de *volume* publicada é equivalente à das
+outras edições (70,7%, contra a faixa 67,6%–71,6%) — foi exatamente para isso que o limiar
+substituto foi calibrado (item 8.2 da seção de 1980).
+
+### 8. A tipologia de Baeninger sobre o IEM
+
+O índice de eficácia migratória já publicado (`iem = (D−O)/(D+O)`) é a ponte com a leitura
+brasileira mais reconhecível que a série pode oferecer: a **rotatividade migratória** de Baeninger,
+R. (2012), "Rotatividade migratória: um novo olhar para as migrações internas no Brasil", *REMHU —
+Revista Interdisciplinar da Mobilidade Humana* 20(39):77–100. A tese é que o Brasil deixou de ser um
+país de grandes correntes de mão única e passou a um regime em que muitos lugares **recebem e
+perdem quase o mesmo tanto de gente** — eficácia baixa com volume alto. A classificação usada na
+interface, e que alimenta as frases-síntese, é operacional:
+
+| classe | condição | leitura |
+|---|---|---|
+| **rotatividade** | \|IEM\| < **0,15** | entra e sai quase o mesmo: o fluxo maior não supera o menor em mais de um terço (razão D/O < 4/3) |
+| **absorção** / **evasão** | 0,15 ≤ \|IEM\| < **1/3** | ganho ou perda líquida clara, sem dominância |
+| **absorção forte** / **evasão forte** | \|IEM\| ≥ **1/3** | o fluxo maior é **o dobro** do menor (D/O ≥ 2) |
+| **indefinido** | \|IEM\| ≥ 0,15 **e** \|IEM\| < 1,96·se(IEM) | classificado seria ruído amostral |
+
+Os dois limiares são ancorados em razão entre fluxos, não em quantil — o que os torna estáveis entre
+edições e entre níveis (o IEM é livre de escala, item 4): `|IEM| = 0,15` equivale a `D/O = 4/3` e
+`|IEM| = 1/3` equivale a `D/O = 2`. A guarda estatística existe porque o IEM de município pequeno é
+ruidoso: no atlas, a margem de 95% do IEM (método delta sobre `se_imig`/`se_emig`) tem mediana
+**0,225 em municípios com menos de 20 mil residentes de 5 anos ou mais**, 0,140 entre 20 e 100 mil e
+**0,059 acima de 100 mil**. Sem a guarda, cerca de 15% dos municípios seriam classificados como
+absorção ou evasão sobre diferença indistinguível de zero. A guarda **não** joga esses casos em
+"rotatividade" — incerteza não é evidência de equilíbrio —, e sim numa classe própria,
+`indefinido`. Em 1980 ela não existe (a edição não publica erro amostral) e a tipologia sai com a
+nota `iem_sem_guarda_1980`.
+
+Aplicada ao dado publicado, a tipologia mede a tese de Baeninger e produz a série que a seção
+existe para mostrar:
+
+| edição | rotatividade | absorção | evasão | (das quais, "forte") |
+|---|---:|---:|---:|---:|
+| 2022 | **43,7%** | 34,7% | 21,6% | 19,2% |
+| 2010 | 36,7% | 26,0% | 37,3% | 28,2% |
+| 2000 | 30,9% | 29,3% | 39,8% | 35,9% |
+| 1991 | 29,4% | 23,6% | 46,9% | 39,8% |
+| 1980 | **24,9%** | 16,9% | **58,2%** | 45,6% |
+
+(participação dos municípios de cada edição; a mediana de \|IEM\| cai de 0,304 em 1980 para 0,173
+em 2022.) A leitura de 1980 tem uma proteção argumentativa útil: o proxy **atenua** o IEM em
+direção a zero, ou seja, tende a fazer 1980 parecer *mais* de rotatividade do que foi — e 1980 ainda
+assim tem a **menor** participação de rotatividade das cinco edições. A tendência medida é, portanto,
+um **piso**: corrigir o proxy a reforçaria.
+
+### 9. Estados de célula e o que a seção nunca faz
+
+Cada célula da série resolve, nesta ordem: **(1)** a medida existe naquele nível? **(2)** a edição
+mede? (`nao_comparavel` + nota, nunca zero); **(3)** o território existe e está coberto?
+(`nao_existia` com o mãe nomeado, `sem_cobertura`, `cobertura insuficiente`); **(4)** a célula
+sobreviveu à revelação? (`suprimido`); **(5)** senão, o número, com o estado de comparabilidade e o
+selo de cobertura. Os motivos de ausência são sempre **distinguíveis entre si** — `nao_medido`,
+`nao_existia`, `sem_cobertura`, `cobertura_insuficiente` e `suprimido` — e nenhum deles é
+representado por `0`.
+
+Quatro invariantes, verificados nos testes da F12.4-t e F12.5-t:
+
+- nenhuma medida `nao_comparavel` produz número em célula alguma;
+- nenhuma leitura de CMI, SMI, ANMR, taxa bruta, distância, conectividade, Gini, Duncan D ou
+  log-linear atravessa níveis territoriais;
+- nenhuma célula de pendular em 1991, nenhuma de renda em 1980, nenhuma de erro amostral em 1980;
+- `comparabilidade.json` cobre **todas** as combinações (medida × edição × nível) — hoje 47 medidas
+  e 1.115 células, das quais 606 `comparavel`, 398 `comparavel_com_ressalva` e 111
+  `nao_comparavel`.
+
+### 10. O que a série publica, e onde estão os documentos de apoio
+
+`pipeline/build_series.py` não recebe `--edicao`: ele lê as cinco pastas `data/processed[/<edição>]/`
+— **nunca microdados, nunca o pipeline** — e grava `data/processed/series/`, com `.gate_ok` próprio
+(`verify_gate.py --dir data/processed/series`) cuja `versao_dados` é a concatenação das cinco versões
+publicadas. Nenhum arquivo de edição é reescrito e nenhum dos cinco gates é recarimbado. Tamanho da
+série construída:
+
+| tabela | linhas | conteúdo |
+|---|---:|---|
+| `unidades_serie.parquet` | 31.606 | Bloco 1 por `(nível, código, edição)`: 27.851 municipais, 2.550 de RGI, 665 de RGInt, 405 de RM e 135 de UF — 6.321 linhas por edição (6.322 em 1980, com `NORTEGO`). Cobertura: 27.539 `plena`, 1.201 `parcial`, 59 `insuficiente`, 2.806 `sem_cobertura` (das quais 2.778 são municípios que não existiam) |
+| `pares_serie.parquet` | 914.610 | fluxos por par e edição: 642.895 de migração, 156.615 de trabalho e 115.100 de estudo; por nível, 764.505 municipais, 117.740 de RGI, 28.935 de RGInt e 3.430 de UF |
+| `perfil_serie.parquet` | 1.667.956 | Bloco 4, com o vocabulário já harmonizado pelo item 6 |
+| `sistema_serie.parquet` | 20 | Bloco 2: uma linha por `(nível, edição)` nos quatro níveis com sistema fechado (município, RGI, RGInt, UF) × cinco edições |
+| `loglinear_serie.parquet` | 421.898 | parâmetros `O`, `D` e `OD` da decomposição, sobre a matriz comum a cada par de edições (item 5) |
+| `comparabilidade.json` | 1.115 células | a matriz do item 9, gerada por `pipeline/comparabilidade_regras.py` |
+
+Municípios de 2022 sem linha com número, por edição — é a medida direta do truncamento do item 1:
+**1.631** em 1980, **1.079** em 1991, **63** em 2000 e **5** em 2010, cada um com o município-mãe
+nomeado. (Esses valores vêm da genealogia, que compara contra a **malha** de cada censo; os
+1.634/1.082/66/8 citados nas seções das edições antigas comparam contra `labels.RECORTES`, uma
+tabela de rótulos. As duas medidas são próximas e não intercambiáveis.)
+
+Dois documentos de apoio, que esta seção não duplica:
+
+- **`docs/genealogia.md`** — a saída de `pipeline/build_genealogia.py`: ausências por edição,
+  municípios com mais de um território de origem (281 em 1980, 277 em 1991, 22 em 2000, 1 em 2010),
+  cobertura de cada RGI/RGInt/RM por edição, o tratamento de `NORTEGO` como território de origem dos
+  139 municípios do atual Tocantins em 1980, e a razão de nenhum caso ter precisado do casamento por
+  centroide. É o metadado que sustenta os itens 1 a 3 — e **não** é uma AMC: não entra em
+  `municipios_ref` nem no SQL do pipeline. O histórico completo da decisão AMC-vs-código, descartada
+  três vezes, está no aviso 1 de `docs/EDICOES.md`.
+- **`docs/design_serie_censos.md`** — o desenho da interface (F12.4-d). Três pontos dele são
+  metodológicos e não apenas gráficos: **(a)** as quebras fixas do mapa **são** a tipologia do item 8
+  (`iem` em 0,15 e 1/3), de modo que legenda, classe e fonte única coincidam, e a escala de cor é a
+  mesma em todas as edições de um mesmo mapa — reescalar por edição faria décadas diferentes
+  parecerem iguais; **(b)** as três tramas de ausência (território não comparável, suprimido, não
+  medido) dão forma própria a cada motivo do item 9, sem preenchimento sólido, para que sejam
+  distinguíveis sem cor; **(c)** as frases-síntese são determinísticas e derivadas de
+  `classificar_iem`, com trava explícita contra afirmar tendência menor que a incerteza do proxy de
+  1980.
+
 ## Limitações conhecidas
 
 - A vista padrão do mapa usa a projeção cônica equivalente de Albers (`+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54`), que preserva área exatamente mas **não preserva forma nem ângulo**: há até ~6,6% de distorção de forma no extremo sul do país, a escala varia com a latitude (não há barra de escala válida para o mapa inteiro) e só o meridiano central fica vertical, de modo que o norte geográfico não é o topo da tela em toda parte. Os arcos origem→destino de longo alcance têm curvatura aparente diferente da da vista geográfica — a direção e o volume são os mesmos, a impressão de trajetória não. Ver a seção "Cartografia: projeção cônica equivalente de Albers (F10)".
@@ -1465,3 +1940,6 @@ números (3.940 polígonos no nível municipal, 489 RGIs, 130 RGInts, 27 UFs em
 - Na edição 1980, o território do atual Tocantins é publicado como **uma unidade agregada** ("Norte de Goiás (atual Tocantins)", 52 municípios), e não município a município: a fonte não informa em qual dos 52 cada residente morava. A unidade tem população (739.049), imigração, emigração, saldo, deslocamento pendular, UF (Tocantins) e polígono próprios, e entra nos dois lados da matriz origem→destino — mas **não é um município**, não tem RGI/RGInt, e mudanças entre os 52 municípios não aparecem como migração. Ver o item 4 da mesma seção.
 - Na edição 1980, **os recortes de 2022 deixam de estar todos povoados**: 489 das 510 regiões imediatas e 130 das 133 regiões intermediárias têm ao menos um município em 1980, e das 81 regiões metropolitanas 78 aparecem, 71 com menos municípios que em 2022 e **4 com um único município** (Capital/RR, Central/RR, Porto Velho/RO e Santarém/PA), o que zera por construção — não por medida — os indicadores intrametropolitanos dessas quatro. As 3 RGInts e 11 das 21 RGIs vazias são o território do atual Tocantins; as outras 10 RGIs vazias são regiões de fronteira agrícola cujos municípios foram todos criados depois de 1980. Um recorte vazio não é um recorte sem fluxo. Ver o item 9 da mesma seção.
 - Na edição 1980, a **origem não informada é a maior do atlas** (7,0% dos imigrantes internos, contra 1,2% em 2022 e 6,8% em 2010), e ela é toda do próprio questionário: as sentinelas de UF conhecida sem município, "Brasil sem especificação" e "ignorado". (Até a versão `1.0.1-1980` havia uma terceira parcela, os 15.350 vindos do norte de Goiás, cuja origem a fonte informava mas o atlas não tinha onde colocar; com a unidade agregada do item 4 eles viraram migrantes de origem válida e a categoria caiu de 7,4% para 7,0%.) Como em todas as edições, esses registros contam na imigração total do destino e ficam fora da matriz origem→destino municipal. Ver os itens 4 e 10 da mesma seção.
+- Na comparação entre censos, a série de um município **criado depois** de um censo é truncada (não recebe número naquela edição) e a série de um município **que cedeu território** contém um degrau de fronteira que não é migração: parte da queda de população e de fluxo entre dois censos é perda de área, e mudanças que hoje cruzam a divisa municipal eram, antes da emancipação, mudanças intramunicipais — isto é, não eram migração. O atlas assume esse viés em vez de construir áreas mínimas comparáveis, e o sinaliza célula a célula. Ver os itens 1 e 2 da seção "Comparação entre censos (F12)".
+- Na comparação entre censos, uma agregação (RGI, RGInt, UF, RM) só publica número quando **pelo menos 90% da população de 2022 da unidade** está coberta pelo território dos municípios presentes naquela edição; abaixo disso a célula diz "cobertura insuficiente", e uma unidade sem nenhum município diz "sem cobertura". Os indicadores intrametropolitanos usam o mesmo limiar sobre a cobertura por município individualmente presente, que é mais exigente, e são sempre suprimidos numa RM reduzida a um único município (zero por construção, não por medida). Ver o item 3 da mesma seção.
+- Na comparação entre censos, **intensidade migratória (CMI), SMI, ANMR, taxas brutas, distâncias, conectividade, Gini, Duncan D e os parâmetros do log-linear não podem ser comparados entre níveis territoriais diferentes** (município × RGI × RGInt × UF × RM): essas medidas crescem com o número de unidades da malha (efeito Courgeau/MAUP). O IEM/MEI e as medidas de composição e razão são livres de escala e podem. Ver o item 4 da mesma seção.
