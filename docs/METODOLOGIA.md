@@ -1684,6 +1684,23 @@ plota a CMI de cada edição contra o log do número de unidades de cada nível.
 dessa reta, por edição, é o próprio coeficiente de escala do atlas, e é ela que dá a ordem de
 grandeza do artefato no item 5 — sem importar coeficiente de nenhum outro país.
 
+**Nota apurada na auditoria F12.6-aud, ainda pendente de decisão**: `CMI = 100·M/P` e o `MEI`
+agregado são calculados com `M` = soma dos pares **publicados** de `fluxos*.parquet` (após R1/R2),
+não sobre o total de migrantes do nível (`Σ municipios.emig`, que inclui os pares suprimidos). A
+cobertura de `M` sobre o total varia por edição — **67,6% (2022) a 71,6% (1991)** — próxima da
+cobertura de revelação já documentada no item 3.1 desta seção. Consequência: a CMI publicada
+**não** é exatamente "% da população que mudou de município" (o glossário promete essa grandeza) —
+é essa fração aplicada só aos pares que passaram no limiar de revelação. Como a cobertura é
+parecida entre as cinco edições, a **comparação entre censos continua válida** (é o que o item 6
+desta seção valida contra a errata do IBGE); o que não está correto é a leitura do valor absoluto
+como a intensidade migratória verdadeira do nível. Nos níveis agregados (UF, por exemplo) o
+problema quase desaparece, porque `fluxos_uf` já cobre a quase totalidade da migração
+interestadual. Duas correções possíveis, nenhuma aplicada ainda: (a) trocar `M` por
+`Σ municipios.emig` (ou o equivalente do nível) em `pipeline/build_series.py`, o que exige nova
+rodada de `pipeline/tests/test_series.py` e de todos os gráficos do Bloco 2; ou (b) manter o
+cálculo e reescrever o glossário/definição de CMI para declarar a base exata. Fica para quem
+avaliar o branch decidir.
+
 ### 5. O `n_unidades` variável do Bloco 2
 
 As medidas do sistema (CMI, SMI, MEI agregado, ANMR, β de Fielding) são calculadas sobre as
