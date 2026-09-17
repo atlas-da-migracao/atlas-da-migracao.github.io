@@ -28,12 +28,37 @@ uma declaração do titular, não uma checagem automática.
       revelação + `verify_gate.py`). **O termo é omisso** sobre divulgação em formato de
       site público interativo, dataset sob licença aberta (CC BY 4.0), indexação ativa em
       buscadores e depósito com DOI -- não veda, mas também não autoriza explicitamente.
-      **Item continua genuinamente pendente**: solicitar confirmação por escrito ao IBGE de
-      que "Pesquisa acadêmica" cobre esse formato, dado que o site já está publicado.
-      **Ponto correlato, fora do escopo do IBGE**: a autorização de acesso está vinculada
-      ao vínculo institucional do titular declarado no Termo; o atlas publicado está em
-      nome pessoal, sem menção a essa instituição -- vale confirmar internamente se a
-      autorização concedida contemplava esse uso e essa forma de divulgação.
+      **Resposta do IBGE recebida em 2026-09-17** (protocolo nº 20260906003, Grupo de
+      Trabalho de Sigilo de Microdados, em resposta à solicitação enviada em 31/08/2026):
+      > "\[...\] não é permitido o compartilhamento dos microdados do Censo Demográfico 2022
+      > em repositórios de dados de pesquisa externos ao IBGE. Portanto, esse
+      > compartilhamento fere o termo de compromisso disponibilizado. \[...\] Com relação aos
+      > dados agregados por municípios, não há impedimento de sua disseminação, inclusive
+      > com o uso de mapas. Nesse caso, recomenda-se a utilização de técnicas de Controle
+      > Estatístico de Confidencialidade que, segundo o relato, já está em andamento, para
+      > que não haja risco de revelação por cruzamentos rarefeitos em domínios pequenos."
+
+      **Leitura da sessão**: a resposta cobre exatamente os dois lados da pergunta. (a) O
+      que é vedado -- compartilhar os microdados em si em repositório externo -- **nunca é
+      feito por este projeto** (`data/raw`/`data/interim` nunca saem da máquina, nunca são
+      commitados; ver regras de sigilo em `CLAUDE.md`). (b) O que o atlas de fato publica --
+      agregados por município, com mapas -- está **explicitamente autorizado**, condicionado
+      ao controle estatístico de confidencialidade, que o IBGE reconhece que "já está em
+      andamento" (o gate de revelação R1-R9, `pipeline/disclosure_check.py` +
+      `pipeline/verify_gate.py`, descrito na solicitação original). Isso resolve a lacuna
+      que o Termo de Uso e Finalidade deixava em aberto sobre o formato de divulgação
+      (site público, DOI, indexação) -- a resposta não fala desses termos por nome, mas
+      autoriza sem ressalva a "disseminação" de agregados municipais com mapas, que é
+      exatamente essa divulgação.
+      **Item permanece com a caixa em branco de propósito**: a leitura acima é da sessão,
+      não uma checagem automática -- quem decide se essa resposta satisfaz o item, e marca
+      a caixa, é o titular.
+      **Ponto correlato, ainda em aberto, fora do escopo desta resposta do IBGE**: a
+      autorização de acesso está vinculada ao vínculo institucional do titular declarado no
+      Termo; o atlas publicado está em nome pessoal, sem menção a essa instituição -- vale
+      confirmar internamente se a autorização concedida contemplava esse uso e essa forma
+      de divulgação. Este segundo ponto não foi perguntado ao IBGE e a resposta acima não o
+      resolve.
 - [ ] **Termos e e-mail de concessão arquivados.** Cópia do Termo de Compromisso de
       Confidencialidade e Responsabilidade, do Termo de Uso e Finalidade, e do e-mail de
       concessão (e do eventual aditamento acima) estão salvos em `docs/termos/`
