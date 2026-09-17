@@ -49,10 +49,25 @@ function estadoDoPonto(l: LinhaUnidadeSerie | undefined): EstadoCelula {
   return "numero";
 }
 
-/** Célula de uma medida qualquer: número quando existe, palavra + trama quando não. */
+/** Célula de uma medida qualquer: número quando existe, palavra + trama quando não.
+ *
+ *  `estado === "numero"` (a edição É comparável para esta unidade) com `valor == null` é um
+ *  caso à parte: a MEDIDA específica não pôde ser calculada para esta linha (ex.: Gini de
+ *  fluxos sem pares suficientes, distância média não computada em nível RM) -- não é a mesma
+ *  coisa que a unidade não existir ou ter cobertura insuficiente. Bug encontrado na auditoria
+ *  F12.6-aud: a versão anterior renderizava `PALAVRA_ESTADO.numero` (string vazia) sem trama
+ *  nenhuma -- uma célula em branco, indistinguível de um erro de carregamento. Tratada aqui
+ *  como "não publicado" com a trama cruzada (mesma família visual de "há dado, mas não pode
+ *  ser mostrado" -- aqui por insuficiência estrutural, não por sigilo, mas o efeito para quem
+ *  lê é o mesmo: nenhum número, e a razão está no tooltip). */
 function Celula({ valor, estado, formatar }: {
   valor: number | null; estado: EstadoCelula; formatar: (v: number) => string;
 }) {
+  if (estado === "numero" && valor == null) {
+    return <td className="serie-celula-vazia trama-cruzada" title="Não foi possível calcular esta medida para esta unidade/edição.">
+      não publicado
+    </td>;
+  }
   if (estado !== "numero" || valor == null) {
     const trama = tramaDoEstado(estado);
     return (

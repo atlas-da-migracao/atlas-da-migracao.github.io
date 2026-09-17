@@ -470,12 +470,42 @@ def _medidas_nivel_agregado(edicao: str, nivel: str) -> pd.DataFrame:
     col = COD_COL[nivel]
 
     if nivel in ("rgi", "rgint", "uf"):
-        grp = mun.dropna(subset=[col]).groupby(col).agg(
-            pop=("pop", "sum"), pop5=("pop5", "sum"), imig=("imig", "sum"),
-            emig=("emig", "sum"), saldo=("saldo", "sum"),
-            se_imig=("se_imig", lambda s: float(np.sqrt((s.fillna(0) ** 2).sum()))),
-            se_emig=("se_emig", lambda s: float(np.sqrt((s.fillna(0) ** 2).sum()))),
+        # `pop`/`pop5` somam de `municipios.parquet` -- população é legitimamente aditiva entre
+        # os municípios PRESENTES na edição. `imig`/`emig`/`saldo`/`se_*`, ao contrário, NÃO
+        # podem vir dessa soma: `municipios.imig` conta toda imigração de um município, inclusive
+        # a que vem de outro município da MESMA unidade (ex.: dois municípios da mesma UF) --
+        # migração interna à unidade, não migração que atravessa a fronteira dela. A definição
+        # correta (a mesma que o painel usa, `PainelUnidade`/`carregarUnidades` sobre
+        # `fluxos_<nivel>.parquet`, e a mesma de `docs/METODOLOGIA.md`, F6) é somar só os pares
+        # `fluxos_<nivel>` -- que já vêm filtrados para `origem <> destino` no SQL do pipeline
+        # (`04_flows.sql`, blocos rgi/rgint/uf) -- com destino/origem = a unidade. Bug encontrado
+        # e corrigido na auditoria F12.6-aud: a versão anterior somava `municipios.imig/emig`,
+        # inflando `iem` sistematicamente nos agregados (mediana 2,79x nas UFs em 2022) e
+        # divergindo da classificação de Baeninger do painel em até 11/27 UFs.
+        pop_grp = mun.dropna(subset=[col]).groupby(col).agg(
+            pop=("pop", "sum"), pop5=("pop5", "sum"),
         ).reset_index().rename(columns={col: "codigo"})
+
+        nome_fluxos = {"rgi": "fluxos_rgi.parquet", "rgint": "fluxos_rgint.parquet",
+                       "uf": "fluxos_uf.parquet"}[nivel]
+        fluxos = _ler(edicao, nome_fluxos) if _existe(edicao, nome_fluxos) else pd.DataFrame()
+        if not fluxos.empty:
+            imig_f = fluxos.groupby("destino").agg(
+                imig=("total", "sum"),
+                se_imig=("se", lambda s: float(np.sqrt((s.fillna(0) ** 2).sum()))),
+            ).rename_axis("codigo")
+            emig_f = fluxos.groupby("origem").agg(
+                emig=("total", "sum"),
+                se_emig=("se", lambda s: float(np.sqrt((s.fillna(0) ** 2).sum()))),
+            ).rename_axis("codigo")
+        else:
+            imig_f = pd.DataFrame(columns=["imig", "se_imig"])
+            emig_f = pd.DataFrame(columns=["emig", "se_emig"])
+
+        grp = pop_grp.set_index("codigo").join(imig_f, how="left").join(emig_f, how="left")
+        grp[["imig", "emig", "se_imig", "se_emig"]] = grp[["imig", "emig", "se_imig", "se_emig"]].fillna(0.0)
+        grp["saldo"] = grp["imig"] - grp["emig"]
+        grp = grp.reset_index()
         grp["tbi"] = np.where(grp["pop5"] > 0, 1000.0 * grp["imig"] / grp["pop5"], np.nan)
         grp["tbe"] = np.where(grp["pop5"] > 0, 1000.0 * grp["emig"] / grp["pop5"], np.nan)
         grp["tlm"] = np.where(grp["pop5"] > 0, 1000.0 * grp["saldo"] / grp["pop5"], np.nan)
@@ -511,17 +541,36 @@ def _medidas_nivel_agregado(edicao: str, nivel: str) -> pd.DataFrame:
         rm = _ler(edicao, "rm.parquet") if _existe(edicao, "rm.parquet") else pd.DataFrame()
         if rm.empty:
             return pd.DataFrame()
+        # `pop`/`pop5`: soma legítima dos municípios membros presentes na edição.
+        # `imig`/`emig`/`saldo`: NÃO somar de `municipios.parquet` (mesmo bug do bloco acima --
+        # incluiria migração intra-RM como se cruzasse a fronteira da região). A fonte correta,
+        # e a mesma que `PainelRM.tsx` usa ("Saldo com o resto do país"), é
+        # `rm_resumo.entradas_externas`/`saidas_externas`/`saldo_externo` -- já calculado pelo
+        # pipeline (`08_metro.sql`) como o que atravessa o limite da RM. `rm_resumo` não publica
+        # erro amostral para essas colunas, então `se_imig`/`se_emig` ficam NULL neste nível
+        # (mesma convenção de "não medido" usada em outras lacunas da série).
         munidx = mun.set_index("cd_mun")
         membros = rm[["cd_rm", "cd_mun"]].merge(
-            munidx[["pop", "pop5", "imig", "emig", "saldo", "se_imig", "se_emig"]],
-            left_on="cd_mun", right_index=True, how="left",
+            munidx[["pop", "pop5"]], left_on="cd_mun", right_index=True, how="left",
         )
-        grp = membros.groupby("cd_rm").agg(
-            pop=("pop", "sum"), pop5=("pop5", "sum"), imig=("imig", "sum"),
-            emig=("emig", "sum"), saldo=("saldo", "sum"),
-            se_imig=("se_imig", lambda s: float(np.sqrt((s.fillna(0) ** 2).sum()))),
-            se_emig=("se_emig", lambda s: float(np.sqrt((s.fillna(0) ** 2).sum()))),
+        pop_grp = membros.groupby("cd_rm").agg(
+            pop=("pop", "sum"), pop5=("pop5", "sum"),
         ).reset_index().rename(columns={"cd_rm": "codigo"})
+
+        resumo_ext = _ler(edicao, "rm_resumo.parquet") if _existe(edicao, "rm_resumo.parquet") else pd.DataFrame()
+        if not resumo_ext.empty:
+            ext = resumo_ext[["cd_rm", "entradas_externas", "saidas_externas"]].rename(
+                columns={"cd_rm": "codigo", "entradas_externas": "imig", "saidas_externas": "emig"},
+            )
+        else:
+            ext = pd.DataFrame(columns=["codigo", "imig", "emig"])
+
+        grp = pop_grp.merge(ext, on="codigo", how="left")
+        grp["imig"] = grp["imig"].fillna(0.0)
+        grp["emig"] = grp["emig"].fillna(0.0)
+        grp["saldo"] = grp["imig"] - grp["emig"]
+        grp["se_imig"] = np.nan
+        grp["se_emig"] = np.nan
         grp["tbi"] = np.where(grp["pop5"] > 0, 1000.0 * grp["imig"] / grp["pop5"], np.nan)
         grp["tbe"] = np.where(grp["pop5"] > 0, 1000.0 * grp["emig"] / grp["pop5"], np.nan)
         grp["tlm"] = np.where(grp["pop5"] > 0, 1000.0 * grp["saldo"] / grp["pop5"], np.nan)

@@ -343,7 +343,13 @@ function ressalvaCobertura(entrada: EntradaFrase, fim: PontoFrase): string | nul
 
 function prefixoTruncamento(entrada: EntradaFrase): string | null {
   if (!entrada.mae) return null;
-  const ultimaSemExistir = entrada.pontos.find((p) => p.estado === "nao_existia")?.edicao;
+  // `entrada.pontos` está em ordem cronológica ascendente (EDICOES_SERIE: 1980..2022). O
+  // município foi criado DEPOIS da ÚLTIMA edição em que ainda não existia -- não da primeira
+  // (bug encontrado na auditoria F12.6-aud: `.find` pegava a primeira ocorrência de
+  // `nao_existia`, dizendo "criado depois de 1980" para ~1.070 municípios cuja criação real foi
+  // em 1991, 2000 ou 2010). Percorrer de trás para frente dá a última.
+  const semExistir = entrada.pontos.filter((p) => p.estado === "nao_existia");
+  const ultimaSemExistir = semExistir.length > 0 ? semExistir[semExistir.length - 1].edicao : undefined;
   const agregada = entrada.mae.agregada ? ", unidade agregada" : "";
   return `${entrada.nome} foi criado depois de ${ultimaSemExistir ?? entrada.mae.edicoes[entrada.mae.edicoes.length - 1]}; ` +
     `até então seu território fazia parte de ${entrada.mae.nome}${agregada}.`;
@@ -410,19 +416,32 @@ export function fraseSintese(entrada: EntradaFrase): string {
       `margem de ${margem}). A comparação entre as duas pontas não é conclusiva.`;
   }
 
-  // T8 -- 1980 é a única âncora inicial possível e a mudança é pequena (mesma classe)
-  if (ini.edicao === "1980" && ini.tipo === fim.tipo) {
+  // T8 -- 1980 é a única âncora inicial possível e a variação é menor que a incerteza do
+  // proxy daquele ano. A trava é sobre a DIFERENÇA (|Δ IEM| < 0,10), não sobre "mesma classe":
+  // uma variação pequena pode atravessar um limiar da tipologia (ex.: 0,14 -> 0,16, cruzando
+  // 0,15) e ainda assim não ser uma tendência real -- é exatamente o caso em que afirmar
+  // "passou de rotatividade para absorção" (T1) seria mais enganoso, não menos, porque soa
+  // categórico sobre uma diferença ínfima. Encontrado na auditoria F12.6-aud: a versão
+  // anterior só disparava quando `ini.tipo === fim.tipo`, deixando ~108 municípios (e RGIs/
+  // RGInts/RMs/UF) que cruzam um limiar com Δ pequeno caírem em T1, afirmando tendência que o
+  // proxy sozinho explica.
+  if (ini.edicao === "1980" && Math.abs(fim.iem! - ini.iem!) < 0.1) {
     const valores = comNumero.map((p) => p.iem!).filter((v) => v != null);
     const min = Math.min(...valores);
     const max = Math.max(...valores);
-    if (Math.abs(fim.iem! - ini.iem!) < 0.1) {
-      return juntar([
-        prefixo,
-        `${entrada.nome} aparece em ${NOME_TIPO_IEM[fim.tipo!]} em todos os censos com dado ` +
-        `(IEM entre ${fmtIem(min)} e ${fmtIem(max)}). A diferença em relação a 1980 é menor que ` +
-        "a incerteza do proxy daquele ano.",
-      ]);
-    }
+    const mesmaClasse = ini.tipo === fim.tipo;
+    const nucleo = mesmaClasse
+      ? `${entrada.nome} aparece em ${NOME_TIPO_IEM[fim.tipo!]} em todos os censos com dado ` +
+        `(IEM entre ${fmtIem(min)} e ${fmtIem(max)})`
+      : `${entrada.nome} vai de ${NOME_TIPO_IEM[ini.tipo!]} (1980) a ${NOME_TIPO_IEM[fim.tipo!]} ` +
+        `(${fim.edicao}), mas o IEM quase não se move (${fmtIem(ini.iem)} para ${fmtIem(fim.iem)}) -- ` +
+        "a diferença atravessa um limiar da classificação sem ser, de fato, uma mudança grande";
+    return juntar([
+      prefixo,
+      `${nucleo}. A diferença em relação a 1980 é menor que a incerteza do proxy daquele ano; ` +
+      "não é seguro afirmar tendência.",
+      ressalvaCobertura(entrada, fim),
+    ]);
   }
 
   const comp = complemento(ini, fim, porTaxa);

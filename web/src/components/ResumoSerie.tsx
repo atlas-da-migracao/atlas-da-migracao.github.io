@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { serieDaUnidade, serieFilhosDoMunicipio } from "../db/queries";
 import {
-  EDICOES_SERIE, classificarIem, fraseSintese, rotuloEdicao,
+  EDICOES_SERIE, NOME_TIPO_IEM, classificarIem, fraseSintese, rotuloEdicao,
   type EdicaoSerie, type EntradaFrase, type NivelSerie, type PontoFrase,
 } from "../lib/serie";
 import { num, sinal } from "../lib/format";
@@ -157,15 +157,16 @@ export function ResumoSerie({ nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrir
             <div className="serie-numero-valor">{sinal(ultima.saldo)}</div>
             <Sparkline valores={pontos.map((p) => p.saldo)} />
           </div>
-          <div className="serie-numero" role="group" aria-label={`Eficácia, ${ultima.tipo}`}>
+          <div className="serie-numero" role="group"
+               aria-label={`Eficácia, ${ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}`}>
             <div className="serie-numero-rotulo">Eficácia ({ultima.edicao})</div>
             <div className="serie-numero-valor">
               {ultima.iem != null ? (ultima.iem > 0 ? "+" : "") + ultima.iem.toFixed(2) : "—"}
             </div>
-            <div className="muted-pequeno">{ultima.tipo}</div>
+            <div className="muted-pequeno">{ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}</div>
           </div>
-          <div className="serie-numero" role="group" aria-label="Rotatividade">
-            <div className="serie-numero-rotulo">Rotatividade ({ultima.edicao})</div>
+          <div className="serie-numero" role="group" aria-label="Movimento total (entradas + saídas)">
+            <div className="serie-numero-rotulo">Movimento total ({ultima.edicao})</div>
             <div className="serie-numero-valor">
               {ultima.imig != null && ultima.emig != null ? num(ultima.imig + ultima.emig) : "—"}
             </div>
