@@ -114,7 +114,9 @@ const MEDIDAS_BLOCO1: MedidaTabela[] = [
   { chave: "emig", rotulo: "Emigrantes", unidade: "", campo: "emig", formatar: num },
   { chave: "saldo", rotulo: "Saldo", unidade: "", campo: "saldo", formatar: sinal },
   { chave: "turnover", rotulo: "Rotatividade (entr.+saíd.)", unidade: "", campo: "turnover", formatar: num },
-  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: num },
+  // `distancia_media`/`distancia_mediana` são gravadas em METROS (distância euclidiana em Albers
+  // -- ver pipeline/medidas.py::distancia_media_ponderada); converte para km só na exibição.
+  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000) },
   { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%` },
   { chave: "gini_linha", rotulo: "Concentração origens (Gini)", unidade: "", campo: "gini_linha", formatar: num2 },
 ];
