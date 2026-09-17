@@ -10,6 +10,8 @@ import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import { AvisoProxy } from "./AvisoProxy";
 import { AvisoUnidade, unidadeAgregada } from "./AvisoUnidade";
+import { classificarIem, NOME_TIPO_IEM, seIem } from "../lib/serie";
+import { ResumoSerie } from "./ResumoSerie";
 
 interface Props {
   municipio: Municipio | null;
@@ -29,6 +31,8 @@ interface Props {
   aoSelecionarFluxo: (o: string, d: string) => void;
   aoFechar: () => void;
   meta: Meta | null;
+  /** F12.5: abre a seção completa "Ao longo dos censos" (?pagina=serie) para este município. */
+  aoAbrirSerie?: () => void;
 }
 
 /** Perfil dos migrantes do município: quem chega, quem sai e quem já morava.
@@ -104,7 +108,7 @@ function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalh
 }
 
 export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregando, escuro, recorte,
-                                 recorteCarregando, aoSelecionarFluxo, aoFechar, meta }: Props) {
+                                 recorteCarregando, aoSelecionarFluxo, aoFechar, meta, aoAbrirSerie }: Props) {
   // Hook chamado incondicionalmente, antes de qualquer "return" antecipado: `m` começa
   // null (dados do município ainda não chegaram) e vira truthy num re-render seguinte do
   // MESMO componente montado -- chamar o hook só no ramo `m truthy` violaria as regras dos
@@ -206,13 +210,25 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
         {m.imig_int > 0 && <> · {num(m.imig_int)} vindos do exterior</>}
       </div>}
 
-      {m.iem != null && (
-        <div className="nota-precisao">
-          Índice de eficácia migratória: <strong>{num2(m.iem)}</strong>{" "}
-          <span className="muted">
-            ({m.iem > 0.1 ? "atração consolidada" : m.iem < -0.1 ? "evasão consolidada" : "trocas equilibradas"})
-          </span>
-        </div>
+      {m.iem != null && (() => {
+        // F12.5: classificação pela tipologia de Baeninger (fonte única em lib/serie.ts,
+        // limiares ±0,15/1/3 e guarda estatística), a MESMA usada pela seção "Ao longo dos
+        // censos" -- antes este trecho classificava inline com limiar ±0,10, o que fazia
+        // painel e série mostrarem classes diferentes para o mesmo município/edição (ver
+        // docs/design_serie_censos.md, 4.5, item 2).
+        const se = seIem(m.imig, m.emig, m.se_imig, m.se_emig);
+        const tipo = classificarIem(m.iem, se);
+        return (
+          <div className="nota-precisao">
+            Índice de eficácia migratória: <strong>{num2(m.iem)}</strong>{" "}
+            <span className="muted">({tipo ? NOME_TIPO_IEM[tipo] : "—"})</span>
+          </div>
+        );
+      })()}
+
+      {aoAbrirSerie && (
+        <ResumoSerie nivel="mun" codigo={m.cd_mun} nome={`${m.nm_mun}/${m.uf_sigla}`}
+                     aoAbrirSerieCompleta={aoAbrirSerie} />
       )}
 
       {carregando ? (

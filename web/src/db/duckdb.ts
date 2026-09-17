@@ -156,6 +156,90 @@ export async function consultar<T = Record<string, unknown>>(
 /** Escapa um literal de texto para interpolação segura em SQL. */
 export const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
+// ============ F12.5: conexão "serie", independente das cinco conexões por edição ============
+// A seção "Ao longo dos censos" lê data/series/*.parquet -- publicado UMA vez, fora do caminho
+// data/<edicao>/ que as demais views usam (ver basePath em lib/edicoes.ts). É uma conexão
+// própria porque a série não pertence a nenhuma edição: ela COMPARA as cinco. Registrada uma
+// única vez e reaproveitada por toda consulta de lib/serie.ts / db/queries.ts.
+const TABELAS_SERIE = [
+  "unidades_serie", "pares_serie", "perfil_serie", "sistema_serie", "loglinear_serie",
+] as const;
+
+/** Caminho base dos parquets da série -- análogo a `basePath()`, mas fixo (a série não
+ *  depende da edição ativa). Ver web/scripts/sync-data.sh: `data/processed/series/**`
+ *  vira `web/public/data/series/**` (cópia recursiva de `data/processed`). */
+export const basePathSerie = (): string => "data/series/";
+
+let conexaoSerie: Promise<duckdb.AsyncDuckDBConnection> | null = null;
+
+async function iniciarSerie(): Promise<duckdb.AsyncDuckDBConnection> {
+  const raiz = new URL("duckdb/", document.baseURI).href;
+  const bundle = {
+    mainModule: `${raiz}duckdb-eh.wasm`,
+    mainWorker: `${raiz}duckdb-browser-eh.worker.js`,
+    pthreadWorker: null,
+  };
+  const worker = new Worker(bundle.mainWorker);
+  worker.addEventListener("error", (e) => console.error("[duckdb:serie] erro no worker", e.message));
+  const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING), worker);
+  await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+  const con = await db.connect();
+
+  const base = new URL(basePathSerie(), document.baseURI).href;
+  for (const t of TABELAS_SERIE) {
+    await db.registerFileURL(`${t}.parquet`, `${base}${t}.parquet`, duckdb.DuckDBDataProtocol.HTTP, false);
+    await con.query(`CREATE OR REPLACE VIEW ${t} AS SELECT * FROM read_parquet('${t}.parquet')`);
+  }
+
+  // Nomes das unidades para os cinco níveis, resolvidos a partir de `municipios_ref` de 2022
+  // (a base territorial da série -- todo `codigo` em unidades_serie/pares_serie é um código de
+  // 2022, ver plano F12 "Base territorial"). Registrado só aqui, na conexão `serie` -- as
+  // conexões por edição (db/duckdb.ts::TABELAS_BASE) já resolvem nome por join direto com o
+  // `municipios_ref` da própria edição, que não serve à série (ela cruza as cinco edições).
+  const baseEdicao2022 = new URL("data/", document.baseURI).href;
+  await db.registerFileURL(
+    "municipios_ref_2022.parquet", `${baseEdicao2022}municipios_ref.parquet`,
+    duckdb.DuckDBDataProtocol.HTTP, false,
+  );
+  await con.query(`
+    CREATE OR REPLACE VIEW unidades_nomes AS
+    SELECT 'mun' AS nivel, cd_mun AS codigo, nm_mun AS nome FROM read_parquet('municipios_ref_2022.parquet')
+    UNION ALL
+    SELECT DISTINCT 'rgi', cd_rgi, nm_rgi FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rgi IS NOT NULL
+    UNION ALL
+    SELECT DISTINCT 'rgint', cd_rgint, nm_rgint FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rgint IS NOT NULL
+    UNION ALL
+    SELECT DISTINCT 'uf', uf, uf_nome FROM read_parquet('municipios_ref_2022.parquet') WHERE uf IS NOT NULL
+    UNION ALL
+    SELECT DISTINCT 'rm', cd_rm, nm_rm FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rm IS NOT NULL
+  `);
+  return con;
+}
+
+/** Conexão DuckDB dedicada às cinco tabelas da série (memoizada: os parquets carregam uma
+ *  única vez, mesmo que a seção seja aberta/fechada várias vezes). */
+export function conectarSerie(): Promise<duckdb.AsyncDuckDBConnection> {
+  if (!conexaoSerie) {
+    conexaoSerie = iniciarSerie().catch((e: unknown) => {
+      conexaoSerie = null;
+      throw e;
+    });
+  }
+  return conexaoSerie;
+}
+
+/** Executa SQL na conexão "serie" e devolve as linhas como objetos (mesma conversão de
+ *  BigInt -> number de `consultar()`). */
+export async function consultarSerie<T = Record<string, unknown>>(sql: string): Promise<T[]> {
+  const con = await conectarSerie();
+  const res = await con.query(sql);
+  return res.toArray().map((linha) => {
+    const obj = linha.toJSON() as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) if (typeof v === "bigint") obj[k] = Number(v);
+    return obj as T;
+  });
+}
+
 /** true enquanto o motor da edição ATIVA não estiver pronto -- painéis usam para trocar
  *  "carregando fluxos…" por "preparando os dados…" durante a carga a frio. Acompanha a
  *  edição ativa automaticamente (troca de censo tem sua própria carga a frio). */

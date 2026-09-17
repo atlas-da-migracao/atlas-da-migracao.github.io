@@ -58,6 +58,12 @@ interface Estado {
    *  (ver `.filtro-fluxo` em App.tsx). Como o toggle de fluxos, não afeta as consultas nem o
    *  painel lateral -- só o que o mapa desenha. */
   limiarFluxo: number;
+  /** F12.5: resumo da série ("Ao longo dos censos") expandido dentro do painel ativo
+   *  (`?serie=1`). A seção COMPLETA (`?pagina=serie`) é roteada à parte, no mesmo padrão de
+   *  `PaginaMetodologia` -- ver App.tsx -- porque ocupa a tela inteira; este campo só
+   *  controla a camada 1 embutida no painel (ResumoSerie.tsx). Independente de edição/nível:
+   *  a série nunca muda com a edição ativa (docs/design_serie_censos.md, 1.1). */
+  serieExpandida: boolean;
   /** troca de edição do Censo; mantém nível, município, unidade, RM e aba, e limpa o fluxo
    *  selecionado e o recorte por característica (ver a implementação para o porquê) */
   setCenso: (censo: Censo) => void;
@@ -77,6 +83,7 @@ interface Estado {
   setMostrarFluxos: (v: boolean) => void;
   setMostrarSatelite: (v: boolean) => void;
   setLimiarFluxo: (v: number) => void;
+  setSerieExpandida: (v: boolean) => void;
   /** F6 leva 2: aplica várias peças de estado de uma vez (ex.: o link de um "achado-chave"
    *  da capa nacional, que precisa entrar em modo RM, trocar de aba E selecionar um fluxo
    *  na mesma navegação -- as ações individuais acima limpam campos umas das outras). */
@@ -118,12 +125,13 @@ function daUrl() {
     mostrarFluxos: p.get("fluxos") !== "0",
     mostrarSatelite: p.get("sat") === "1",
     limiarFluxo: Math.min(1, Math.max(0, Number(p.get("fmin") ?? 0) || 0)),
+    serieExpandida: p.get("serie") === "1",
   };
 }
 
 function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | "destino" | "metrica" | "topN"
                               | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos"
-                              | "mostrarSatelite" | "limiarFluxo">) {
+                              | "mostrarSatelite" | "limiarFluxo" | "serieExpandida">) {
   const p = new URLSearchParams();
   if (e.censo !== CENSO_PADRAO) p.set("censo", e.censo);
   if (e.rm) {
@@ -141,6 +149,7 @@ function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | 
   if (!e.mostrarFluxos) p.set("fluxos", "0");
   if (e.mostrarSatelite) p.set("sat", "1");
   if (e.limiarFluxo > 0) p.set("fmin", e.limiarFluxo.toFixed(2));
+  if (e.serieExpandida) p.set("serie", "1");
   const qs = p.toString();
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
@@ -239,6 +248,7 @@ export const useStore = create<Estado>((set, get) => ({
     paraUrl({ ...get(), limiarFluxo });
   },
   irPara: (patch) => { set(patch); paraUrl({ ...get(), ...patch }); },
+  setSerieExpandida: (v) => { set({ serieExpandida: v }); paraUrl({ ...get(), serieExpandida: v }); },
 }));
 
 /** true quando a interface está renderizando em modo escuro. */

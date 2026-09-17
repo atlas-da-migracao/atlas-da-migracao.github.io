@@ -21,9 +21,14 @@ interface Props {
   categorias: readonly Categoria[];
   series: SeriePerfil[];
   escuro: boolean;
+  /** F12.5: texto específico para uma série sem dado, por edição/série (ex.: "não medido
+   *  nesta edição", quando o motivo é a comparabilidade entre censos -- ver
+   *  docs/design_serie_censos.md, 3.4-a). Sem esta prop, o texto genérico "sem dado
+   *  publicável" continua valendo (uso atual, dentro de uma única edição). */
+  motivoVazio?: (serie: SeriePerfil) => string | null;
 }
 
-export function BarraPerfil({ titulo, nota, categorias, series, escuro }: Props) {
+export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVazio }: Props) {
   const usadas = categorias.filter((c) => series.some((s) => (s.valores[c.chave] ?? 0) > 0));
   if (usadas.length === 0) return null;
 
@@ -40,7 +45,7 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro }: Props)
           return (
             <div className="perfil-linha" key={s.rotulo}>
               <div className="perfil-rotulo">{s.rotulo}</div>
-              <div className="perfil-vazio">sem dado publicável</div>
+              <div className="perfil-vazio">{motivoVazio?.(s) ?? "sem dado publicável"}</div>
             </div>
           );
         }

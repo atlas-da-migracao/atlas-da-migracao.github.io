@@ -74,3 +74,95 @@ export function corDaFaixa(nivel: number, sinal: number, escuro: boolean): strin
   const rgb = sinal === 0 ? p.zero : sinal > 0 ? p.pos[nivel] : p.neg[nivel];
   return `rgb(${rgb.join(",")})`;
 }
+
+// --------------------------------------------------------------------------------------
+// F12.5-cartografia: cor por valor com QUEBRAS FIXAS (docs/design_serie_censos.md, seção 4) --
+// usada pelos 5 small multiples de MapaSerieCensos.tsx. Diferente de `corDivergente`/
+// `quebrasSimetricas` acima (mapa principal, quebras por quantil, recalculadas por edição),
+// aqui as quebras são as MESMAS constantes nas cinco edições (`QUEBRAS_FIXAS` de `lib/serie.ts`)
+// -- é o que torna os cinco painéis comparáveis entre si. `corDivergente()` já aceita um array
+// de 3 quebras crescentes, o formato exato de QUEBRAS_FIXAS.iem/tlm: reaproveitado sem
+// alteração. Para tbi/tbe (sequenciais, 5 classes) a função nova abaixo é o equivalente.
+// --------------------------------------------------------------------------------------
+import { classeSequencial, QUEBRAS_FIXAS, type EdicaoSerie } from "./serie";
+import { AZUL, LARANJA } from "./paletas";
+
+export type MedidaMapaSerie = "iem" | "tlm" | "tbi" | "tbe";
+
+/** Cor de uma classe sequencial (tbi/tbe), a partir de uma rampa ordinal de `paletas.ts`
+ *  (AZUL ou LARANJA) e das quebras fixas (4 quebras, 5 classes) -- seção 4.2/4.3. */
+export function corSequencial(
+  v: number | null, quebras: readonly number[],
+  rampa: (i: number) => { claro: string; escuro: string }, escuro: boolean,
+): string {
+  const i = classeSequencial(v, quebras);
+  const c = rampa(i);
+  return escuro ? c.escuro : c.claro;
+}
+
+/** Cor de uma unidade no mapa comparativo, para qualquer uma das 4 medidas permitidas
+ *  (iem/tlm divergentes; tbi/tbe sequenciais), sempre com `QUEBRAS_FIXAS` -- nunca quantis,
+ *  nunca recalculada por edição (regra dura da seção 4.1). Volume (saldo/imig/emig) não é
+ *  uma medida válida aqui: quem chama já filtra isso na UI (seletor de medida do mapa). */
+export function corMedidaSerie(medida: MedidaMapaSerie, v: number | null, escuro: boolean): string {
+  if (medida === "iem" || medida === "tlm") {
+    const rgb = corDivergente(v, [...QUEBRAS_FIXAS[medida]], escuro);
+    return `rgb(${rgb.join(",")})`;
+  }
+  const rampa = medida === "tbi" ? AZUL : LARANJA;
+  return corSequencial(v, QUEBRAS_FIXAS[medida], rampa, escuro);
+}
+
+/** Rótulos de legenda das 4 medidas do mapa comparativo (seção 4.2 -- textos fixos do
+ *  documento de desenho, não gerados por fórmula: os limiares de iem/tlm têm nomes da
+ *  tipologia de Baeninger, não "faixas" genéricas). */
+export const LEGENDA_MEDIDA_SERIE: Record<MedidaMapaSerie, { cor: string; rotulo: string }[]> = {
+  iem: [
+    { cor: "pos2", rotulo: "absorção muito forte (acima de +0,60)" },
+    { cor: "pos1", rotulo: "absorção forte (+0,33 a +0,60)" },
+    { cor: "pos0", rotulo: "absorção (+0,15 a +0,33)" },
+    { cor: "zero", rotulo: "rotatividade (−0,15 a +0,15)" },
+    { cor: "neg0", rotulo: "evasão (−0,33 a −0,15)" },
+    { cor: "neg1", rotulo: "evasão forte (−0,60 a −0,33)" },
+    { cor: "neg2", rotulo: "evasão muito forte (abaixo de −0,60)" },
+  ],
+  tlm: [
+    { cor: "pos2", rotulo: "ganho acima de 80‰" },
+    { cor: "pos1", rotulo: "ganho de 30 a 80‰" },
+    { cor: "pos0", rotulo: "ganho de 10 a 30‰" },
+    { cor: "zero", rotulo: "quase equilíbrio (±10‰)" },
+    { cor: "neg0", rotulo: "perda de 10 a 30‰" },
+    { cor: "neg1", rotulo: "perda de 30 a 80‰" },
+    { cor: "neg2", rotulo: "perda acima de 80‰" },
+  ],
+  tbi: [
+    { cor: "seq0", rotulo: "até 25‰" },
+    { cor: "seq1", rotulo: "25 a 50‰" },
+    { cor: "seq2", rotulo: "50 a 80‰" },
+    { cor: "seq3", rotulo: "80 a 130‰" },
+    { cor: "seq4", rotulo: "130‰ ou mais" },
+  ],
+  tbe: [
+    { cor: "seq0", rotulo: "até 25‰" },
+    { cor: "seq1", rotulo: "25 a 50‰" },
+    { cor: "seq2", rotulo: "50 a 80‰" },
+    { cor: "seq3", rotulo: "80 a 130‰" },
+    { cor: "seq4", rotulo: "130‰ ou mais" },
+  ],
+};
+
+/** Cor efetiva de cada slot de legenda acima ("pos2", "neg0", "seq3"...), para desenhar a
+ *  amostra de cor ao lado do rótulo. */
+export function corDoSlotLegenda(medida: MedidaMapaSerie, cor: string, escuro: boolean): string {
+  if (medida === "iem" || medida === "tlm") {
+    const p = escuro ? DIVERGENTE.escuro : DIVERGENTE.claro;
+    if (cor === "zero") return `rgb(${p.zero.join(",")})`;
+    const sinalCor = cor.startsWith("pos") ? p.pos : p.neg;
+    return `rgb(${sinalCor[Number(cor.slice(3))].join(",")})`;
+  }
+  const rampa = medida === "tbi" ? AZUL : LARANJA;
+  const c = rampa(Number(cor.slice(3)));
+  return escuro ? c.escuro : c.claro;
+}
+
+export type { EdicaoSerie };

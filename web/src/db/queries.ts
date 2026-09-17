@@ -1,6 +1,7 @@
 /** Consultas do atlas. Toda agregação roda no navegador, via DuckDB-WASM. */
-import { consultar, lit } from "./duckdb";
+import { consultar, consultarSerie, lit } from "./duckdb";
 import type { Fluxo, Municipio } from "../lib/types";
+import type { EdicaoSerie, NivelSerie } from "../lib/serie";
 
 export const carregarMunicipios = () =>
   consultar<Municipio>(`
@@ -492,3 +493,115 @@ export const rmDoPar = (o: string, d: string) =>
   consultar<{ cd_rm: string }>(`
     SELECT DISTINCT r1.cd_rm FROM rm r1 JOIN rm r2 ON r1.cd_rm = r2.cd_rm
     WHERE r1.cd_mun = ${lit(o)} AND r2.cd_mun = ${lit(d)}`).then((r) => r[0]?.cd_rm ?? null);
+
+// ============ F12.5: "Ao longo dos censos" -- consultas na conexão "serie" ============
+// Ver web/src/db/duckdb.ts (conectarSerie/consultarSerie) e web/src/lib/serie.ts (tipos e
+// regras). Os cinco parquets (unidades_serie, pares_serie, perfil_serie, sistema_serie,
+// loglinear_serie) são publicados uma única vez, fora do caminho por edição.
+
+/** As cinco edições da unidade (nivel, codigo), na ordem cronológica 1980->2022, com
+ *  posições ausentes preenchidas (a série é sempre completa em EDICOES_SERIE; a ausência
+ *  vira `estado`/motivo do lado de `lib/serie.ts`, não da consulta). */
+export const serieDaUnidade = (nivel: NivelSerie, codigo: string) =>
+  consultarSerie<Record<string, unknown>>(`
+    SELECT * FROM unidades_serie
+    WHERE nivel = ${lit(nivel)} AND codigo = ${lit(codigo)}
+    ORDER BY CASE edicao WHEN '1980' THEN 0 WHEN '1991' THEN 1 WHEN '2000' THEN 2
+                         WHEN '2010' THEN 3 WHEN '2022' THEN 4 END`);
+
+/** Top-10 de parceiros (origens ou destinos) de uma unidade nas cinco edições, mais
+ *  qualquer parceiro que tenha estado no top-10 em alguma edição (seção 3.3-a).
+ *
+ *  `direcao` é o lado FIXO do par (a própria unidade selecionada): "destino" pede os
+ *  parceiros que são ORIGEM dos fluxos que chegam nela ("de onde vieram"); "origem" pede os
+ *  parceiros que são DESTINO dos fluxos que saem dela ("para onde foram"). `tipoFluxo`
+ *  é a dimensão independente de `pares_serie.tipo` (migração/pendular-trabalho/pendular-
+ *  estudo) -- as duas NÃO podem compartilhar um parâmetro, senão o filtro
+ *  `WHERE tipo = <direção>` nunca casa com nenhuma linha (bug corrigido nesta revisão: a
+ *  versão anterior usava `direcao` também como valor de `tipo`, e com a polaridade
+ *  invertida). Devolve `nome`/`uf_sigla` do parceiro via `unidades_nomes` (registrada em
+ *  `db/duckdb.ts::iniciarSerie`, fonte `municipios_ref` de 2022). */
+export const serieDosPares = (
+  nivel: NivelSerie, codigo: string, direcao: "origem" | "destino",
+  tipoFluxo: "mig" | "trab" | "estudo" = "mig",
+) => {
+  const fixo = direcao;
+  const variavel = direcao === "destino" ? "origem" : "destino";
+  return consultarSerie<Record<string, unknown>>(`
+    WITH base AS (
+      SELECT * FROM pares_serie
+      WHERE nivel = ${lit(nivel)} AND tipo = ${lit(tipoFluxo)} AND ${fixo} = ${lit(codigo)}
+    ), destaque AS (
+      SELECT DISTINCT ${variavel} AS parceiro
+      FROM base WHERE posto IS NOT NULL AND posto <= 10
+    )
+    SELECT base.*, n.nome AS nome_parceiro FROM base
+    JOIN destaque ON destaque.parceiro = base.${variavel}
+    LEFT JOIN unidades_nomes n ON n.nivel = ${lit(nivel)} AND n.codigo = base.${variavel}
+    ORDER BY base.edicao, base.posto`);
+};
+
+/** Série de um par origem->destino específico (bloco 3-c, "par selecionado"). */
+export const serieDoPar = (nivel: NivelSerie, o: string, d: string) =>
+  consultarSerie<Record<string, unknown>>(`
+    SELECT * FROM pares_serie
+    WHERE nivel = ${lit(nivel)} AND origem = ${lit(o)} AND destino = ${lit(d)}
+    ORDER BY CASE edicao WHEN '1980' THEN 0 WHEN '1991' THEN 1 WHEN '2000' THEN 2
+                         WHEN '2010' THEN 3 WHEN '2022' THEN 4 END`);
+
+/** Perfil de uma unidade por dimensão, nas cinco edições (bloco 4). */
+export const seriePerfil = (nivel: NivelSerie, codigo: string, dimensao: string) =>
+  consultarSerie<{ nivel: string; codigo: string; edicao: EdicaoSerie; direcao: string;
+                    dimensao: string; categoria: string; valor: number; n_faixa: string | null;
+                    comparavel_com_ressalva: boolean }>(`
+    SELECT * FROM perfil_serie
+    WHERE nivel = ${lit(nivel)} AND codigo = ${lit(codigo)} AND dimensao = ${lit(dimensao)}
+    ORDER BY CASE edicao WHEN '1980' THEN 0 WHEN '1991' THEN 1 WHEN '2000' THEN 2
+                         WHEN '2010' THEN 3 WHEN '2022' THEN 4 END, direcao, categoria`);
+
+/** Medidas do sistema (Bloco 2: CMI, SMI, MEI agregado, ANMR, β de Fielding, Duncan D). */
+export const serieDoSistema = (nivel: NivelSerie) =>
+  consultarSerie<Record<string, unknown>>(`
+    SELECT * FROM sistema_serie WHERE nivel = ${lit(nivel)}
+    ORDER BY CASE edicao WHEN '1980' THEN 0 WHEN '1991' THEN 1 WHEN '2000' THEN 2
+                         WHEN '2010' THEN 3 WHEN '2022' THEN 4 END`);
+
+/** Decomposição log-linear (T, O_i, D_j, OD_ij) de uma unidade, nas edições publicadas. */
+export const serieLogLinear = (nivel: NivelSerie, codigo: string) =>
+  consultarSerie<Record<string, unknown>>(`
+    SELECT * FROM loglinear_serie
+    WHERE nivel = ${lit(nivel)} AND codigo = ${lit(codigo)}
+    ORDER BY CASE edicao WHEN '1980' THEN 0 WHEN '1991' THEN 1 WHEN '2000' THEN 2
+                         WHEN '2010' THEN 3 WHEN '2022' THEN 4 END`);
+
+/** Municípios cujo `cd_mun_mae` aponta para `codigo` -- ou seja, unidades que se
+ *  desmembraram DESTE município em alguma edição (seção 1.4, aviso `municipio_mae`). */
+export const serieFilhosDoMunicipio = (codigo: string) =>
+  consultarSerie<{ codigo: string; nm_mun_mae: string }>(`
+    SELECT DISTINCT codigo FROM unidades_serie
+    WHERE nivel = 'mun' AND cd_mun_mae = ${lit(codigo)}`);
+
+// ============ F12.5-cartografia/gráficos: mapa comparativo e Bloco 2 (GraficosSistema) ============
+
+export interface LinhaMapaSerie {
+  codigo: string; edicao: EdicaoSerie;
+  iem: number | null; tlm: number | null; tbi: number | null; tbe: number | null;
+  existia: boolean | null; estado_cobertura: string | null; rm_unitaria: boolean | null;
+}
+
+/** Todas as unidades de um nível, nas cinco edições, só as colunas que o mapa comparativo
+ *  pinta (iem/tlm/tbi/tbe -- nunca volume, seção 4.1) e o estado de ausência de cada célula.
+ *  Usada por `MapaSerieCensos.tsx`: uma consulta cobre os cinco painéis. */
+export const serieMapa = (nivel: NivelSerie) =>
+  consultarSerie<LinhaMapaSerie>(`
+    SELECT codigo, edicao, iem, tlm, tbi, tbe, existia, estado_cobertura, rm_unitaria
+    FROM unidades_serie WHERE nivel = ${lit(nivel)}`);
+
+/** CMI de TODOS os níveis de uma mesma edição (figura de Courgeau, seção 3.2-c): a figura
+ *  exige comparar níveis dentro da MESMA edição, a única vista da seção em que isso é
+ *  permitido (ver docs/design_serie_censos.md, 1.1, "nível é contexto fixo da seção"). */
+export const serieCourgeau = (edicao: EdicaoSerie) =>
+  consultarSerie<{ nivel: NivelSerie; n_unidades: number; cmi: number | null }>(`
+    SELECT nivel, n_unidades, cmi FROM sistema_serie
+    WHERE edicao = ${lit(edicao)} AND nivel <> 'rm'
+    ORDER BY n_unidades`);

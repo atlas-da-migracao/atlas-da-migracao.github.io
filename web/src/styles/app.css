@@ -557,3 +557,92 @@
 .filtro-fluxo label { font-size: 11px; color: var(--ink-muted-texto); }
 .filtro-fluxo input[type="range"] { width: 100%; accent-color: var(--ink-secondary); margin: 0; }
 .filtro-fluxo-valor { font-size: 11.5px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+
+/* ---- F12.5: "Ao longo dos censos" (ResumoSerie/SerieCensos) ----
+   As três tramas de ausência (docs/design_serie_censos.md, 4.4): SVG <pattern> com traço em
+   --ink-muted sobre fundo transparente -- nunca preenchimento sólido, para não se confundir
+   com a classe central da escala divergente. Distinguíveis em escala de cinza nos dois temas. */
+.secao-titulo-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.link-serie {
+  background: transparent; border: 0; padding: 0; font-size: 12.5px;
+  color: var(--ink-secondary); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.serie-frase { font-size: 13.5px; line-height: 1.5; margin: 6px 0 10px; }
+.serie-frase-completa { font-size: 15px; max-width: 70ch; }
+.serie-numeros { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+@media (max-width: 700px) { .serie-numeros { grid-template-columns: 1fr; } }
+.serie-numero {
+  padding: 8px 10px; background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.serie-numero-rotulo { font-size: 11px; color: var(--ink-muted-texto); text-transform: uppercase; letter-spacing: .03em; }
+.serie-numero-valor { font-size: 18px; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.serie-spark, .serie-spark-cel svg { color: var(--ink-secondary); }
+.serie-spark-vazia { display: inline-block; width: 60px; height: 20px; }
+.serie-legenda-spark { margin-top: 2px; }
+.serie-carregando { margin: 8px 0; }
+
+.serie-indice {
+  display: flex; gap: 12px; padding-bottom: 8px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--hairline); overflow-x: auto;
+}
+.serie-indice a { font-size: 12.5px; color: var(--ink-secondary); white-space: nowrap; }
+.serie-bloco { margin-top: 22px; }
+.tabela-serie { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.tabela-serie th, .tabela-serie td {
+  padding: 4px 8px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--hairline);
+}
+.tabela-serie th:first-child, .tabela-serie td:first-child { text-align: left; position: sticky; left: 0; background: var(--plane); }
+.serie-spark-cel { text-align: center; }
+.serie-celula-vazia { color: var(--ink-muted-texto); font-style: italic; }
+
+/* diagonal = "território não comparável"; cruzada = "há dado, mas suprimido"; pontilhada =
+   "o censo não mediu" -- mesma semântica no mapa, na tabela e no sparkline (seção 4.4). */
+.trama-diagonal {
+  background-image: repeating-linear-gradient(45deg, var(--ink-muted) 0 1px, transparent 1px 5px);
+}
+.trama-cruzada {
+  background-image:
+    repeating-linear-gradient(45deg, var(--ink-muted) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, var(--ink-muted) 0 1px, transparent 1px 6px);
+}
+.trama-pontilhada {
+  background-image: radial-gradient(var(--ink-muted) 1.2px, transparent 1.4px);
+  background-size: 4px 4px;
+}
+.serie-glossario dt { font-weight: 600; margin-top: 8px; }
+.serie-glossario dd { margin: 2px 0 0; color: var(--ink-secondary); font-size: 13px; }
+
+/* F12.5-cartografia: mapa comparativo (MapaSerieCensos.tsx), seção 4 do documento de desenho. */
+.serie-mapa { margin-top: 14px; }
+.serie-mapa-controles { margin-bottom: 8px; font-size: 12.5px; }
+.serie-mapa-paineis { display: flex; flex-wrap: wrap; gap: 10px; }
+.serie-mapa-painel { margin: 0; }
+.serie-mapa-painel figcaption { font-size: 11.5px; color: var(--ink-muted-texto); text-align: center; margin-bottom: 2px; }
+.serie-mapa-painel-vazio { display: flex; align-items: center; justify-content: center; border: 1px dashed var(--hairline); }
+.serie-mapa-painel path[role="button"] { cursor: pointer; }
+.serie-mapa-legenda { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12px; align-items: center; }
+.serie-mapa-legenda-classes, .serie-mapa-legenda-tramas {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 14px;
+}
+.serie-mapa-legenda-classes li, .serie-mapa-legenda-tramas li { display: flex; align-items: center; gap: 4px; }
+.serie-mapa-legenda-separador { width: 100%; border: none; border-top: 1px solid var(--hairline); margin: 4px 0; }
+.serie-mapa-amostra { display: inline-block; width: 14px; height: 14px; border: 1px solid var(--hairline); }
+.serie-mapa-amostra-diagonal { background-image: repeating-linear-gradient(45deg, var(--ink-muted) 0 1px, transparent 1px 5px); }
+.serie-mapa-amostra-cruzada {
+  background-image:
+    repeating-linear-gradient(45deg, var(--ink-muted) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-45deg, var(--ink-muted) 0 1px, transparent 1px 6px);
+}
+.serie-mapa-amostra-pontilhada { background-image: radial-gradient(var(--ink-muted) 1.2px, transparent 1.4px); background-size: 4px 4px; }
+
+/* F12.5-gráficos: Bloco 2 (GraficosSistema.tsx), seção 3.2 do documento de desenho. */
+.serie-graficos-sistema { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; }
+.serie-grafico { margin: 0; max-width: 100%; }
+.serie-grafico figcaption { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+.serie-grafico-exportar { display: flex; gap: 8px; margin: 4px 0; }
+.serie-fielding-paineis { display: flex; flex-wrap: wrap; gap: 8px; }
+.serie-fielding-painel {
+  border: 1px solid var(--hairline); border-radius: 4px; padding: 6px 10px; min-width: 110px;
+}
+.serie-fielding-beta { font-variant-numeric: tabular-nums; font-size: 13px; margin: 2px 0; }

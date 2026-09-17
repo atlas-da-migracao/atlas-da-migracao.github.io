@@ -1,0 +1,259 @@
+/** F12.5-gráficos -- os 3 gráficos do Bloco 2 ("O sistema"), seção 3.2 do documento de
+ *  desenho: (a) plano MEI×CMI com trajetória e contornos de ANMR constante; (b) dispersão de
+ *  Fielding (5 small multiples); (c) figura de Courgeau (CMI × nº de unidades, 5 linhas por
+ *  edição). O item (d) (Duncan D + log-linear, "linha de 4 números") NÃO tem gráfico próprio
+ *  por especificação -- está em `SerieCensos.tsx`, junto do resto do Bloco 2.
+ *
+ *  DESVIO DOCUMENTADO -- (b) Dispersão de Fielding: a especificação pede uma nuvem de pontos
+ *  por unidade (x = log10 densidade, y = taxa líquida) mais a reta ajustada. `unidades_serie`
+ *  (a única tabela publicada ao front para esta seção) NÃO publica população nem área por
+ *  unidade -- só `pipeline/area_km2.parquet` (usado internamente por `build_series.py` para
+ *  calcular `beta_fielding`/`ep_beta`, ambos publicados em `sistema_serie`) tem essa
+ *  informação, e não é copiado para `data/processed/series`. Reconstruir a nuvem de pontos
+ *  exigiria publicar população e área por unidade/edição -- uma decisão de pipeline (o que
+ *  publicar, se pop/área correspondem à mesma definição territorial usada no cálculo de
+ *  `beta_fielding`) que não me cabe tomar aqui (ver CLAUDE.md: decisões de comparabilidade são
+ *  do agente `metodologo`). Esta implementação usa só o que já é publicado: os cinco painéis
+ *  mostram o coeficiente β±erro-padrão (já calculado e publicado) e a leitura em palavras, sem
+ *  a nuvem de pontos -- sinalizado como pendência, não aproximado com dado inventado.
+ *
+ *  Usa @observablehq/plot (já dependência do projeto) -- `Plot.plot()` devolve um `<svg>` (ou
+ *  `<figure>` com `<svg>` dentro, quando há legenda de cor); anexado a uma `<div>` via ref em
+ *  `useEffect`, removendo o anterior antes de cada novo desenho (padrão recomendado pela
+ *  própria documentação do Plot para uso fora de notebooks Observable).
+ */
+import { useEffect, useMemo, useRef, useState } from "react";
+import * as Plot from "@observablehq/plot";
+import { serieCourgeau } from "../db/queries";
+import { EDICOES_SERIE, rotuloEdicao, type EdicaoSerie, type NivelSerie } from "../lib/serie";
+import { AZUL, cor as corDaPaleta } from "../lib/paletas";
+import { num, num2 } from "../lib/format";
+import { baixarCSV, baixarSvgComoPng } from "../lib/exportar";
+
+const ROTULO_NIVEL: Record<NivelSerie, string> = {
+  mun: "municípios", rgi: "regiões imediatas", rgint: "regiões intermediárias", uf: "UFs", rm: "regiões metropolitanas",
+};
+
+/** Renderiza uma figura do Plot dentro de uma <div>, guardando o <svg> para exportação. */
+function useFigura(desenhar: () => (SVGSVGElement | HTMLElement) | null, deps: unknown[]) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.innerHTML = "";
+    const figura = desenhar();
+    if (!figura) return;
+    el.appendChild(figura);
+    svgRef.current = figura instanceof SVGSVGElement ? figura : figura.querySelector("svg");
+    return () => { el.innerHTML = ""; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { containerRef, svgRef };
+}
+
+function BotoesExportar({ nome, linhas, svgRef }: {
+  nome: string; linhas: () => Record<string, unknown>[]; svgRef: React.RefObject<SVGSVGElement | null>;
+}) {
+  return (
+    <div className="serie-grafico-exportar">
+      <button className="link-serie" onClick={() => baixarCSV(nome, linhas())}>Baixar CSV</button>
+      <button className="link-serie" onClick={() => svgRef.current && baixarSvgComoPng(nome, svgRef.current)}>
+        Baixar PNG
+      </button>
+    </div>
+  );
+}
+
+interface LinhaSistema {
+  edicao: EdicaoSerie; n_unidades: number | null; cmi: number | null; mei: number | null;
+  anmr: number | null; beta_fielding: number | null; ep_beta: number | null;
+}
+
+function normalizar(linhas: Record<string, unknown>[]): LinhaSistema[] {
+  return linhas.map((l) => ({
+    edicao: l.edicao as EdicaoSerie,
+    n_unidades: (l.n_unidades as number) ?? null,
+    cmi: (l.cmi as number) ?? null,
+    mei: (l.mei as number) ?? null,
+    anmr: (l.anmr as number) ?? null,
+    beta_fielding: (l.beta_fielding as number) ?? null,
+    ep_beta: (l.ep_beta as number) ?? null,
+  }));
+}
+
+/** (a) Plano MEI×CMI com trajetória, seção 3.2-a. 420x320px. */
+function PlanoMeiCmi({ linhas }: { linhas: LinhaSistema[] }) {
+  const pontos = linhas.filter((l) => l.cmi != null && l.mei != null);
+  const { containerRef, svgRef } = useFigura(() => {
+    if (pontos.length === 0) return null;
+    const cmiMax = Math.max(1, ...pontos.map((p) => p.cmi!)) * 1.15;
+    const meiMax = Math.max(1, ...pontos.map((p) => p.mei!)) * 1.15;
+    // contornos de ANMR constante: mei = 100 * anmr / cmi
+    const niveisAnmr = [0.5, 1, 2, 4];
+    const contornos = niveisAnmr.flatMap((k) => {
+      const cmis = Array.from({ length: 60 }, (_, i) => cmiMax * (i + 1) / 60);
+      return cmis
+        .map((cmi) => ({ cmi, mei: (100 * k) / cmi, k }))
+        .filter((p) => p.mei <= meiMax);
+    });
+    // segmento 1980->1991 tracejado (proxy), separado do resto (sólido) -- Plot.line não
+    // aceita um acessor por-segmento para strokeDasharray, então a linha é desenhada em duas
+    // séries: os dois primeiros pontos (tracejado) e o restante (sólido), com o ponto de 1991
+    // repetido nas duas para não deixar um vão na trajetória.
+    const segmentoProxy = pontos.filter((p) => p.edicao === "1980" || p.edicao === "1991");
+    const segmentoResto = pontos.filter((p) => p.edicao !== "1980");
+    return Plot.plot({
+      width: 420, height: 320, marginRight: 40,
+      x: { label: "CMI (%) →", domain: [0, cmiMax] },
+      y: { label: "↑ MEI agregado (%)", domain: [0, meiMax] },
+      marks: [
+        Plot.line(contornos, {
+          x: "cmi", y: "mei", z: "k", stroke: "#c3c2b7", strokeWidth: 1, curve: "basis",
+        }),
+        ...niveisAnmr.map((k) => Plot.text([{ cmi: cmiMax * 0.97, mei: (100 * k) / (cmiMax * 0.97) }], {
+          x: "cmi", y: "mei", text: () => `ANMR ${num2(k)}`, fill: "#898781", fontSize: 9, dx: -4,
+        })),
+        Plot.line(segmentoProxy, { x: "cmi", y: "mei", stroke: "var(--ink-secondary)", strokeDasharray: "4,3" }),
+        Plot.line(segmentoResto, { x: "cmi", y: "mei", stroke: "var(--ink)" }),
+        Plot.dot(pontos, {
+          x: "cmi", y: "mei", r: 4,
+          symbol: (d) => (d.edicao === "1980" ? "diamond" : "circle"),
+          fill: (d) => (d.edicao === "1980" ? "none" : "var(--ink)"),
+          stroke: "var(--ink)",
+        }),
+        Plot.text(pontos, { x: "cmi", y: "mei", text: "edicao", dy: -12, fontSize: 10 }),
+        Plot.text(pontos, {
+          x: "cmi", y: "mei", dy: 16, fontSize: 9, fill: "var(--ink-secondary)",
+          text: (d) => `n = ${num(d.n_unidades)}`,
+        }),
+      ],
+    });
+  }, [pontos.map((p) => `${p.edicao}:${p.cmi}:${p.mei}`).join("|")]);
+
+  return (
+    <figure className="serie-grafico">
+      <figcaption>Plano MEI×CMI, com trajetória entre censos</figcaption>
+      <div ref={containerRef} />
+      <BotoesExportar nome="plano-mei-cmi" svgRef={svgRef} linhas={() => pontos.map((p) => ({ ...p }))} />
+      <p className="muted-pequeno">
+        A intensidade (CMI) cresce com o número de unidades; parte do deslocamento para a
+        direita entre 1980 e 2022 é malha mais fina, não comportamento — ver figura de Courgeau.
+      </p>
+    </figure>
+  );
+}
+
+/** (b) Dispersão de Fielding -- ver desvio documentado no cabeçalho do arquivo: sem nuvem de
+ *  pontos por unidade (dado não publicado ao front), só β±erro-padrão e leitura em palavras. */
+function DispersaoFielding({ linhas }: { linhas: LinhaSistema[] }) {
+  const leitura = (beta: number | null, ep: number | null): string => {
+    if (beta == null || ep == null) return "sem dado";
+    if (Math.abs(beta) < 2 * ep) return "equilíbrio";
+    return beta > 0 ? "concentração" : "desconcentração";
+  };
+  return (
+    <figure className="serie-grafico serie-fielding">
+      <figcaption>Dispersão de Fielding (β), por edição</figcaption>
+      <div className="serie-fielding-paineis">
+        {linhas.map((l) => (
+          <div key={l.edicao} className="serie-fielding-painel">
+            <div className="muted-pequeno">{rotuloEdicao(l.edicao)}</div>
+            <div className="serie-fielding-beta">
+              {l.beta_fielding != null ? `β = ${num2(l.beta_fielding)} ± ${num2(l.ep_beta)}` : "sem dado"}
+            </div>
+            <div className="muted-pequeno">{leitura(l.beta_fielding, l.ep_beta)}</div>
+          </div>
+        ))}
+      </div>
+      <BotoesExportar
+        nome="dispersao-fielding" svgRef={{ current: null }}
+        linhas={() => linhas.map((l) => ({
+          edicao: l.edicao, beta_fielding: l.beta_fielding, ep_beta: l.ep_beta, leitura: leitura(l.beta_fielding, l.ep_beta),
+        }))}
+      />
+      <p className="muted-pequeno">
+        Reta ajustada por MQO ponderado por população sobre as unidades existentes em cada
+        edição. Em 1980 a taxa líquida é proxy. A nuvem de pontos por unidade não está
+        publicada ao front nesta fase (depende de publicar população/área por unidade em
+        `data/processed/series` -- decisão de pipeline/metodologia fora de escopo aqui).
+      </p>
+    </figure>
+  );
+}
+
+/** (c) Figura de Courgeau -- CMI de todos os níveis, na mesma edição, 5 linhas (uma por
+ *  edição). 360x240px. */
+function FiguraCourgeau({ nivelAtivo }: { nivelAtivo: NivelSerie }) {
+  const [porEdicao, setPorEdicao] = useState<Record<EdicaoSerie, { nivel: NivelSerie; n_unidades: number; cmi: number | null }[]>>(
+    {} as Record<EdicaoSerie, { nivel: NivelSerie; n_unidades: number; cmi: number | null }[]>,
+  );
+  useEffect(() => {
+    let vivo = true;
+    Promise.all(EDICOES_SERIE.map((e) => serieCourgeau(e).then((r) => [e, r] as const))).then((resultados) => {
+      if (!vivo) return;
+      const obj = Object.fromEntries(resultados) as typeof porEdicao;
+      setPorEdicao(obj);
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  const dados = useMemo(() => EDICOES_SERIE.flatMap((e) =>
+    (porEdicao[e] ?? []).filter((l) => l.cmi != null && l.n_unidades > 0)
+      .map((l) => ({ ...l, edicao: e, log_n: Math.log10(l.n_unidades) })),
+  ), [porEdicao]);
+
+  const { containerRef, svgRef } = useFigura(() => {
+    if (dados.length === 0) return null;
+    return Plot.plot({
+      width: 360, height: 240, marginRight: 60,
+      x: { label: "log10(nº de unidades do nível) →" },
+      y: { label: "↑ CMI (%)", domain: [0, Math.max(1, ...dados.map((d) => d.cmi!)) * 1.1] },
+      color: { legend: false },
+      marks: [
+        Plot.line(dados, {
+          x: "log_n", y: "cmi", z: "edicao", curve: "linear",
+          stroke: (d) => corDaPaleta(AZUL(EDICOES_SERIE.indexOf(d.edicao)), false),
+        }),
+        Plot.dot(dados, {
+          x: "log_n", y: "cmi",
+          fill: (d) => corDaPaleta(AZUL(EDICOES_SERIE.indexOf(d.edicao)), false),
+          r: (d) => (d.nivel === nivelAtivo ? 4 : 2.5),
+        }),
+        Plot.text(
+          EDICOES_SERIE.map((e) => dados.filter((d) => d.edicao === e).sort((a, b) => b.log_n - a.log_n)[0])
+            .filter((d): d is NonNullable<typeof d> => Boolean(d)),
+          { x: "log_n", y: "cmi", text: "edicao", dx: 18, fontSize: 9 },
+        ),
+      ],
+    });
+  }, [dados.map((d) => `${d.edicao}:${d.nivel}:${d.cmi}`).join("|"), nivelAtivo]);
+
+  return (
+    <figure className="serie-grafico">
+      <figcaption>Figura de Courgeau — CMI × número de unidades do nível ({ROTULO_NIVEL[nivelAtivo]} em destaque)</figcaption>
+      <div ref={containerRef} />
+      <BotoesExportar nome="figura-courgeau" svgRef={svgRef} linhas={() => dados} />
+      <p className="muted-pequeno">
+        Quanto mais unidades tem a malha, maior a intensidade medida. A inclinação de cada
+        linha é o tamanho desse efeito na edição.
+      </p>
+    </figure>
+  );
+}
+
+interface Props {
+  nivel: NivelSerie;
+  linhasSistema: Record<string, unknown>[];
+}
+
+export function GraficosSistema({ nivel, linhasSistema }: Props) {
+  const linhas = useMemo(() => normalizar(linhasSistema), [linhasSistema]);
+  return (
+    <div className="serie-graficos-sistema">
+      <PlanoMeiCmi linhas={linhas} />
+      <DispersaoFielding linhas={linhas} />
+      <FiguraCourgeau nivelAtivo={nivel} />
+    </div>
+  );
+}

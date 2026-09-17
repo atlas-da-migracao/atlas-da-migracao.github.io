@@ -33,6 +33,8 @@ import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
 // tamanho do bundle antes/depois.
 const Tour = lazy(() => import("./components/Tour").then((m) => ({ default: m.Tour })));
 const PaginaMetodologia = lazy(() => import("./components/PaginaMetodologia").then((m) => ({ default: m.PaginaMetodologia })));
+// F12.5: "Ao longo dos censos" (?pagina=serie) -- mesma razão de ser um chunk separado.
+const SerieCensos = lazy(() => import("./components/SerieCensos").then((m) => ({ default: m.SerieCensos })));
 const PainelRM = lazy(() => import("./components/PainelRM").then((m) => ({ default: m.PainelRM })));
 const PainelPendular = lazy(() => import("./components/PainelPendular").then((m) => ({ default: m.PainelPendular })));
 // PainelUnidade carrega d3-chord/d3-shape (matriz de acordes UF x UF) -- só usado fora do
@@ -198,6 +200,31 @@ export default function App() {
   };
   useEffect(() => {
     const aoNavegar = () => setPaginaMetodologia(new URLSearchParams(location.search).get("pagina") === "metodologia");
+    window.addEventListener("popstate", aoNavegar);
+    return () => window.removeEventListener("popstate", aoNavegar);
+  }, []);
+
+  // F12.5: seção completa "Ao longo dos censos", roteada por ?pagina=serie (mesmo padrão da
+  // metodologia). O território/nível NÃO entram nesta URL própria -- continuam em ?n/?mun/?sel
+  // (docs/design_serie_censos.md, 1.1): a seção lê a unidade selecionada no momento em que abre.
+  const [paginaSerie, setPaginaSerie] = useState(
+    () => new URLSearchParams(location.search).get("pagina") === "serie",
+  );
+  const abrirSerie = () => {
+    setPaginaSerie(true);
+    const p = new URLSearchParams(location.search);
+    p.set("pagina", "serie");
+    history.pushState(null, "", `?${p.toString()}`);
+  };
+  const fecharSerie = () => {
+    setPaginaSerie(false);
+    const p = new URLSearchParams(location.search);
+    p.delete("pagina");
+    const qs = p.toString();
+    history.pushState(null, "", qs ? `?${qs}` : location.pathname);
+  };
+  useEffect(() => {
+    const aoNavegar = () => setPaginaSerie(new URLSearchParams(location.search).get("pagina") === "serie");
     window.addEventListener("popstate", aoNavegar);
     return () => window.removeEventListener("popstate", aoNavegar);
   }, []);
@@ -619,6 +646,16 @@ export default function App() {
   const unidadeNaoEncontrada = nivelEfetivo !== "mun" && unidadesNivel[chaveCache(nivelEfetivo)] != null
     && Boolean(selecao) && !unidadeSelecionada;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
+
+  // F12.5: unidade que a seção "Ao longo dos censos" abre quando `abrirSerie()` é chamado --
+  // deriva da seleção atual (município, unidade agregada ou RM), nunca da URL própria da seção.
+  const serieUnidade = rm
+    ? { nivel: "rm" as const, codigo: rm, nome: rmsCabecalho.find((r) => r.cd_rm === rm)?.nm_rm ?? rm }
+    : nivelEfetivo !== "mun" && unidadeSelecionada
+    ? { nivel: nivelEfetivo as "rgi" | "rgint" | "uf", codigo: unidadeSelecionada.codigo, nome: unidadeSelecionada.nome }
+    : selecionado
+    ? { nivel: "mun" as const, codigo: selecionado.cd_mun, nome: `${selecionado.nm_mun}/${selecionado.uf_sigla}` }
+    : null;
   const aoSelecionarNoMapa = nivelEfetivo === "mun" ? selecionarMunicipio : selecionarUnidade;
   // rótulo da dica flutuante do mapa (nome/UF), pelo código da feição sob o cursor
   const rotuloDaFeicao = useCallback((cd: string): string | null => {
@@ -691,7 +728,8 @@ export default function App() {
                       fluxos={arcos} carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
                       aoFechar={() => selecionarUnidade(null)} meta={meta}
                       fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel[`${censo}:uf`]} escuro={escuro}
-                      ufSobMapa={ufSobMapa} aoSelecionarUF={selecionarUnidade} aoRealcarUFs={aoRealcarUFs} />
+                      ufSobMapa={ufSobMapa} aoSelecionarUF={selecionarUnidade} aoRealcarUFs={aoRealcarUFs}
+                      aoAbrirSerie={abrirSerie} />
       )}
     </Suspense>
   ) : origem && destino ? (
@@ -702,7 +740,7 @@ export default function App() {
                      carregando={carregandoFluxos} escuro={escuro} recorte={filtro}
                      recorteCarregando={Boolean(filtro) && !recorte}
                      aoSelecionarFluxo={aoSelecionarFluxo} meta={meta}
-                     aoFechar={() => selecionarMunicipio(null)} />
+                     aoFechar={() => selecionarMunicipio(null)} aoAbrirSerie={abrirSerie} />
   ) : (
     <CapaNacional aoSelecionarFluxo={aoSelecionarFluxo} recorte={filtro} meta={meta} />
   );
@@ -891,6 +929,10 @@ export default function App() {
       <Suspense fallback={null}>
         {mostrarTour && <Tour aoFechar={() => setMostrarTour(false)} />}
         {paginaMetodologia && <PaginaMetodologia meta={meta} aoFechar={fecharMetodologia} />}
+        {paginaSerie && serieUnidade && (
+          <SerieCensos nivel={serieUnidade.nivel} codigo={serieUnidade.codigo} nome={serieUnidade.nome}
+                       escuro={escuro} aoFechar={fecharSerie} />
+        )}
       </Suspense>
 
       {meta && (

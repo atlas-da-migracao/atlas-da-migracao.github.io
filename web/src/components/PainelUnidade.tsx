@@ -12,6 +12,7 @@ import { AvisoUnidadeUf } from "./AvisoUnidade";
 import type { FluxoUF, UnidadeUF } from "../lib/acordes";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
+import { ResumoSerie } from "./ResumoSerie";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
@@ -75,11 +76,13 @@ interface Props {
   aoSelecionarUF?: (cd: string | null) => void;
   aoRealcarUFs?: (cds: string[] | null) => void;
   meta: Meta | null;
+  /** F12.5: abre a seção completa "Ao longo dos censos" (?pagina=serie) para esta unidade. */
+  aoAbrirSerie?: () => void;
 }
 
 export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregando, aoSelecionarFluxo,
                                 aoFechar, fluxosUF, unidadesUF, escuro = false, ufSobMapa = null,
-                                aoSelecionarUF, aoRealcarUFs, meta }: Props) {
+                                aoSelecionarUF, aoRealcarUFs, meta, aoAbrirSerie }: Props) {
   const acordes = fluxosUF && unidadesUF && (
     <DiagramaAcordes fluxos={fluxosUF} unidades={unidadesUF} escuro={escuro}
                      aoSelecionarPar={aoSelecionarFluxo} selecionado={unidade?.codigo ?? null}
@@ -167,6 +170,11 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
       <p className="muted-pequeno explicacao">
         Indicadores agregados: soma dos fluxos municipais publicados; sem erro-padrão próprio.
       </p>
+
+      {aoAbrirSerie && (
+        <ResumoSerie nivel={nivel} codigo={unidade.codigo} nome={unidade.nome}
+                     aoAbrirSerieCompleta={aoAbrirSerie} />
+      )}
 
       {unidade.iem != null && (
         <div className="nota-precisao">

@@ -16,10 +16,16 @@ interface Props {
   rotuloReferencia?: string;
   valoresReferencia?: Record<string, number>;
   escuro: boolean;
+  /** F12.5: trava a escala entre vários painéis (ex.: os 5 small multiples por edição da
+   *  seção "Ao longo dos censos", docs/design_serie_censos.md, 3.4-b). Sem esta prop, cada
+   *  pirâmide reescala a partir do próprio maior valor e a comparação visual entre edições
+   *  mente -- o mesmo erro que uma escala de cor por edição cometeria no mapa. Quando
+   *  ausente, mantém o comportamento atual (reescala pelo maior valor do próprio painel). */
+  maiorPct?: number;
 }
 
 export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloReferencia,
-                                    valoresReferencia, escuro }: Props) {
+                                    valoresReferencia, escuro, maiorPct: maiorPctFixo }: Props) {
   const grupo = prepararPiramide(valoresGrupo);
   const ref = valoresReferencia ? prepararPiramide(valoresReferencia) : null;
   if (grupo.total <= 0) return null;
@@ -29,7 +35,7 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
   const pontosExibidos = [...grupo.pontos].reverse();
   const refExibidos = ref ? [...ref.pontos].reverse() : null;
 
-  const maiorPct = Math.max(
+  const maiorPct = maiorPctFixo ?? Math.max(
     ...grupo.pontos.map((p) => Math.max(p.pctHomens, p.pctMulheres)),
     ...(ref?.pontos.map((p) => Math.max(p.pctHomens, p.pctMulheres)) ?? [0]),
     1,

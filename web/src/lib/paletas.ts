@@ -20,11 +20,14 @@ export interface Categoria {
 
 const ordinal = (claro: string[], escuro: string[]) => (i: number) => ({ claro: claro[i], escuro: escuro[i] });
 
-const AZUL = ordinal(
+// Exportadas (F12.5): reaproveitadas pelos small multiples sequenciais de tbi/tbe da seção
+// "Ao longo dos censos" (lib/serie.ts, QUEBRAS_FIXAS) -- ver docs/design_serie_censos.md, 4.3.
+// Não introduzir uma segunda rampa sequencial: estas duas são as únicas validadas pela skill.
+export const AZUL = ordinal(
   ["#86b6ef", "#5598e7", "#2a78d6", "#1c5cab", "#0d366b"],
   ["#b7d3f6", "#86b6ef", "#3987e5", "#256abf", "#184f95"],
 );
-const LARANJA = ordinal(
+export const LARANJA = ordinal(
   ["#e89d83", "#da7550", "#bf5329", "#9c390c", "#611f02"],
   ["#f2c4b4", "#e89d83", "#d06238", "#af4517", "#883008"],
 );
