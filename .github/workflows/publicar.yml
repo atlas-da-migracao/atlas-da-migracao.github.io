@@ -4,9 +4,17 @@ name: Publicar
 # controlados do IBGE, só existentes na máquina local do titular do acesso -- ver
 # CLAUDE.md e docs/CHECKLIST_PUBLICACAO.md): o CI só verifica, constrói e publica os
 # agregados já aprovados pelo gate de revelação e versionados em data/processed.
+# Publicação MANUAL, por enquanto. O gatilho automático em `push: branches: [main]` está
+# suspenso de propósito: com ele, integrar trabalho em `main` e colocar o site no ar eram o
+# mesmo ato, e a decisão de publicar ainda está em aberto (ver `legal/`, ignorado neste
+# repositório: o parecer de 06/09/2026 não conclui por "pode publicar como está", e a
+# autorização institucional e os ajustes R10-R14 do gate de revelação seguem pendentes).
+# Enquanto isso, `main` pode receber merges sem republicar nada, e a publicação é um ato
+# deliberado: aba Actions -> "Publicar" -> "Run workflow". Para voltar ao automático, basta
+# reativar as duas linhas de `push` abaixo.
 on:
-  push:
-    branches: [main]
+  # push:
+  #   branches: [main]
   workflow_dispatch: {}
 
 permissions:
@@ -37,7 +45,11 @@ jobs:
       - name: Gate de revelação -- verificação independente (sem microdados)
         run: python pipeline/verify_gate.py
 
-      - name: Gate de revelação de edições adicionais (ex.: data/processed/2010)
+      # Aspas obrigatórias: o "ex.: " embute dois-pontos seguido de espaço, que num escalar
+      # YAML sem aspas encerra a chave e torna o arquivo inválido (o parser reclama de
+      # "mapping values are not allowed here"). Sem elas o workflow inteiro corre o risco de
+      # nem ser lido.
+      - name: "Gate de revelação de edições adicionais (ex.: data/processed/2010)"
         run: |
           set -euo pipefail
           for gate in data/processed/*/.gate_ok; do

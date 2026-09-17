@@ -56,3 +56,9 @@ service-account*.json
 docs/ibge/*
 !docs/ibge/README.md
 Documentacao_Tecnica_*.pdf
+
+# documentos jurídicos e de compliance (parecer, carta de solicitação ao IBGE, pedido de
+# takedown): contêm dados pessoais do titular e posição jurídica em elaboração. Como o
+# repositório é publicado como site (atlas-da-migracao.github.io), nada aqui pode ser
+# versionado -- e a pasta não estava ignorada, ou seja, um `git add -A` a commitaria.
+legal/
