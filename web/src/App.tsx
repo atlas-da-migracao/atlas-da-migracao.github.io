@@ -92,34 +92,45 @@ export default function App() {
   // níveis); fora do modo RM, o nível efetivo é o escolhido pelo usuário.
   const nivelEfetivo: Nivel = rm ? "mun" : nivel;
   useEffect(() => { setUfSobMapa(null); setUfsRealcadas(null); }, [nivelEfetivo]);
-  const [malhaNivel, setMalhaNivel] = useState<Partial<Record<NivelAgregado, FeatureCollection>>>({});
+  const [malhaNivel, setMalhaNivel] = useState<Record<string, FeatureCollection>>({});
   // F2 (mapa-representacao): topologia bruta por nível agregado, guardada além do
   // FeatureCollection já decodificado -- topojson.mesh() precisa do objeto topológico
   // (arcos + índices), não da geometria já expandida em feature(), para calcular fronteiras
   // únicas (sem duplicar arestas compartilhadas nem desenhar arestas internas de MultiPolygon).
-  const [topoNivel, setTopoNivel] = useState<Partial<Record<NivelAgregado, Topology>>>({});
-  const [unidadesNivel, setUnidadesNivel] = useState<Partial<Record<NivelAgregado, UnidadeAgregada[]>>>({});
+  const [topoNivel, setTopoNivel] = useState<Record<string, Topology>>({});
+  const [unidadesNivel, setUnidadesNivel] = useState<Record<string, UnidadeAgregada[]>>({});
   const [avisoNivel, setAvisoNivel] = useState<string | null>(null);
 
-  // F6 leva 2 (10a): fluxos UF x UF para a matriz de acordes, carregados uma vez ao entrar no nível UF
-  const [fluxosUF, setFluxosUF] = useState<FluxoUF[] | null>(null);
+  // F6 leva 2 (10a): fluxos UF x UF para a matriz de acordes, carregados ao entrar no nível UF
+  // -- por EDIÇÃO, como os caches acima (ver `chaveCache`).
+  const [fluxosUFPorCenso, setFluxosUFPorCenso] = useState<Record<string, FluxoUF[]>>({});
+  const fluxosUF = fluxosUFPorCenso[censo] ?? null;
   useEffect(() => {
-    if (nivelEfetivo !== "uf" || fluxosUF) return;
-    fluxosEntreUFs().then(setFluxosUF).catch(() => {});
-  }, [nivelEfetivo]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (nivelEfetivo !== "uf" || fluxosUFPorCenso[censo]) return;
+    const c = censo;
+    fluxosEntreUFs().then((f) => setFluxosUFPorCenso((m) => ({ ...m, [c]: f }))).catch(() => {});
+  }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // F4: trocar de edição invalida os caches por nível/UF -- vêm de uma conexão DuckDB e de
-  // caminhos data/ diferentes; sem isto, trocar 2010<->2022 e mudar de nível reusaria a malha
-  // ou as unidades da edição anterior (setCenso já volta o nível a "mun", então o efeito
-  // abaixo dele não dispara sozinho de novo -- é preciso limpar os caches explicitamente).
-  useEffect(() => { setMalhaNivel({}); setTopoNivel({}); setUnidadesNivel({}); setFluxosUF(null); }, [censo]);
+  // F4: a malha e as unidades de um nível agregado são de UMA edição -- vêm de caminhos
+  // `data/` e de uma conexão DuckDB próprios --, então a chave do cache inclui a edição.
+  //
+  // Antes o cache era indexado só pelo nível e um efeito separado o esvaziava quando `censo`
+  // mudava. Isso quebrou quando a troca de edição passou a PRESERVAR o nível (ver `setCenso`
+  // em state/store.ts): os dois efeitos rodam no mesmo commit, e o de carga ainda enxerga o
+  // cache da edição ANTERIOR (o esvaziamento só vale do próximo render em diante), conclui
+  // que já tem a malha e não busca nada; como suas dependências (`nivelEfetivo`, `censo`) já
+  // tinham mudado, ele não roda de novo -- e o mapa ficava preso em "Carregando o mapa…".
+  // Com a chave composta não existe estado intermediário errado para ler: a entrada da edição
+  // nova simplesmente ainda não existe. De quebra, voltar para um ano já visitado é imediato.
+  const chaveCache = (n: NivelAgregado) => `${censo}:${n}`;
 
   // F6 leva 2: folha de filtros (busca/recorte/métrica) no mobile -- abre como bottom sheet
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   useEffect(() => {
-    if (nivelEfetivo === "mun" || malhaNivel[nivelEfetivo]) return;
+    if (nivelEfetivo === "mun" || malhaNivel[chaveCache(nivelEfetivo)]) return;
     const n = nivelEfetivo;
+    const k = chaveCache(n);
     let vivo = true;
     // F10: malha em Albers (metros) -- a mesma que o mapa consome (COORDINATE_SYSTEM.CARTESIAN
     // em MapaAtlas.tsx). O front nunca reprojeta: o arquivo já vem em metros do pipeline.
@@ -127,17 +138,18 @@ export default function App() {
       if (!vivo) return;
       const chave = Object.keys(topo.objects)[0];
       const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
-      setMalhaNivel((m) => ({ ...m, [n]: fc }));
-      setTopoNivel((t) => ({ ...t, [n]: topo }));
+      setMalhaNivel((m) => ({ ...m, [k]: fc }));
+      setTopoNivel((t) => ({ ...t, [k]: topo }));
     }).catch((e) => { if (vivo) setErro(`Falha ao carregar a malha (${n}): ${(e as Error).message}`); });
     return () => { vivo = false; };
   }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (nivelEfetivo === "mun" || unidadesNivel[nivelEfetivo]) return;
+    if (nivelEfetivo === "mun" || unidadesNivel[chaveCache(nivelEfetivo)]) return;
     const n = nivelEfetivo;
+    const k = chaveCache(n);
     let vivo = true;
-    carregarUnidades(n).then((u) => { if (vivo) setUnidadesNivel((m) => ({ ...m, [n]: u })); })
+    carregarUnidades(n).then((u) => { if (vivo) setUnidadesNivel((m) => ({ ...m, [k]: u })); })
       .catch((e) => { if (vivo) setErro(`Falha ao consultar as unidades (${n}): ${(e as Error).message}`); });
     return () => { vivo = false; };
   }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -280,9 +292,9 @@ export default function App() {
   }, [municipios, qProcessado]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // malha ativa: municipal por padrão, ou a do nível agregado escolhido
-  const malhaAtiva = nivelEfetivo === "mun" ? malha : malhaNivel[nivelEfetivo] ?? null;
+  const malhaAtiva = nivelEfetivo === "mun" ? malha : malhaNivel[chaveCache(nivelEfetivo)] ?? null;
   // topologia bruta correspondente (para o mesh de contornos -- ver contornosMalha abaixo)
-  const topoAtivo = nivelEfetivo === "mun" ? topoMun : topoNivel[nivelEfetivo] ?? null;
+  const topoAtivo = nivelEfetivo === "mun" ? topoMun : topoNivel[chaveCache(nivelEfetivo)] ?? null;
   const campoId = CAMPO_ID[nivelEfetivo];
 
   // F2 (mapa-representacao): contorno "normal" por malha de arestas -- topojson.mesh com o
@@ -512,7 +524,7 @@ export default function App() {
     () => new Map(municipiosVisiveis.map((m) => [m.cd_mun, m])), [municipiosVisiveis]);
 
   // F6: indicadores da malha ativa -- municipais, ou das unidades do nível agregado escolhido
-  const unidadesAtivas = nivelEfetivo === "mun" ? null : unidadesNivel[nivelEfetivo] ?? [];
+  const unidadesAtivas = nivelEfetivo === "mun" ? null : unidadesNivel[chaveCache(nivelEfetivo)] ?? [];
   const porCodigoAtivo: Map<string, ValorMapa> = useMemo(() => {
     if (nivelEfetivo === "mun") return porCodigo;
     return new Map((unidadesAtivas ?? []).map((u) => [u.codigo, u]));
@@ -577,7 +589,7 @@ export default function App() {
   // URL. Ver PainelMunicipio/PainelUnidade (prop `naoEncontrado`) e o guard equivalente, já
   // autocontido, em PainelRM.tsx.
   const municipioNaoEncontrado = municipios.length > 0 && Boolean(municipio) && !selecionado;
-  const unidadeNaoEncontrada = nivelEfetivo !== "mun" && unidadesNivel[nivelEfetivo] != null
+  const unidadeNaoEncontrada = nivelEfetivo !== "mun" && unidadesNivel[chaveCache(nivelEfetivo)] != null
     && Boolean(selecao) && !unidadeSelecionada;
   const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
   const aoSelecionarNoMapa = nivelEfetivo === "mun" ? selecionarMunicipio : selecionarUnidade;
@@ -651,7 +663,7 @@ export default function App() {
         <PainelUnidade nivel={nivelEfetivo} unidade={unidadeSelecionada} naoEncontrado={unidadeNaoEncontrada}
                       fluxos={arcos} carregando={carregandoFluxos} aoSelecionarFluxo={aoSelecionarFluxo}
                       aoFechar={() => selecionarUnidade(null)} meta={meta}
-                      fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel.uf} escuro={escuro}
+                      fluxosUF={fluxosUF ?? undefined} unidadesUF={unidadesNivel[`${censo}:uf`]} escuro={escuro}
                       ufSobMapa={ufSobMapa} aoSelecionarUF={selecionarUnidade} aoRealcarUFs={aoRealcarUFs} />
       )}
     </Suspense>

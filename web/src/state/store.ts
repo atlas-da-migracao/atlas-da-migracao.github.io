@@ -16,8 +16,9 @@ const RECORTES = new Set(Object.entries(DIMENSOES).flatMap(([dim, d]) =>
   d.categorias.map((c) => `${dim}__${c.chave}`)));
 
 interface Estado {
-  /** edição do Censo ativa; trocar reseta toda seleção (ver setCenso) -- os dados das duas
-   *  edições nunca se cruzam (cada uma tem sua própria conexão DuckDB, ver db/duckdb.ts). */
+  /** edição do Censo ativa; trocar PRESERVA o recorte territorial selecionado e limpa só o
+   *  fluxo e o recorte por característica (ver setCenso) -- os dados das edições nunca se
+   *  cruzam (cada uma tem sua própria conexão DuckDB, ver db/duckdb.ts). */
   censo: Censo;
   municipio: string | null;      // município selecionado (nivel "mun")
   /** unidade selecionada nos níveis agregados (rgi/rgint/uf); município usa `municipio`, não este campo */
@@ -45,7 +46,8 @@ interface Estado {
    *  URL); `?sat=1` liga. Independente de edição/nível -- a mesma imagem cobre o Brasil
    *  inteiro em qualquer censo. */
   mostrarSatelite: boolean;
-  /** troca de edição do Censo; reseta toda seleção (município/unidade/fluxo/RM/recorte/nível) */
+  /** troca de edição do Censo; mantém nível, município, unidade, RM e aba, e limpa o fluxo
+   *  selecionado e o recorte por característica (ver a implementação para o porquê) */
   setCenso: (censo: Censo) => void;
   selecionarMunicipio: (cd: string | null) => void;
   selecionarUnidade: (cd: string | null) => void;
@@ -133,10 +135,38 @@ export const useStore = create<Estado>((set, get) => ({
   ...inicial,
   tema: (localStorage.getItem("tema") as Estado["tema"]) ?? "sistema",
 
+  // Trocar de edição PRESERVA o recorte territorial em foco -- nível, município, unidade
+  // agregada (RGI/RGInt/UF), RM e aba do módulo metropolitano --, porque comparar o MESMO
+  // lugar entre censos é o uso principal do atlas: antes, trocar de ano jogava o usuário de
+  // volta para o Brasil inteiro e ele tinha de refazer a navegação a cada edição.
+  //
+  // Manter o código é seguro mesmo quando ele não existe na edição de destino (os recortes
+  // territoriais mudam entre censos: 1980 tem 3.940 municípios contra 5.570 em 2022, o
+  // Tocantins não existia, e a lista de RMs é retroativa por edição). Esse caso já tinha
+  // tratamento próprio e continua valendo: `municipioNaoEncontrado`/`unidadeNaoEncontrada`
+  // em App.tsx alimentam a prop `naoEncontrado` dos painéis, e `PainelRM.tsx` tem o guard
+  // equivalente -- o painel diz que aquela unidade não existe naquele ano em vez de ficar
+  // vazio ou quebrar.
+  //
+  // Duas coisas continuam sendo limpas, por não serem o "lugar" selecionado:
+  // - o FLUXO (origem/destino): um par origem-destino é uma seleção de outra natureza, e um
+  //   par que existe num censo frequentemente não tem publicação no outro (o corte de
+  //   revelação e o próprio volume mudam);
+  // - o RECORTE por característica (`filtro`): as características disponíveis variam por
+  //   edição (1980 não tem renda, por exemplo, ver `recursos` em lib/edicoes.ts), então
+  //   carregá-lo adiante arriscaria um recorte inexistente na edição nova.
   setCenso: (censo) => {
+    // As mesmas travas por RECURSO que `daUrl` aplica a um link colado: uma edição sem módulo
+    // metropolitano (`recursos.rm`) ou sem deslocamento pendular (`recursos.pendular`, que
+    // 1991 não tem) não tem as tabelas correspondentes na sua conexão DuckDB -- carregar a RM
+    // ou a aba pendular adiante daria erro de "tabela não encontrada", não um painel vazio.
+    // Só nesses casos a preservação cede; o município/unidade/nível seguem intactos.
+    const recursos = edicao(censo).recursos;
+    const atual = get();
     const patch = {
-      censo, nivel: "mun" as Nivel, municipio: null, selecao: null, origem: null,
-      destino: null, rm: null, filtro: null, aba: "mig" as AbaRM,
+      censo, origem: null, destino: null, filtro: null,
+      rm: recursos.rm ? atual.rm : null,
+      aba: (recursos.pendular ? atual.aba : "mig") as AbaRM,
     };
     set(patch);
     paraUrl({ ...get(), ...patch });

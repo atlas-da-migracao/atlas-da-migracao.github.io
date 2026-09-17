@@ -180,8 +180,9 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
         {menorFluxo != null && (
           <div className="legenda-nota-fluxo">
             Corte: o mapa desenha {qtdFluxos ? `os ${num(qtdFluxos)} maiores fluxos` : "os maiores fluxos"}
-            {" "}desta edição — o menor deles tem <strong>{num(menorFluxo)}</strong> pessoas. Pares abaixo
-            desse volume existem nos dados e no painel, mas não aparecem no mapa.
+            {" "}desta vista — o mesmo número em todas as edições. Nesta, o menor deles tem
+            {" "}<strong>{num(menorFluxo)}</strong> pessoas: pares abaixo desse volume existem nos dados
+            e no painel, mas não aparecem no mapa.
           </div>
         )}
       </div>
