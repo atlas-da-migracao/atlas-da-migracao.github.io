@@ -28,16 +28,14 @@ import { serieCourgeau } from "../db/queries";
 import { rotuloEdicao, rotuloIntervalo, slotEdicao, type EdicaoSerie, type NivelSerie } from "../lib/serie";
 import { AZUL, cor as corDaPaleta } from "../lib/paletas";
 import { num, num2 } from "../lib/format";
-import { baixarCSV, baixarSvgComoPng } from "../lib/exportar";
 
 const ROTULO_NIVEL: Record<NivelSerie, string> = {
   mun: "municípios", rgi: "regiões imediatas", rgint: "regiões intermediárias", uf: "UFs", rm: "regiões metropolitanas",
 };
 
-/** Renderiza uma figura do Plot dentro de uma <div>, guardando o <svg> para exportação. */
+/** Renderiza uma figura do Plot dentro de uma <div>. */
 function useFigura(desenhar: () => (SVGSVGElement | HTMLElement) | null, deps: unknown[]) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement | null>(null);
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -45,24 +43,10 @@ function useFigura(desenhar: () => (SVGSVGElement | HTMLElement) | null, deps: u
     const figura = desenhar();
     if (!figura) return;
     el.appendChild(figura);
-    svgRef.current = figura instanceof SVGSVGElement ? figura : figura.querySelector("svg");
     return () => { el.innerHTML = ""; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  return { containerRef, svgRef };
-}
-
-function BotoesExportar({ nome, linhas, svgRef }: {
-  nome: string; linhas: () => Record<string, unknown>[]; svgRef: React.RefObject<SVGSVGElement | null>;
-}) {
-  return (
-    <div className="serie-grafico-exportar">
-      <button className="link-serie" onClick={() => baixarCSV(nome, linhas())}>Baixar CSV</button>
-      <button className="link-serie" onClick={() => svgRef.current && baixarSvgComoPng(nome, svgRef.current)}>
-        Baixar PNG
-      </button>
-    </div>
-  );
+  return { containerRef };
 }
 
 interface LinhaSistema {
@@ -85,7 +69,7 @@ function normalizar(linhas: Record<string, unknown>[]): LinhaSistema[] {
 /** (a) Plano MEI×CMI com trajetória, seção 3.2-a. 420x320px. */
 function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: readonly EdicaoSerie[] }) {
   const pontos = linhas.filter((l) => l.cmi != null && l.mei != null);
-  const { containerRef, svgRef } = useFigura(() => {
+  const { containerRef } = useFigura(() => {
     if (pontos.length === 0) return null;
     const cmiMax = Math.max(1, ...pontos.map((p) => p.cmi!)) * 1.15;
     const meiMax = Math.max(1, ...pontos.map((p) => p.mei!)) * 1.15;
@@ -138,7 +122,6 @@ function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: rea
     <figure className="serie-grafico">
       <figcaption>Plano MEI×CMI, com trajetória entre censos</figcaption>
       <div ref={containerRef} />
-      <BotoesExportar nome="plano-mei-cmi" svgRef={svgRef} linhas={() => pontos.map((p) => ({ ...p }))} />
       <p className="muted-pequeno">
         A intensidade (CMI) cresce com o número de unidades; parte do deslocamento para a
         direita entre {rotuloIntervalo(edicoes)} é malha mais fina, não comportamento — ver
@@ -170,12 +153,6 @@ function DispersaoFielding({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoe
           </div>
         ))}
       </div>
-      <BotoesExportar
-        nome="dispersao-fielding" svgRef={{ current: null }}
-        linhas={() => linhas.map((l) => ({
-          edicao: l.edicao, beta_fielding: l.beta_fielding, ep_beta: l.ep_beta, leitura: leitura(l.beta_fielding, l.ep_beta),
-        }))}
-      />
       <p className="muted-pequeno">
         Reta ajustada por MQO ponderado por população sobre as unidades existentes em cada
         edição.{edicoes.includes("1980") && " Em 1980 a taxa líquida é proxy."} A nuvem de
@@ -209,7 +186,7 @@ function FiguraCourgeau({ nivelAtivo, edicoes }: { nivelAtivo: NivelSerie; edico
       .map((l) => ({ ...l, edicao: e, log_n: Math.log10(l.n_unidades) })),
   ), [porEdicao, edicoes]);
 
-  const { containerRef, svgRef } = useFigura(() => {
+  const { containerRef } = useFigura(() => {
     if (dados.length === 0) return null;
     return Plot.plot({
       width: 360, height: 240, marginRight: 60,
@@ -239,7 +216,6 @@ function FiguraCourgeau({ nivelAtivo, edicoes }: { nivelAtivo: NivelSerie; edico
     <figure className="serie-grafico">
       <figcaption>Figura de Courgeau — CMI × número de unidades do nível ({ROTULO_NIVEL[nivelAtivo]} em destaque)</figcaption>
       <div ref={containerRef} />
-      <BotoesExportar nome="figura-courgeau" svgRef={svgRef} linhas={() => dados} />
       <p className="muted-pequeno">
         Quanto mais unidades tem a malha, maior a intensidade medida. A inclinação de cada
         linha é o tamanho desse efeito na edição.
