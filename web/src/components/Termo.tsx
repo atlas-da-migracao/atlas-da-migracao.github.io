@@ -3,11 +3,15 @@
  *
  *  Abre ao clicar OU focar o botão (não só hover -- precisa funcionar em touch e teclado);
  *  fecha com Escape, clique fora, ou blur do botão (a menos que o foco tenha ido para dentro
- *  do próprio popover). Reaproveita a técnica de posicionamento de `Tour.tsx`
- *  (getBoundingClientRect + clamp simples à viewport), sem posicionamento "inteligente". */
-import { useEffect, useRef, useState } from "react";
+ *  do próprio popover). Posicionamento automático (`posicionar`): mede o popover já montado
+ *  (altura variável conforme o texto) e escolhe abrir abaixo ou acima do botão -- o que tiver
+ *  mais espaço --, sempre clampado à viewport nas duas direções, para nunca ficar cortado pela
+ *  borda da tela. Recalcula em resize/scroll enquanto aberto. */
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { termo } from "../lib/glossario";
+
+const MARGEM_VIEWPORT = 8;
 
 interface Props {
   /** Chave de `GLOSSARIO`. Se não existir, renderiza só `children`, sem o ícone. */
@@ -23,21 +27,43 @@ interface Props {
 export function Termo({ chave, children, className }: Props) {
   const def = termo(chave);
   const [aberto, setAberto] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const botaoRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!def && chave) {
       // eslint-disable-next-line no-console
       console.warn(`Termo: chave "${chave}" não existe em GLOSSARIO`);
     }
   }, [def, chave]);
 
-  useEffect(() => {
-    if (!aberto) return;
-    const el = botaoRef.current;
-    setRect(el ? el.getBoundingClientRect() : null);
+  // Mede o popover já montado (altura variável conforme o texto) e escolhe abrir acima ou
+  // abaixo do botão -- o lado com mais espaço --, sempre clampado à viewport; roda antes da
+  // pintura do navegador, então não há flash na posição inicial.
+  const posicionar = () => {
+    const botao = botaoRef.current;
+    const popover = popoverRef.current;
+    if (!botao || !popover) return;
+    const rBotao = botao.getBoundingClientRect();
+    const altura = popover.offsetHeight;
+    const largura = popover.offsetWidth;
+    const espacoAbaixo = window.innerHeight - rBotao.bottom;
+    const espacoAcima = rBotao.top;
+    const abrirAcima = espacoAbaixo < altura + MARGEM_VIEWPORT && espacoAcima > espacoAbaixo;
+    const top = abrirAcima
+      ? Math.max(MARGEM_VIEWPORT, rBotao.top - altura - 6)
+      : Math.min(rBotao.bottom + 6, window.innerHeight - altura - MARGEM_VIEWPORT);
+    const left = Math.min(
+      Math.max(rBotao.left + rBotao.width / 2 - largura / 2, MARGEM_VIEWPORT),
+      window.innerWidth - largura - MARGEM_VIEWPORT,
+    );
+    setPos({ top, left });
+  };
+
+  useLayoutEffect(() => {
+    if (!aberto) { setPos(null); return; }
+    posicionar();
 
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.key === "Escape") { e.preventDefault(); setAberto(false); botaoRef.current?.focus(); }
@@ -49,10 +75,15 @@ export function Termo({ chave, children, className }: Props) {
     };
     document.addEventListener("keydown", aoTeclar);
     document.addEventListener("mousedown", aoClicarFora);
+    window.addEventListener("resize", posicionar);
+    window.addEventListener("scroll", posicionar, true);
     return () => {
       document.removeEventListener("keydown", aoTeclar);
       document.removeEventListener("mousedown", aoClicarFora);
+      window.removeEventListener("resize", posicionar);
+      window.removeEventListener("scroll", posicionar, true);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto]);
 
   if (!def) return <>{children}</>;
@@ -66,13 +97,11 @@ export function Termo({ chave, children, className }: Props) {
 
   const tituloId = `termo-titulo-${chave}`;
 
-  const estiloPopover: React.CSSProperties = rect
-    ? {
-        position: "fixed",
-        top: Math.min(rect.bottom + 6, window.innerHeight - 40),
-        left: Math.min(Math.max(rect.left - 140, 8), window.innerWidth - 304),
-      }
-    : { position: "fixed", top: "40%", left: "50%", transform: "translate(-50%, -50%)" };
+  // Enquanto `pos` não foi medido (primeiro layout do popover recém-montado), fica invisível
+  // no canto para não piscar numa posição errada -- `posicionar()` corrige antes da pintura.
+  const estiloPopover: React.CSSProperties = pos
+    ? { position: "fixed", top: pos.top, left: pos.left }
+    : { position: "fixed", top: 0, left: 0, visibility: "hidden" };
 
   return (
     <span className={className ? `termo ${className}` : "termo"}>
