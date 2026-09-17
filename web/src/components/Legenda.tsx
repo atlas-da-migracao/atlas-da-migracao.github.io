@@ -33,7 +33,8 @@ const TITULOS: Record<Metrica, string> = {
   iem: "Índice de eficácia migratória (%)",
 };
 
-export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maiorAbsolutoMetrica }: {
+export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maiorAbsolutoMetrica,
+                          categoriasFluxo, titulo, notaFluxo, menorFluxo, qtdFluxos }: {
   metrica: Metrica; quebras: number[]; escuro: boolean;
   /** F6: rótulo do nível agregado ativo (ex.: "Reg. imediata"); omitido no nível município. */
   notaNivel?: string;
@@ -46,6 +47,25 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
    *  MapaAtlas.tsx) -- base das 3 amostras de comprimento abaixo, só quando `metrica` é de
    *  contagem (saldo/imig/emig). `null`/ausente cai num texto genérico sem números. */
   maiorAbsolutoMetrica?: number | null;
+  /** F11 (mapa-representação): no modo metropolitano o mapa não pinta a malha nem desenha
+   *  espigas -- o único dado em tela são os fluxos INTRA-RM, cuja COR é categórica (tipologia
+   *  do fluxo na aba de migração; origem-destino do deslocamento nas abas de pendular). Quando
+   *  estas categorias são passadas, a legenda troca as faixas/espigas por elas e usa `titulo`
+   *  no lugar do título da métrica -- a métrica não está representada no mapa neste modo. */
+  categoriasFluxo?: readonly { rotulo: string; cor: string }[];
+  /** Título que substitui o da métrica quando `categoriasFluxo` é passado. */
+  titulo?: string;
+  /** Nota extra sobre as cores dos fluxos (ex.: o que significa um fluxo esmaecido). */
+  notaFluxo?: string;
+  /** Volume do MENOR fluxo desenhado no mapa nesta vista -- o corte efetivo da camada de
+   *  fluxos. O mapa nacional não desenha os ~53 mil pares publicados: desenha os `qtdFluxos`
+   *  maiores (ver `maioresFluxos` em db/queries.ts e o seletor "top N"), e sem este número o
+   *  leitor não tem como saber que a ausência de um fluxo no mapa não significa ausência de
+   *  migração. O corte muda de edição para edição (os volumes de 1980 não são os de 2022) e
+   *  com o próprio "top N", então é medido nos fluxos em tela, não fixado na metodologia. */
+  menorFluxo?: number | null;
+  /** Quantidade de fluxos desenhados (o "top N" ativo). */
+  qtdFluxos?: number;
 }) {
   // A legenda começa recolhida num chip no mobile, para não cobrir o mapa; no desktop
   // começa aberta. Em ambos os tamanhos, o botão no título permite minimizá-la de volta ao chip.
@@ -64,11 +84,20 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
   return (
     <div className="legenda" id="legenda-painel">
       <div className="legenda-titulo">
-        {TITULOS[metrica]}
+        {titulo ?? TITULOS[metrica]}
         <button type="button" className="fechar legenda-fechar" onClick={() => setAberta(false)}
                 aria-label="Minimizar legenda">×</button>
       </div>
-      {METRICAS_ESPIGA.has(metrica) ? (
+      {categoriasFluxo ? (
+        <ul>
+          {categoriasFluxo.map((c) => (
+            <li key={c.rotulo}>
+              <span className="amostra" style={{ background: c.cor }} />
+              {c.rotulo}
+            </li>
+          ))}
+        </ul>
+      ) : METRICAS_ESPIGA.has(metrica) ? (
         // F5 (mapa-representação): contagem (saldo/imig/emig) não pinta a malha -- o valor sai
         // em espigas bipolares (MapaAtlas.tsx), então a legenda mostra espigas de referência em
         // vez de faixas de cor. Saldo tem os dois polos (ganho para cima, perda para baixo);
@@ -119,10 +148,22 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
         </ul>
       )}
       <div className="legenda-nota">
-        Arcos: <span className="amostra pequena" style={{ background: "var(--arc-in)" }} /> entradas ·{" "}
-        <span className="amostra pequena" style={{ background: "var(--arc-out)" }} /> saídas
+        {/* F11 (mapa-representação): a direção de um fluxo deixou de ser lida pela cor
+            (azul/laranja, que colidia com a mesma dupla nas espigas e no coroplético
+            divergente) -- agora é lida pela FORMA: a fita AFUNILA da origem para o destino,
+            termina numa SETA, e um NÓ circular marca as duas pontas. A amostra em CSS abaixo
+            (triângulo + seta + dois pontos) é só um ícone de referência dessa forma, não usa
+            deck.gl. */}
+        Fluxos: fita afunila da origem ao destino, termina em seta; um círculo marca cada ponta
+        <div className="legenda-fluxo-amostra" aria-hidden="true">
+          <span className="legenda-fluxo-no" />
+          <span className="legenda-fluxo-fita" />
+          <span className="legenda-fluxo-seta" />
+          <span className="legenda-fluxo-no" />
+        </div>
+        {notaFluxo && <div className="legenda-nota-fluxo">{notaFluxo}</div>}
         {maiorFluxo ? (
-          <div className="legenda-espessura" aria-label="Espessura da linha cresce com a raiz quadrada do volume; amostras de referência">
+          <div className="legenda-espessura" aria-label="Espessura da fita cresce com a raiz quadrada do volume; amostras de referência">
             {FRACOES_AMOSTRA.map((f) => (
               <span key={f} style={{ height: larguraDaAmostra(f) }} />
             ))}
@@ -131,9 +172,16 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
             </em>
           </div>
         ) : (
-          <div className="legenda-espessura" aria-label="Espessura da linha cresce com o volume, na raiz quadrada">
+          <div className="legenda-espessura" aria-label="Espessura da fita cresce com o volume, na raiz quadrada">
             <span style={{ height: 2 }} /><span style={{ height: 5 }} /><span style={{ height: 9 }} />
             <em>espessura cresce com o volume (raiz quadrada)</em>
+          </div>
+        )}
+        {menorFluxo != null && (
+          <div className="legenda-nota-fluxo">
+            Corte: o mapa desenha {qtdFluxos ? `os ${num(qtdFluxos)} maiores fluxos` : "os maiores fluxos"}
+            {" "}desta edição — o menor deles tem <strong>{num(menorFluxo)}</strong> pessoas. Pares abaixo
+            desse volume existem nos dados e no painel, mas não aparecem no mapa.
           </div>
         )}
       </div>

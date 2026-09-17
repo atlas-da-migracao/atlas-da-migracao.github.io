@@ -108,6 +108,15 @@ export const FAIXAS_IDADE = [
 
 export const cor = (c: { claro: string; escuro: string }, escuro: boolean) => (escuro ? c.escuro : c.claro);
 
+/** Cor monocromática dos fluxos O/D no mapa (F11, mapa-representação). Grafite/ardósia: a
+ *  direção é lida pela FORMA (afunilamento + seta + nós), não pela cor, que fica livre para
+ *  separar "isto é um fluxo" de "isto é um dado" -- a dupla azul/laranja já significa
+ *  entrada/saída nas espigas e no coroplético divergente. Fica aqui, e não em `MapaAtlas.tsx`,
+ *  porque a legenda precisa da mesma cor: um token, um significado. Ponto de troca único das
+ *  alternativas ainda em aberto (verde-azulado/violeta por direção, ou azul/laranja
+ *  dessaturado). Ver o comentário em `MapaAtlas.tsx`, `ARC_FLUXO_CLARO`. */
+export const FLUXO_MAPA = { claro: "#52514e", escuro: "#c3c2b7" } as const;
+
 /** Converte um hex "#rrggbb" em [r,g,b] para as camadas deck.gl. */
 export function hexParaRgb(h: string): [number, number, number] {
   return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];

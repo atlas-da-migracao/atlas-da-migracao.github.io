@@ -21,7 +21,7 @@ import { quebrasSimetricas } from "./lib/escalas";
 import { ANCORA_ESPIGA_MUNICIPIO } from "./lib/espigas";
 import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, uniaoDeBboxes, type Bbox } from "./lib/rm";
 import type { FluxoUF } from "./lib/acordes";
-import { hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
+import { cor as corPaleta, FLUXO_MAPA, hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
 import { basePath, CENSOS, edicao } from "./lib/edicoes";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
@@ -385,6 +385,41 @@ export default function App() {
     if (geoms.length === 0) return null;
     return { type: "Feature", properties: {}, geometry: merge(topoMun, geoms) };
   }, [topoMun, rmDestacar]);
+
+  // F11 (mapa-representação): legenda do MODO METROPOLITANO. No modo Brasil a legenda explica
+  // a métrica (faixas de cor ou espigas); dentro de uma RM o mapa não pinta a malha nem desenha
+  // espigas -- os fluxos são o único dado em tela, e a cor deles muda de significado conforme a
+  // aba, o que sem legenda ficava por adivinhar. Na aba de migração a cor é a TIPOLOGIA do
+  // fluxo (as mesmas 3 categorias do painel lateral, CORES_TIPOLOGIA acima, que é por onde o
+  // mapa pinta -- daí ler `cor.claro`, como ele, em vez de alternar por tema); nas abas de
+  // pendular não há categoria: a cor é a monocromática do mapa (FLUXO_MAPA) e o que varia é o
+  // alfa, reduzido nos deslocamentos que atravessam o limite da RM (`cruza` em MapaAtlas.tsx),
+  // que só aparecem com o filtro "cruzar o limite" ligado.
+  const legendaRM = useMemo(() => {
+    if (aba === "mig") {
+      return {
+        titulo: "Migração dentro da região metropolitana",
+        categorias: TIPOLOGIA_INTRA_RM.categorias.map((c) => ({ rotulo: c.rotulo, cor: c.cor.claro })),
+        nota: "A cor identifica a posição das duas pontas na RM (núcleo ou periferia); a direção é lida pela forma.",
+      };
+    }
+    const destino = aba === "trab" ? "trabalho" : "estudo";
+    return {
+      titulo: `Deslocamento pendular para ${destino}`,
+      categorias: [{ rotulo: `Residência → ${destino}`, cor: corPaleta(FLUXO_MAPA, escuro) }],
+      nota: cruzar
+        ? "Cor única: todo fluxo vai da residência ao destino. Os fluxos esmaecidos atravessam o limite da RM."
+        : "Cor única: todo fluxo vai da residência ao destino.",
+    };
+  }, [aba, cruzar, escuro]);
+
+  /** Corte efetivo da camada de fluxos: o volume do MENOR fluxo em tela. O mapa desenha só os
+   *  `topN` maiores pares da vista (`maioresFluxos`/`maioresFluxosNivel` em db/queries.ts), e
+   *  sem esse número o leitor lê a ausência de um fluxo no mapa como ausência de migração. Sai
+   *  dos próprios fluxos carregados, não de uma constante: muda com a edição (os volumes de
+   *  1980 não são os de 2022), com o nível agregado e com o "top N" escolhido. */
+  const menorFluxoExibido = useMemo(
+    () => (arcos.length ? Math.min(...arcos.map((a) => a.total)) : null), [arcos]);
 
   // fluxos exibidos no mapa: nacionais (modo Brasil) ou da RM ativa (modo metropolitano)
   const topNStore = topN;
@@ -781,7 +816,13 @@ export default function App() {
             {porCodigoAtivo.size > 0 && !rm && (
               <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
                        maiorAbsolutoMetrica={maiorAbsolutoMetrica}
-                       notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined} />
+                       notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined}
+                       menorFluxo={menorFluxoExibido} qtdFluxos={arcos.length || undefined} />
+            )}
+            {rm && (
+              <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
+                       titulo={legendaRM.titulo} categoriasFluxo={legendaRM.categorias}
+                       notaFluxo={legendaRM.nota} />
             )}
           </div>
         </div>

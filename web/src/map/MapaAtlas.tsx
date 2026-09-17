@@ -2,8 +2,8 @@
  *  Sem basemap externo -- a base é a própria malha do IBGE, o que evita dependência
  *  de terceiros e mantém a leitura cartográfica limpa. */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import DeckGL from "@deck.gl/react";
-import { GeoJsonLayer, ArcLayer, SolidPolygonLayer, BitmapLayer, TextLayer, ScatterplotLayer } from "@deck.gl/layers";
+import DeckGL, { type DeckGLRef } from "@deck.gl/react";
+import { GeoJsonLayer, SolidPolygonLayer, BitmapLayer, TextLayer, ScatterplotLayer } from "@deck.gl/layers";
 import { OrthographicView, COORDINATE_SYSTEM } from "@deck.gl/core";
 import type { PickingInfo } from "@deck.gl/core";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -11,8 +11,8 @@ import type { Fluxo, Metrica } from "../lib/types";
 import { fitBoundsCartesiano, validarEExpandirBbox, type Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
 import { num, sinal, rotuloPrecisao } from "../lib/format";
-import { hexParaRgb } from "../lib/paletas";
-import { alturaDoArco, TILT_ARCO, poligonoSeta } from "../lib/arcos";
+import { FLUXO_MAPA, hexParaRgb } from "../lib/paletas";
+import { poligonoFluxo, RAIO_NO_PX } from "../lib/fluxos";
 import {
   alturaEspigaPx, poligonoEspiga, ANCORA_ESPIGA_MUNICIPIO, TETO_ESPIGA_PX, fatorAlturaPorZoom,
   metrosPorPixel,
@@ -36,14 +36,29 @@ export interface VistaCartesiana {
   transitionDuration?: number;
 }
 
-// F3 (mapa-representação): cores dos arcos, nos dois temas -- mesmos hex de --arc-in/--arc-out
-// em styles/tokens.css (não dá para ler custom properties de dentro de uma cor do deck.gl,
-// que precisa de RGB numérico). ORIGEM_* é o cinza neutro (--axis) usado na ponta de origem de
-// um arco direcionado: o degradê de cor (não só de alfa) fica mais forte assim -- a origem
-// "esvanece" para cinza, o destino chega na cor cheia da direção.
+// F3 (mapa-representação): cores das ESPIGAS (ganho/entrada em azul, perda/saída em laranja) --
+// mesmos hex de --arc-in/--arc-out em styles/tokens.css (não dá para ler custom properties de
+// dentro de uma cor do deck.gl, que precisa de RGB numérico). Continuam em uso só pelas espigas
+// (ver `espigas` abaixo) -- os FLUXOS (fitas/setas) deixaram de usar essa dupla azul/laranja
+// nesta fase (F11), ver ARC_FLUXO_* logo abaixo.
 const ARC_IN_CLARO = hexParaRgb("#2a78d6"), ARC_IN_ESCURO = hexParaRgb("#3987e5");
 const ARC_OUT_CLARO = hexParaRgb("#eb6834"), ARC_OUT_ESCURO = hexParaRgb("#d95926");
-const ORIGEM_CLARO = hexParaRgb("#c3c2b7"), ORIGEM_ESCURO = hexParaRgb("#383835");
+
+// F11 (mapa-representação): cor da fita/seta de um fluxo -- MONOCROMÁTICA por padrão, pedido
+// explícito do usuário. A dupla azul/laranja acima (ARC_IN/ARC_OUT) já identifica entrada/saída
+// nas espigas E no divergente do coroplético; repeti-la nos fluxos fazia a mesma cor significar
+// três coisas diferentes ao mesmo tempo. Com a direção agora legível pela FORMA (afunilamento +
+// seta + nós), a cor do fluxo fica livre para separar "isto é um fluxo" de "isto é um dado" --
+// grafite/ardósia (--ink-secondary de styles/tokens.css) no tema claro, o mesmo tom claro no
+// escuro. Ponto de troca único: as duas alternativas que o usuário vai avaliar depois são
+// (a) verde-azulado/violeta por direção (entrada/saída), ou (b) a dupla azul/laranja acima,
+// dessaturada; qualquer uma delas troca só o par de hex em `FLUXO_MAPA` (lib/paletas.ts, onde a
+// legenda lê a MESMA cor), sem mexer no resto da camada.
+const ARC_FLUXO_CLARO = hexParaRgb(FLUXO_MAPA.claro), ARC_FLUXO_ESCURO = hexParaRgb(FLUXO_MAPA.escuro);
+// Nós (círculos de origem/destino): claro (superfície) com contorno escuro no tema claro,
+// invertido no escuro -- mesmo padrão de "capitalPontos" mais abaixo.
+const NO_PREENCHIMENTO_CLARO = hexParaRgb("#fcfcfb"), NO_PREENCHIMENTO_ESCURO = hexParaRgb("#1a1a19");
+const NO_CONTORNO_CLARO = hexParaRgb("#0b0b0b"), NO_CONTORNO_ESCURO = hexParaRgb("#ffffff");
 
 // F5 (mapa-representação): preenchimento neutro da malha quando a métrica é de CONTAGEM
 // (saldo, imigrantes, emigrantes) -- o coroplético fica reservado às taxas (TLM/IEM), a
@@ -352,6 +367,25 @@ export function MapaAtlas({
       .filter((c): c is Capital & { x: number; y: number } => c != null);
   }, [campoId, centroides]);
 
+  /** Identidade da camada de fluxos, amarrada ao CONJUNTO de fluxos em tela (não só à
+   *  quantidade: dois conjuntos diferentes do mesmo tamanho têm pontas e volumes diferentes).
+   *
+   *  Relato do usuário: ao selecionar uma RM, os fluxos intra-metropolitanos saíam como cunhas
+   *  gigantes e só ficavam certos depois de recarregar a página. Medido aqui: entrando na RM
+   *  direto pela URL (`?rm=4901`), a mesma camada desenha corretamente; entrando pela troca de
+   *  seleção, ela congela com os ATRIBUTOS da escala anterior -- e não só a geometria: pintando
+   *  os fluxos de vermelho por HMR, os polígonos travados continuavam cinzentos, ou seja o
+   *  deck.gl não reprocessava NENHUM acessor daquela camada, nem `getPolygon` (apesar do
+   *  `updateTriggers` em `vista.zoom`) nem `getFillColor`. É a troca simultânea de `data`
+   *  (150 fluxos nacionais -> 15 intra-RM) com a troca de escala que deixa a camada nesse
+   *  estado; forçar uma camada NOVA nessa transição contorna o diff travado, sem depender do
+   *  caminho interno que falha. O zoom sozinho não muda a chave -- ali o `updateTriggers`
+   *  funciona (é o que redimensiona os fluxos durante um gesto de zoom, verificado na vista
+   *  nacional), e refazer a camada a cada quadro de zoom custaria caro. */
+  const idFluxos = arcos.length
+    ? `fluxos-${arcos.length}-${arcos[0].origem}-${arcos[0].destino}-${arcos[arcos.length - 1].total}`
+    : "fluxos-vazio";
+
   const camadas = useMemo(() => {
     if (!malha) return [];
     const contorno: RGB = escuro ? [70, 70, 68] : [225, 224, 217];
@@ -527,100 +561,79 @@ export function MapaAtlas({
       },
     });
 
-    // F3 (mapa-representação): direção legível dentro do que o ArcLayer nativo do deck.gl
-    // oferece. O ArcLayer NÃO afunila (getWidth é um escalar por arco, não por vértice --
-    // não há prop de largura variável ao longo da curva); implementamos só os outros dois
-    // recursos do plano:
-    // (2) curvatura: F10 refez essa parte para a projeção ortográfica -- a parábola do
-    //     ArcLayer é girada para dentro do plano do mapa (`getTilt` = -90, flecha sempre à
-    //     direita do sentido de viagem, convenção de Tobler), o que separa QUALQUER par
-    //     recíproco A->B e B->A sem regra por par, inclusive nos módulos sem campo `direcao`
-    //     (fluxos intra-RM e pendulares). Ver o bloco getHeight/getTilt abaixo.
-    // (3) degradê de cor mais forte: a ponta de origem vai para um cinza neutro (--axis) em
-    //     vez de só reduzir o alfa da mesma cor -- a ponta de destino chega na cor cheia da
-    //     direção (entrada/saída) ou da tipologia (RM). Sem direção real (ex.: maioresFluxos
-    //     da vista Brasil sem seleção, que não marca `direcao`), as duas pontas ficam neutras
-    //     em vez de aplicar a cor de "entrada" por padrão -- ver App.tsx.
-    const arcCor = (d: Fluxo & { direcao?: string; corRgb?: RGB }) => {
-      if (d.corRgb) return d.corRgb;
-      if (d.direcao === "entrada") return escuro ? ARC_IN_ESCURO : ARC_IN_CLARO;
-      if (d.direcao === "saida") return escuro ? ARC_OUT_ESCURO : ARC_OUT_CLARO;
-      return null; // sem direção conhecida: neutro nas duas pontas
-    };
-    const fluxos = new ArcLayer({
-      id: "arcos",
-      data: arcos,
-      // F10: posições em metros (x_o/y_o/x_d/y_d, Albers) -- o ArcLayer continua funcionando
-      // normalmente em CARTESIAN (o arco é desenhado no plano da vista, não segue a curvatura
-      // da Terra em nenhum dos dois modos).
+    // F11 (mapa-representação): cada fluxo passa a ser UM polígono (fita afunilando + seta),
+    // via `poligonoFluxo` (lib/fluxos.ts) -- substitui o par ArcLayer ("arcos") + SolidPolygonLayer
+    // ("setas") de F3/F10. Motivo: o ArcLayer não afunila por vértice (getWidth é escalar) e a
+    // seta antiga usava a CORDA como direção (a tangente real da parábola do ArcLayer exigiria
+    // reproduzir o shader em JS); a Bézier própria dá as duas coisas de graça. Ordenado por
+    // volume ASCENDENTE (maiores por cima), mesmo padrão de `pontosEspiga` acima.
+    const fluxosOrdenados = [...arcos].sort((a, b) => a.total - b.total);
+    const fluxos = new SolidPolygonLayer<Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }>({
+      id: idFluxos,
+      data: fluxosOrdenados,
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       visible: mostrarFluxos,
       pickable: mostrarFluxos,
-      getSourcePosition: (d: Fluxo) => [d.x_o!, d.y_o!],
-      getTargetPosition: (d: Fluxo) => [d.x_d!, d.y_d!],
-      getSourceColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
-        // ponta de origem: cinza neutro em todo arco direcionado (entrada/saída) ou sem
-        // direção conhecida; a tipologia intra-RM (corRgb) continua colorida nas duas pontas,
-        // só com alfa menor na origem -- é uma cor de CATEGORIA do fluxo, não de direção.
-        if (d.corRgb) return [...d.corRgb, comAlfaSat(d.cruza ? 90 : 200)] as [number, number, number, number];
-        const origem = escuro ? ORIGEM_ESCURO : ORIGEM_CLARO;
-        return [...origem, comAlfaSat(d.cruza ? 90 : 190)] as [number, number, number, number];
+      filled: true,
+      getPolygon: (d) => poligonoFluxo(d.x_o!, d.y_o!, d.x_d!, d.y_d!, larguraDoArco(d.total), metrosPorPixel(vista.zoom))
+        ?? [[0, 0], [0, 0], [0, 0]],
+      // Cor: monocromática por padrão -- a direção já é lida pela FORMA (afunilamento + seta
+      // + nós circulares), não pela cor (ver ARC_FLUXO_CLARO/ESCURO acima, com o ponto de
+      // troca para as duas alternativas que o usuário ainda vai avaliar). A ÚNICA exceção é a
+      // tipologia núcleo/periferia intra-RM (`corRgb`), que precisa da cor de CATEGORIA --
+      // essa não é uma cor de direção, então continua colorida. `cruza` (fluxo que cruza o
+      // limite da RM, pendular) continua com alfa reduzido.
+      getFillColor: (d) => {
+        const base = d.corRgb ?? (escuro ? ARC_FLUXO_ESCURO : ARC_FLUXO_CLARO);
+        return [...base, comAlfaSat(d.cruza ? 90 : 215)] as [number, number, number, number];
       },
-      getTargetColor: (d: Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }) => {
-        if (d.corRgb) return [...d.corRgb, comAlfaSat(d.cruza ? 40 : 90)] as [number, number, number, number];
-        const cor = arcCor(d);
-        if (cor) return [...cor, comAlfaSat(d.cruza ? 90 : 230)] as [number, number, number, number];
-        // sem direção conhecida (ex.: maioresFluxos da vista Brasil sem seleção): as duas
-        // pontas ficam neutras, em vez de herdar a cor de "entrada" por padrão.
-        const origem = escuro ? ORIGEM_ESCURO : ORIGEM_CLARO;
-        return [...origem, comAlfaSat(d.cruza ? 60 : 170)] as [number, number, number, number];
-      },
-      getWidth: (d: Fluxo) => larguraDoArco(d.total),
-      widthMinPixels: LARGURA_MIN,
-      widthMaxPixels: LARGURA_MAX,
-      opacity: 0.75,
-      widthUnits: "pixels",
-      // F10: curvatura no PLANO do mapa, não em Z -- `getTilt = -90` gira a parábola do
-      // ArcLayer para XY. Sob OrthographicView uma flecha em Z não tem projeção em tela e o
-      // arco colapsa na corda reta, que é o que produzia a "lâmina" opaca sobre o Atlântico
-      // na vista Brasil de 1980. Motivo, medições e escolha do sinal: lib/arcos.ts.
-      getHeight: (d: Fluxo) => alturaDoArco(Math.hypot(d.x_d! - d.x_o!, d.y_d! - d.y_o!)),
-      getTilt: TILT_ARCO,
       onClick: (info: PickingInfo) => {
         const f = info.object as Fluxo | undefined;
         if (f) aoSelecionarFluxo(f.origem, f.destino);
         return true;
       },
       updateTriggers: {
-        getSourceColor: [escuro, mostrarSatelite], getTargetColor: [escuro, mostrarSatelite], getWidth: [maiorVolume],
+        getPolygon: [vista.zoom, maiorVolume],
+        getFillColor: [escuro, mostrarSatelite],
       },
     });
 
-    // Ponta de seta na chegada de cada arco (pedido do usuário: "os fluxos devem ser setas,
-    // com direção clara"; ver poligonoSeta em lib/arcos.ts -- direção pela corda reta
-    // origem->destino, tamanho fixo em pixels, ponta afastada do centroide de destino por um
-    // raio mínimo para não se sobrepor a outras chegando ali). Mesma cor do lado de chegada do
-    // arco (arcCor/getTargetColor acima), um pouco mais opaca para a ponta se destacar da
-    // linha. `metrosPorPixel(vista.zoom)` -- mesma conversão usada pelas espigas.
-    const setas = mostrarFluxos && arcos.length > 0 && new SolidPolygonLayer<Fluxo & { direcao?: string; cruza?: boolean; corRgb?: RGB }>({
-      id: "setas",
-      data: arcos,
+    // Nós (círculos) marcando origem E destino de cada fluxo -- um por código distinto entre
+    // os dois lados de `arcos` (deduplicado: um município pode ser origem de um fluxo e
+    // destino de outro, ou aparecer em vários). Raio = RAIO_NO_PX (lib/fluxos.ts), a MESMA
+    // constante usada para recuar a fita/posicionar a ponta da seta -- é o que faz a seta
+    // encostar exatamente na borda do círculo. `pickable: false`: um nó fica sobre o
+    // centroide do município, e torná-lo clicável roubaria o hover/clique do polígono do
+    // município embaixo dele (mesmo problema já registrado com a antiga camada "setas").
+    const nosFluxo: { cd: string; x: number; y: number }[] = [];
+    {
+      const vistos = new Set<string>();
+      for (const a of arcos) {
+        if (a.x_o != null && a.y_o != null && !vistos.has(a.origem)) {
+          vistos.add(a.origem);
+          nosFluxo.push({ cd: a.origem, x: a.x_o, y: a.y_o });
+        }
+        if (a.x_d != null && a.y_d != null && !vistos.has(a.destino)) {
+          vistos.add(a.destino);
+          nosFluxo.push({ cd: a.destino, x: a.x_d, y: a.y_d });
+        }
+      }
+    }
+    const fluxosNos = new ScatterplotLayer<{ cd: string; x: number; y: number }>({
+      id: "fluxos-nos",
+      data: nosFluxo,
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-      // Decorativa/não-clicável de propósito: a ponta fica bem perto do centroide de destino
-      // (só AFASTAMENTO_SETA_PX de distância -- ver lib/arcos.ts), então torná-la pickable
-      // fazia hover/clique perto de uma cidade "roubar" o município ou a dica embaixo dela
-      // pela seta em vez do polígono/arco de verdade -- o mesmo clique já funciona na LINHA
-      // do arco (camada "arcos", que continua pickable).
+      visible: mostrarFluxos,
       pickable: false,
-      filled: true,
-      getPolygon: (d) => poligonoSeta(d.x_o!, d.y_o!, d.x_d!, d.y_d!, metrosPorPixel(vista.zoom)) ?? [[0, 0], [0, 0], [0, 0]],
-      getFillColor: (d) => {
-        if (d.corRgb) return [...d.corRgb, comAlfaSat(d.cruza ? 90 : 235)] as [number, number, number, number];
-        const cor = arcCor(d);
-        const base = cor ?? (escuro ? ORIGEM_ESCURO : ORIGEM_CLARO);
-        return [...base, comAlfaSat(d.cruza ? 110 : 235)] as [number, number, number, number];
-      },
-      updateTriggers: { getPolygon: [vista.zoom], getFillColor: [escuro, mostrarSatelite] },
+      getPosition: (d) => [d.x, d.y],
+      radiusUnits: "pixels",
+      getRadius: RAIO_NO_PX,
+      getFillColor: [...(escuro ? NO_PREENCHIMENTO_ESCURO : NO_PREENCHIMENTO_CLARO) as RGB, comAlfaSat(235)] as [number, number, number, number],
+      stroked: true,
+      getLineColor: [...(escuro ? NO_CONTORNO_ESCURO : NO_CONTORNO_CLARO) as RGB, comAlfaSat(235)] as [number, number, number, number],
+      lineWidthUnits: "pixels",
+      getLineWidth: 1.2,
+      updateTriggers: { getFillColor: [escuro, mostrarSatelite], getLineColor: [escuro, mostrarSatelite] },
     });
 
     // Rótulos de capital, sempre visíveis (pedido do usuário) -- no topo da pilha de camadas,
@@ -672,12 +685,33 @@ export function MapaAtlas({
       updateTriggers: { getColor: [escuro, mostrarSatelite], outlineColor: [escuro, mostrarSatelite] },
     });
 
-    return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos, setas,
+    return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos, fluxosNos,
             capitalPontos, capitalRotulos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [malha, contornos, porCodigo, metrica, metricaContagem, quebras, arcos, selecionado, escuro, aoSelecionar,
       aoSelecionarFluxo, maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos, mostrarSatelite,
-      pontosEspiga, maiorAbsolutoEspiga, vista.zoom, pontosCapital]);
+      pontosEspiga, maiorAbsolutoEspiga, vista.zoom, pontosCapital, idFluxos]);
+
+  // F11 (mapa-representação): repintura forçada a cada reconstrução das camadas.
+  //
+  // Relato do usuário: ao selecionar uma RM, os fluxos intra-metropolitanos apareciam como
+  // cunhas cinzentas enormes e só ficavam certos depois de recarregar a página. Medido aqui:
+  // quando a tela travava nesse estado, as camadas em memória já estavam CERTAS (fluxos da RM,
+  // zoom da RM, polígonos com a proporção correta -- conferido pelo cálculo da mesma geometria
+  // fora da camada); bastava mover o mouse sobre o mapa para a imagem se corrigir sozinha, sem
+  // nenhuma mudança de dado ou de vista. Ou seja: o que ficava velho era o FRAME pintado, não
+  // os atributos -- o deck.gl encerrava a transição de enquadramento (`transitionDuration`
+  // abaixo) sem desenhar um quadro final com a última atualização de camadas, e o canvas
+  // continuava mostrando a geometria calculada no zoom anterior (o nacional, onde uma seta de
+  // 15px vale ~106km -- daí o tamanho das cunhas). Qualquer evento de ponteiro, por disparar o
+  // picking, forçava o quadro que faltava.
+  //
+  // `Deck.redraw(motivo)` depois de cada commit que reconstrói as camadas fecha essa janela
+  // para todos os caminhos -- chegada dos dados,
+  // mudança de zoom, toggles -- sem depender de a transição terminar. Custo: um quadro extra
+  // nas trocas em que o deck.gl já ia desenhar de qualquer jeito.
+  const deckRef = useRef<DeckGLRef<OrthographicView> | null>(null);
+  useEffect(() => { deckRef.current?.deck?.redraw("camadas reconstruídas"); }, [camadas]);
 
   const dica = hover?.object as
     | (Feature<Geometry, Record<string, string>> & Fluxo & PontoEspiga)
@@ -699,6 +733,7 @@ export function MapaAtlas({
         </p>
       )}
       <DeckGL
+        ref={deckRef}
         views={VIEW}
         viewState={vista}
         onViewStateChange={({ viewState, interactionState }) => {
@@ -758,6 +793,16 @@ export function MapaAtlas({
                 return rotulo ? <div className="muted-pequeno">precisão da imigração: {rotulo}</div> : null;
               })()}
             </>
+          ) : camadaHover === idFluxos ? (
+            <>
+              <strong>{dica.nm_origem}/{dica.uf_origem} → {dica.nm_destino}/{dica.uf_destino}</strong>
+              <div>{num(dica.total)} pessoas · clique para ver o perfil</div>
+              {dica.precisao && (
+                <div className="muted-pequeno">
+                  precisão: {rotuloPrecisao[dica.precisao] ?? dica.precisao}
+                </div>
+              )}
+            </>
           ) : "properties" in dica && dica.properties?.[campoId] ? (
             <>
               <strong>{rotuloDaFeicao?.(dica.properties[campoId]) ?? dica.properties[campoId]}</strong>
@@ -768,17 +813,7 @@ export function MapaAtlas({
                 return rot ? <div className="muted-pequeno">precisão da imigração: {rot}</div> : null;
               })()}
             </>
-          ) : (
-            <>
-              <strong>{dica.nm_origem}/{dica.uf_origem} → {dica.nm_destino}/{dica.uf_destino}</strong>
-              <div>{num(dica.total)} pessoas · clique para ver o perfil</div>
-              {dica.precisao && (
-                <div className="muted-pequeno">
-                  precisão: {rotuloPrecisao[dica.precisao] ?? dica.precisao}
-                </div>
-              )}
-            </>
-          )}
+          ) : null}
         </div>
       )}
     </div>
