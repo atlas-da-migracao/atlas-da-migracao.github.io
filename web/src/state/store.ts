@@ -46,6 +46,18 @@ interface Estado {
    *  URL); `?sat=1` liga. Independente de edição/nível -- a mesma imagem cobre o Brasil
    *  inteiro em qualquer censo. */
   mostrarSatelite: boolean;
+  /** Filtro de tamanho dos fluxos no mapa: fração (0-1) da FAIXA de volumes dos fluxos
+   *  carregados na vista atual, abaixo da qual o fluxo não é desenhado. 0 (o padrão, ausente
+   *  da URL) mostra todos; 1 deixa só o maior.
+   *
+   *  É fração da faixa, e não um número de pessoas, porque a mesma escala absoluta não serve
+   *  às duas pontas do atlas: no mapa nacional os fluxos vão de ~4 mil a ~23 mil pessoas, e
+   *  num município pequeno vão de poucas dezenas a algumas centenas. Guardado em absoluto, um
+   *  corte escolhido no mapa nacional apagaria TODOS os fluxos ao entrar num município. A
+   *  fração acompanha a vista; o controle mostra ao usuário o valor absoluto correspondente
+   *  (ver `.filtro-fluxo` em App.tsx). Como o toggle de fluxos, não afeta as consultas nem o
+   *  painel lateral -- só o que o mapa desenha. */
+  limiarFluxo: number;
   /** troca de edição do Censo; mantém nível, município, unidade, RM e aba, e limpa o fluxo
    *  selecionado e o recorte por característica (ver a implementação para o porquê) */
   setCenso: (censo: Censo) => void;
@@ -64,6 +76,7 @@ interface Estado {
   setCruzar: (v: boolean) => void;
   setMostrarFluxos: (v: boolean) => void;
   setMostrarSatelite: (v: boolean) => void;
+  setLimiarFluxo: (v: number) => void;
   /** F6 leva 2: aplica várias peças de estado de uma vez (ex.: o link de um "achado-chave"
    *  da capa nacional, que precisa entrar em modo RM, trocar de aba E selecionar um fluxo
    *  na mesma navegação -- as ações individuais acima limpam campos umas das outras). */
@@ -104,11 +117,13 @@ function daUrl() {
     cruzar: p.get("cruzar") === "1",
     mostrarFluxos: p.get("fluxos") !== "0",
     mostrarSatelite: p.get("sat") === "1",
+    limiarFluxo: Math.min(1, Math.max(0, Number(p.get("fmin") ?? 0) || 0)),
   };
 }
 
 function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | "destino" | "metrica" | "topN"
-                              | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos" | "mostrarSatelite">) {
+                              | "filtro" | "rm" | "aba" | "cruzar" | "censo" | "mostrarFluxos"
+                              | "mostrarSatelite" | "limiarFluxo">) {
   const p = new URLSearchParams();
   if (e.censo !== CENSO_PADRAO) p.set("censo", e.censo);
   if (e.rm) {
@@ -125,6 +140,7 @@ function paraUrl(e: Pick<Estado, "municipio" | "selecao" | "nivel" | "origem" | 
   if (e.filtro) p.set("f", e.filtro);
   if (!e.mostrarFluxos) p.set("fluxos", "0");
   if (e.mostrarSatelite) p.set("sat", "1");
+  if (e.limiarFluxo > 0) p.set("fmin", e.limiarFluxo.toFixed(2));
   const qs = p.toString();
   history.replaceState(null, "", qs ? `?${qs}` : location.pathname);
 }
@@ -217,6 +233,11 @@ export const useStore = create<Estado>((set, get) => ({
   setCruzar: (cruzar) => { set({ cruzar }); paraUrl({ ...get(), cruzar }); },
   setMostrarFluxos: (mostrarFluxos) => { set({ mostrarFluxos }); paraUrl({ ...get(), mostrarFluxos }); },
   setMostrarSatelite: (mostrarSatelite) => { set({ mostrarSatelite }); paraUrl({ ...get(), mostrarSatelite }); },
+  setLimiarFluxo: (v) => {
+    const limiarFluxo = Math.min(1, Math.max(0, v));
+    set({ limiarFluxo });
+    paraUrl({ ...get(), limiarFluxo });
+  },
   irPara: (patch) => { set(patch); paraUrl({ ...get(), ...patch }); },
 }));
 

@@ -544,3 +544,16 @@
     transition-duration: 0.001ms !important; scroll-behavior: auto !important;
   }
 }
+
+/* Filtro de tamanho dos fluxos (slider ao lado dos toggles do mapa). Mesma casca dos outros
+   controles flutuantes sobre o canvas (`.botao-fluxos`, `.atribuicao-satelite`): superfície
+   elevada, hairline e sombra curta, para ler como controle e não como parte do mapa. */
+.filtro-fluxo {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 7px 10px; max-width: min(300px, calc(100vw - 24px));
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 2px 10px rgba(0,0,0,.10);
+}
+.filtro-fluxo label { font-size: 11px; color: var(--ink-muted-texto); }
+.filtro-fluxo input[type="range"] { width: 100%; accent-color: var(--ink-secondary); margin: 0; }
+.filtro-fluxo-valor { font-size: 11.5px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }

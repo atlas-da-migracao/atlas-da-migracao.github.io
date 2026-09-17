@@ -18,6 +18,7 @@ import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunic
          pendularDaRM, saldoPorCategoria,
          type NivelAgregado, type ResumoRM, type UnidadeAgregada } from "./db/queries";
 import { quebrasSimetricas } from "./lib/escalas";
+import { num } from "./lib/format";
 import { ANCORA_ESPIGA_MUNICIPIO } from "./lib/espigas";
 import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, uniaoDeBboxes, type Bbox } from "./lib/rm";
 import type { FluxoUF } from "./lib/acordes";
@@ -81,7 +82,7 @@ export default function App() {
   const [erro, setErro] = useState<string | null>(null);
 
   const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
-          mostrarFluxos, mostrarSatelite, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo,
+          mostrarFluxos, mostrarSatelite, limiarFluxo, setLimiarFluxo, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo,
           setNivel, setMetrica, setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos,
           setMostrarSatelite } = useStore();
   const recursos = edicao(censo).recursos;
@@ -425,13 +426,39 @@ export default function App() {
     };
   }, [aba, cruzar, escuro]);
 
+  /** Volumes dos fluxos carregados, em ordem -- base do slider de tamanho. */
+  const volumesFluxo = useMemo(
+    () => arcos.map((a) => a.total).sort((a, b) => a - b), [arcos]);
+  const faixaFluxos = volumesFluxo.length
+    ? { min: volumesFluxo[0], max: volumesFluxo[volumesFluxo.length - 1] } : null;
+
+  /** Corte ABSOLUTO (em pessoas) que a posição do slider representa nesta vista. A posição
+   *  não é lida como fração da FAIXA de volumes, e sim como QUANTIL: `limiarFluxo` = 0,5
+   *  corta na mediana, deixando metade dos fluxos. A diferença é prática -- os volumes são
+   *  muito assimétricos (poucos fluxos enormes, uma cauda longa de pequenos), e medido sobre
+   *  a faixa o controle ficava inútil: metade do curso já apagava 136 dos 150 fluxos do mapa
+   *  nacional, e o resto do curso não fazia quase nada. Por quantil, cada passo do slider
+   *  tira aproximadamente o mesmo número de fluxos. O rótulo continua mostrando o corte em
+   *  pessoas, que é o que o usuário precisa saber para interpretar o mapa. */
+  const corteFluxo = volumesFluxo.length
+    ? volumesFluxo[Math.min(volumesFluxo.length - 1,
+        Math.floor(limiarFluxo * (volumesFluxo.length - 1)))]
+    : 0;
+
+  /** Fluxos que o mapa de fato desenha: os carregados, menos os menores que o corte do
+   *  slider. Só a CAMADA é filtrada -- o painel lateral continua listando todos, como já
+   *  acontece com o toggle "Fluxos" (ver `mostrarFluxos` em state/store.ts). */
+  const arcosVisiveis = useMemo(
+    () => (limiarFluxo > 0 ? arcos.filter((a) => a.total >= corteFluxo) : arcos),
+    [arcos, limiarFluxo, corteFluxo]);
+
   /** Corte efetivo da camada de fluxos: o volume do MENOR fluxo em tela. O mapa desenha só os
    *  `topN` maiores pares da vista (`maioresFluxos`/`maioresFluxosNivel` em db/queries.ts), e
    *  sem esse número o leitor lê a ausência de um fluxo no mapa como ausência de migração. Sai
    *  dos próprios fluxos carregados, não de uma constante: muda com a edição (os volumes de
    *  1980 não são os de 2022), com o nível agregado e com o "top N" escolhido. */
   const menorFluxoExibido = useMemo(
-    () => (arcos.length ? Math.min(...arcos.map((a) => a.total)) : null), [arcos]);
+    () => (arcosVisiveis.length ? Math.min(...arcosVisiveis.map((a) => a.total)) : null), [arcosVisiveis]);
 
   // fluxos exibidos no mapa: nacionais (modo Brasil) ou da RM ativa (modo metropolitano)
   const topNStore = topN;
@@ -799,7 +826,7 @@ export default function App() {
           {erro && <div className="erro" role="alert">{erro}</div>}
           <MapaAtlas
             malha={malhaAtiva} contornos={contornosMalha} porCodigo={porCodigoAtivo} metrica={metrica} quebras={quebras}
-            arcos={arcos} selecionado={codigoSelecionado} escuro={escuro}
+            arcos={arcosVisiveis} selecionado={codigoSelecionado} escuro={escuro}
             aoSelecionar={aoSelecionarNoMapa} aoSelecionarFluxo={aoSelecionarFluxo}
             foco={foco} zoomMaximo={zoomMaximo} rotuloReenquadrar={rotuloReenquadrar}
             destacar={rmDestacar ?? (nivelEfetivo === "uf" ? ufsRealcadas : null)} perimetro={rmPerimetro} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
@@ -820,6 +847,26 @@ export default function App() {
                 {mostrarSatelite ? "Satélite: ligado" : "Satélite: desligado"}
               </button>
             </div>
+            {/* Filtro de TAMANHO dos fluxos. Só aparece quando há fluxos desenhados e mais de
+                um volume distinto -- com um fluxo só, ou todos iguais, o controle não teria o
+                que separar. O slider anda na FRAÇÃO da faixa de volumes da vista (ver
+                `limiarFluxo` em state/store.ts); o rótulo traduz a posição para o número de
+                pessoas e diz quantos fluxos sobraram, que é o retorno que torna a escala
+                compreensível mesmo com a distribuição bem assimétrica dos volumes. */}
+            {mostrarFluxos && faixaFluxos && faixaFluxos.max > faixaFluxos.min && (
+              <div className="filtro-fluxo">
+                <label htmlFor="filtro-fluxo-slider">Tamanho mínimo do fluxo</label>
+                <input id="filtro-fluxo-slider" type="range" min={0} max={1} step={0.01}
+                       value={limiarFluxo}
+                       onChange={(e) => setLimiarFluxo(Number(e.target.value))}
+                       aria-valuetext={`a partir de ${num(Math.round(corteFluxo))} pessoas, `
+                         + `${arcosVisiveis.length} de ${arcos.length} fluxos`} />
+                <span className="filtro-fluxo-valor">
+                  a partir de <strong>{num(Math.round(corteFluxo))}</strong> pessoas
+                  {" "}· {num(arcosVisiveis.length)} de {num(arcos.length)} fluxos
+                </span>
+              </div>
+            )}
             {mostrarSatelite && (
               <p className="atribuicao-satelite">
                 Imagem de satélite: NASA Visible Earth, Blue Marble.
@@ -829,7 +876,7 @@ export default function App() {
               <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
                        maiorAbsolutoMetrica={maiorAbsolutoMetrica}
                        notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined}
-                       menorFluxo={menorFluxoExibido} qtdFluxos={arcos.length || undefined} />
+                       menorFluxo={menorFluxoExibido} qtdFluxos={arcosVisiveis.length || undefined} />
             )}
             {rm && (
               <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
