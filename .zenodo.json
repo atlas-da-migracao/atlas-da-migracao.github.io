@@ -6,8 +6,7 @@
     { "name": "Pessini Sobreira, Daniel", "orcid": "0000-0002-6632-3991" }
   ],
   "license": "CC-BY-4.0",
-  "access_right": "restricted",
-  "access_conditions": "Tabulações agregadas derivadas de microdados de acesso controlado do IBGE (Censo Demográfico 2022). Acesso temporariamente restrito enquanto se confirma a modalidade de disseminação com o IBGE -- ver a nota do registro. Solicitações de acesso são avaliadas caso a caso pelo autor.",
+  "access_right": "open",
   "language": "por",
   "keywords": [
     "migração interna", "migração intermunicipal", "censo demográfico", "IBGE", "data fixa",
@@ -19,5 +18,5 @@
     { "identifier": "https://atlas-da-migracao.github.io", "relation": "isSupplementedBy", "resource_type": "other", "scheme": "url" },
     { "identifier": "https://www.ibge.gov.br/estatisticas/sociais/populacao/22827-censo-demografico-2022.html", "relation": "isDerivedFrom", "resource_type": "dataset", "scheme": "url" }
   ],
-  "notes": "Fonte primária: IBGE, Censos Demográficos 1980-2022, microdados da amostra (acesso controlado; 1980 via fonte secundária pública). O arquivo depositado contém o código do pipeline e do front-end, os agregados publicados (data/processed, incluindo a série comparativa entre censos) e a documentação metodológica; não contém microdados. Nota (setembro de 2026): acesso aos arquivos temporariamente restrito por precaução, aguardando confirmação do IBGE sobre a modalidade de disseminação; a resposta recebida (protocolo 20260906003) já autoriza a disseminação de agregados municipais com mapas, condicionada ao controle estatístico de confidencialidade já implementado (gate R1-R9). Este registro não é um produto do IBGE."
+  "notes": "Fonte primária: IBGE, Censos Demográficos 1980-2022, microdados da amostra (acesso controlado; 1980 via fonte secundária pública). O arquivo depositado contém o código do pipeline e do front-end, os agregados publicados (data/processed, incluindo a série comparativa entre censos) e a documentação metodológica; não contém microdados. O IBGE (Grupo de Trabalho de Sigilo de Microdados, protocolo 20260906003) confirmou por escrito que agregados por município, incluindo mapas, podem ser disseminados, condicionado ao controle estatístico de confidencialidade já implementado (gate R1-R9). Este registro não é um produto do IBGE."
 }
