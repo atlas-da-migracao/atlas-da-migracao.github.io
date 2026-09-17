@@ -48,18 +48,28 @@ def sha256_arquivo(caminho: pathlib.Path) -> str:
     return h.hexdigest()
 
 
+
+# Lixo de sistema operacional que pode aparecer em data/processed numa máquina local (nunca
+# commitado -- .gitignore já os bloqueia) mas nunca deve entrar no carimbo do gate: se entrar,
+# `verify_gate.py` reprova em qualquer clone/CI limpo, porque o arquivo listado no carimbo não
+# existe lá. Achado em produção (2026-09-17): um `.DS_Store` do Finder contaminou o gate da
+# edição 2022 e quebrou o CI.
+_LIXO_SO = {".DS_Store", "Thumbs.db", "desktop.ini"}
+
+
 def hashes_publicaveis() -> dict[str, str]:
     """SHA-256 de todo arquivo publicável em data/processed (recursivo, geo/ incluído).
 
     Caminhos relativos em POSIX (`/`), ordenados, excluindo o próprio carimbo `.gate_ok` --
-    é o que `verify_gate.py` recomputa e confere de forma independente do resto do gate --
-    e qualquer subpasta com o PRÓPRIO `.gate_ok` (outra edição publicada dentro desta, ex.:
-    `2010/` dentro do `data/processed` da edição 2022): tem gate próprio, não é deste.
+    é o que `verify_gate.py` recomputa e confere de forma independente do resto do gate --,
+    lixo de sistema operacional (`_LIXO_SO`, nunca publicável) e qualquer subpasta com o
+    PRÓPRIO `.gate_ok` (outra edição publicada dentro desta, ex.: `2010/` dentro do
+    `data/processed` da edição 2022): tem gate próprio, não é deste.
     """
     subgates = [g.parent for g in PROCESSED.rglob(".gate_ok") if g != GATE_OK]
     hashes = {}
     for f in sorted(PROCESSED.rglob("*")):
-        if not f.is_file() or f == GATE_OK:
+        if not f.is_file() or f == GATE_OK or f.name in _LIXO_SO:
             continue
         if any(f == sg or sg in f.parents for sg in subgates):
             continue

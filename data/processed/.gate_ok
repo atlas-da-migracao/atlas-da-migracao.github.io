@@ -1,6 +1,5 @@
 {
   "arquivos": {
-    ".DS_Store": "8c367ea738850c4a656693fa7bfaf5f80bdbb72b201594604e14540874c8cebd",
     "fluxos.parquet": "62803324eeeaae0cb0a26ac52a6d1210dabaef83a08639567485853e6422f5b1",
     "fluxos_rgi.parquet": "07e0d91abc121704be8ccc28d6a41625dca88960319b3f5d9671d59a01e4a960",
     "fluxos_rgint.parquet": "cff1994e80f6008cad0c8950c54c1b1c676deb7dd9e2ba19a3739fae68e069d0",
@@ -36,6 +35,6 @@
     "rm_resumo.parquet": "6fe6f87faf404e471dfce86770e0f913ce0af05086d293e586585f33c6e828ca"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-17T16:10:11.720127",
+  "timestamp": "2026-09-17T16:48:11.570846",
   "versao_dados": "2026-09-17"
 }
