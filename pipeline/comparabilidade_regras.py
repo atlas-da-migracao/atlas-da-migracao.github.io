@@ -244,8 +244,13 @@ MEDIDAS: tuple[Medida, ...] = (
         },
     ),
     Medida(
-        "gini_linha", "Concentração das origens (Gini de linha)", 1,
-        "Gini das M_ji que chegam à unidade", "Plane & Mulligan (1997), Demography 34(2)",
+        # Correção (achada ao escrever o glossário de tooltips do front): o rótulo estava
+        # trocado com o de `gini_coluna`. `pipeline/build_series.py::_gini_batch` agrupa por
+        # `origem` para calcular `gini_linha` -- ou seja, mede a concentração dos M_ij que SAEM
+        # da unidade (para poucos ou muitos destinos), não das origens que chegam. Ver o
+        # docstring de `pipeline/medidas.py::gini_linha`, que já descrevia isso corretamente.
+        "gini_linha", "Concentração dos destinos (Gini de linha)", 1,
+        "Gini das M_ij que saem da unidade", "Plane & Mulligan (1997), Demography 34(2)",
         requer=("migracao", "fluxos_publicados"),
         excecoes={
             "2022": _r(_COM, "gini_supressao"), "2010": _r(_COM, "gini_supressao"),
@@ -254,8 +259,8 @@ MEDIDAS: tuple[Medida, ...] = (
         },
     ),
     Medida(
-        "gini_coluna", "Concentração dos destinos (Gini de coluna)", 1,
-        "Gini das M_ij que saem da unidade", "Plane & Mulligan (1997)",
+        "gini_coluna", "Concentração das origens (Gini de coluna)", 1,
+        "Gini das M_ji que chegam à unidade", "Plane & Mulligan (1997)",
         requer=("migracao", "fluxos_publicados"),
         excecoes={
             "2022": _r(_COM, "gini_supressao"), "2010": _r(_COM, "gini_supressao"),

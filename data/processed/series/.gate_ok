@@ -1,6 +1,6 @@
 {
   "arquivos": {
-    "comparabilidade.json": "a65437618c6703c640f22df8b2802e229c14c8bd41e2081e7f16e6e15db33dd0",
+    "comparabilidade.json": "fdc1b42a31c6301f32c60ba16b1698635981231185d6d7c83302b41ae3110259",
     "loglinear_serie.parquet": "4c01be004b16567b1811f1f25a3e113368625ca9f63c81cc15a59778ea41a735",
     "pares_serie.parquet": "d76c03abb297442c0519eb9676abbde5b910daac179fdf38968778f8c26e8762",
     "perfil_serie.parquet": "987a48c78a63f1b4aa18abb0590f2bcf235649d3373a4827dda4d98da1fafc90",
@@ -9,6 +9,6 @@
   },
   "formato_versao": 1,
   "nota_verificacao": "Esta pasta não tem microdado: as checagens R1-R6 de disclosure_check.py não se aplicam (nada aqui vem de data/interim/pessoas_classificado.parquet). O carimbo segue o MESMO formato de data/processed/.gate_ok para que verify_gate.py continue funcionando sem alteração; ver build_series.py, decisão de escopo 9, para a ressalva sobre colunas estruturais (n_mun_edicao/n_mun_2022) em verify_gate.py --dir data/processed/series isolado.",
-  "timestamp": "2026-09-17T14:24:56.143548",
+  "timestamp": "2026-09-17T15:47:23.870231",
   "versao_dados": "2026-09-16c+1.0.3-2010+1.0.3-2000+1.0.3-1991+1.0.6-1980"
 }

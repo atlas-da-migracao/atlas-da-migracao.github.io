@@ -8219,7 +8219,7 @@
       "calibracao_1980": null,
       "chave": "gini_linha",
       "entre_niveis": false,
-      "formula": "Gini das M_ji que chegam à unidade",
+      "formula": "Gini das M_ij que saem da unidade",
       "niveis": [
         "mun",
         "rgi",
@@ -8232,14 +8232,14 @@
         "migracao",
         "fluxos_publicados"
       ],
-      "rotulo": "Concentração das origens (Gini de linha)"
+      "rotulo": "Concentração dos destinos (Gini de linha)"
     },
     {
       "bloco": 1,
       "calibracao_1980": null,
       "chave": "gini_coluna",
       "entre_niveis": false,
-      "formula": "Gini das M_ij que saem da unidade",
+      "formula": "Gini das M_ji que chegam à unidade",
       "niveis": [
         "mun",
         "rgi",
@@ -8252,7 +8252,7 @@
         "migracao",
         "fluxos_publicados"
       ],
-      "rotulo": "Concentração dos destinos (Gini de coluna)"
+      "rotulo": "Concentração das origens (Gini de coluna)"
     },
     {
       "bloco": 1,

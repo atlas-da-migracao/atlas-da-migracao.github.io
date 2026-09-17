@@ -10,6 +10,7 @@
  *  dependência do projeto para isso ser completado depois sem nova biblioteca.
  */
 import { useEffect, useState } from "react";
+import { GLOSSARIO } from "../lib/glossario";
 import {
   serieDaUnidade, serieDosPares, serieDoSistema, serieFilhosDoMunicipio, seriePerfil,
 } from "../db/queries";
@@ -23,6 +24,16 @@ import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { DIMENSOES } from "../lib/paletas";
 import { MapaSerieCensos } from "./MapaSerieCensos";
 import { GraficosSistema } from "./GraficosSistema";
+
+/** Termos do glossário exibidos ao fim da seção "Ao longo dos censos", nesta ordem.
+ *  O conteúdo vem de `lib/glossario.ts` (fonte única do projeto) -- não duplicar texto aqui. */
+const CHAVES_GLOSSARIO_SERIE = [
+  "saldo", "taxa_liquida", "eficacia_iem", "rotatividade", "distancia_media",
+  "pct_interestadual", "gini", "cmi", "smi", "mei_agregado", "anmr", "beta_fielding",
+  "duncan_d", "n_unidades", "posto", "cv", "precisao", "n_faixa", "status_migratorio",
+  "escolaridade", "renda_domiciliar", "idade_sexo",
+] as const;
+
 
 export const ROTULO_NIVEL: Record<NivelSerie, string> = {
   mun: "município", rgi: "região imediata", rgint: "região intermediária", uf: "UF", rm: "região metropolitana",
@@ -118,7 +129,10 @@ const MEDIDAS_BLOCO1: MedidaTabela[] = [
   // -- ver pipeline/medidas.py::distancia_media_ponderada); converte para km só na exibição.
   { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000) },
   { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%` },
-  { chave: "gini_linha", rotulo: "Concentração origens (Gini)", unidade: "", campo: "gini_linha", formatar: num2 },
+  // Correção: `gini_linha` mede a concentração dos DESTINOS de quem sai da unidade (agrupa por
+  // origem = a própria unidade, Gini sobre os destinos) -- o rótulo antigo ("origens") estava
+  // trocado com `gini_coluna`. Ver pipeline/medidas.py::gini_linha e comparabilidade_regras.py.
+  { chave: "gini_linha", rotulo: "Concentração destinos (Gini)", unidade: "", campo: "gini_linha", formatar: num2 },
 ];
 
 function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
@@ -456,15 +470,21 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, e
       <section className="secao">
         <h3>Glossário</h3>
         <dl className="serie-glossario">
-          <dt id="gl-iem">IEM (MEI)</dt>
-          <dd>Índice de eficácia migratória: diferença entre quem chegou e quem saiu, dividida
-              pela soma dos dois. Vai de −1 (só saída) a +1 (só entrada).</dd>
-          <dt id="gl-cmi">CMI</dt>
-          <dd>Taxa bruta de intensidade migratória: % da população que mudou de município no
-              período, no conjunto de unidades do nível.</dd>
-          <dt id="gl-cv">CV</dt>
-          <dd>Coeficiente de variação: erro-padrão dividido pela estimativa, em %. Acima de 25%
-              o número é impreciso.</dd>
+          {CHAVES_GLOSSARIO_SERIE.map((chave) => {
+            const t = GLOSSARIO[chave];
+            if (!t) return null;
+            return (
+              <div key={chave} className="serie-glossario-item">
+                <dt id={`gl-${chave}`}>{t.termo}</dt>
+                <dd>
+                  {t.definicao} {t.interpretacao}
+                  {t.limitacoes ? (
+                    <span className="muted-pequeno"> {t.limitacoes}</span>
+                  ) : null}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
         <p className="muted-pequeno">
           Metodologia completa: <button className="link-serie" onClick={aoAbrirMetodologia}>metodologia completa</button>.
