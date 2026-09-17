@@ -55,7 +55,7 @@ LICENCA_DADOS_NOME = "CC BY 4.0"
 LICENCA_DADOS_URL = "https://creativecommons.org/licenses/by/4.0/deed.pt-br"
 LICENCA_CODIGO_NOME = "MIT"
 DOI_CONCEITO = "10.5281/zenodo.22469791"  # resolve sempre para a versão mais recente
-DOI_VERSAO = "10.5281/zenodo.22469792"      # esta versão (v1.0.0)
+DOI_VERSAO = "10.5281/zenodo.22819760"      # esta versão (v2.0.0)
 DOI_PLACEHOLDER = f"https://doi.org/{DOI_CONCEITO}"  # usado no texto de "como citar"
 AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
 ATRIBUICAO_PADRAO = (
@@ -1105,7 +1105,7 @@ unidade primária, área de ponderação como estrato).</li>
 <section class="secao"><h2>Como citar</h2>
 <p>{AUTOR_NOME}. <em>Atlas da migração interna no Brasil</em>. Dados do Censo Demográfico 2022
 (IBGE). DOI: <a href="https://doi.org/{DOI_CONCEITO}">{DOI_CONCEITO}</a> (todas as versões) /
-<a href="https://doi.org/{DOI_VERSAO}">{DOI_VERSAO}</a> (v1.0.0).</p>
+<a href="https://doi.org/{DOI_VERSAO}">{DOI_VERSAO}</a> (v2.0.0).</p>
 <p>Dados e conteúdo sob <a href="{LICENCA_DADOS_URL}">CC BY 4.0</a>, com atribuição ao IBGE
 como fonte primária. Metadados estruturados em
 <a href="https://github.com/atlas-da-migracao/atlas-da-migracao.github.io/blob/main/CITATION.cff">CITATION.cff</a>.</p>

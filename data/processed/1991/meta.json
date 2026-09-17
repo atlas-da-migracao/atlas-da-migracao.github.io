@@ -1,7 +1,7 @@
 {
   "edicao": "1991",
-  "versao_dados": "2026-09-16",
-  "gerado_em": "2026-09-16T17:32:20",
+  "versao_dados": "2026-09-17",
+  "gerado_em": "2026-09-17T17:28:32",
   "fonte": "IBGE, Censo Demográfico 1991, microdados da amostra (dados públicos)",
   "periodo_referencia": {
     "de": "1986-09-01",
@@ -70,7 +70,7 @@
     "autor": "Daniel Pessini Sobreira",
     "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
     "doi_conceito": "10.5281/zenodo.22469791",
-    "doi_versao": "10.5281/zenodo.22469792",
+    "doi_versao": "10.5281/zenodo.22819760",
     "licenca": "CC BY 4.0",
     "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
     "texto": "Daniel Pessini Sobreira. Atlas da migração interna no Brasil. Dados do Censo Demográfico 1991 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."

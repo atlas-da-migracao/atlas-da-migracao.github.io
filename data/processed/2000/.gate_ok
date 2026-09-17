@@ -17,7 +17,7 @@
     "geo/rgint_albers.topojson": "4b00bf1dd0831effea8f530252f3bac29546dac5d18f7eeef420946f339d3fcf",
     "geo/uf.topojson": "6e530c8ba3d77c81ce3577e4821bddec7546e555862be7845539cd4c04def863",
     "geo/uf_albers.topojson": "c0904deca576be25befabf17b222c995bf63e85d0b36967fb787939089fd7a2f",
-    "meta.json": "a6f9087b260e9dd3c1ab91a3763a7d08f22ef359e74f84f838d048f90f0023b2",
+    "meta.json": "0c875f2da0cad8f9b0b25ad9ecd4156bd2ddf722824c8bd73a6a97271d88fbce",
     "municipios.parquet": "f96e2282c35cafff26bbb29f95a40c0e26451c50b445f5fce80d977fd2b767a6",
     "municipios_dim.parquet": "35f9ac4d5ce4b262eebc21920c0646a3023e1048bad70e55fc159a2639f7f6ba",
     "municipios_mapa.json": "71450a3f2ef26871a8bc04a57c689be820136508fd9e921ea2fedca0cd5cf309",
@@ -35,6 +35,6 @@
     "rm_resumo.parquet": "78482dead93744fc6cfdacd4db9939e43a1ed2df0af32fb9e09af55172cb1ad1"
   },
   "formato_versao": 1,
-  "timestamp": "2026-09-17T16:24:16.008496",
+  "timestamp": "2026-09-17T17:28:57.275070",
   "versao_dados": "1.0.3-2000"
 }

@@ -19,6 +19,9 @@ identifiers:
   - type: doi
     value: "10.5281/zenodo.22469792"
     description: "DOI da versão v1.0.0 (2026-09-06, só o Censo 2022)."
+  - type: doi
+    value: "10.5281/zenodo.22819760"
+    description: "DOI da versão v2.0.0 (2026-09-17, cinco edições e a seção 'Ao longo dos censos'). Acesso restrito no Zenodo enquanto se confirma a modalidade de disseminação com o IBGE -- ver docs/CHECKLIST_PUBLICACAO.md."
 keywords:
   - migração interna
   - censo demográfico

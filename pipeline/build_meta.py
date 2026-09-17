@@ -32,11 +32,11 @@ def _maior_fluxo(ed) -> int:
         maior = con.execute(f"SELECT MAX(total) FROM read_parquet('{caminho.as_posix()}')").fetchone()[0]
     return int(maior)
 
-# DOI emitido pelo Zenodo ao publicar a release v1.0.0 (integração GitHub -> Zenodo).
+# DOI emitido pelo Zenodo ao publicar a release v2.0.0 (integração GitHub -> Zenodo).
 # Única fonte destas constantes para o front-end interativo; as páginas estáticas de SEO
 # têm suas próprias (pipeline/build_paginas.py), mantidas em sincronia manualmente.
 DOI_CONCEITO = "10.5281/zenodo.22469791"  # resolve sempre para a versão mais recente
-DOI_VERSAO = "10.5281/zenodo.22469792"    # esta versão (v1.0.0)
+DOI_VERSAO = "10.5281/zenodo.22819760"    # esta versão (v2.0.0)
 AUTOR_NOME = "Daniel Pessini Sobreira"
 AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
 
