@@ -28,6 +28,7 @@ import { serieCourgeau } from "../db/queries";
 import { rotuloEdicao, rotuloIntervalo, slotEdicao, type EdicaoSerie, type NivelSerie } from "../lib/serie";
 import { AZUL, cor as corDaPaleta } from "../lib/paletas";
 import { num, num2 } from "../lib/format";
+import { Termo } from "./Termo";
 
 const ROTULO_NIVEL: Record<NivelSerie, string> = {
   mun: "municípios", rgi: "regiões imediatas", rgint: "regiões intermediárias", uf: "UFs", rm: "regiões metropolitanas",
@@ -120,7 +121,9 @@ function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: rea
 
   return (
     <figure className="serie-grafico">
-      <figcaption>Plano MEI×CMI, com trajetória entre censos</figcaption>
+      <figcaption>
+        Plano <Termo chave="mei_agregado">MEI</Termo>×<Termo chave="cmi">CMI</Termo>, com trajetória entre censos
+      </figcaption>
       <div ref={containerRef} />
       <p className="muted-pequeno">
         A intensidade (CMI) cresce com o número de unidades; parte do deslocamento para a
@@ -141,7 +144,7 @@ function DispersaoFielding({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoe
   };
   return (
     <figure className="serie-grafico serie-fielding">
-      <figcaption>Dispersão de Fielding (β), por edição</figcaption>
+      <figcaption>Dispersão de Fielding (<Termo chave="beta_fielding">β</Termo>), por edição</figcaption>
       <div className="serie-fielding-paineis">
         {linhas.map((l) => (
           <div key={l.edicao} className="serie-fielding-painel">
@@ -214,7 +217,9 @@ function FiguraCourgeau({ nivelAtivo, edicoes }: { nivelAtivo: NivelSerie; edico
 
   return (
     <figure className="serie-grafico">
-      <figcaption>Figura de Courgeau — CMI × número de unidades do nível ({ROTULO_NIVEL[nivelAtivo]} em destaque)</figcaption>
+      <figcaption>
+        Figura de Courgeau — <Termo chave="cmi">CMI</Termo> × número de unidades do nível ({ROTULO_NIVEL[nivelAtivo]} em destaque)
+      </figcaption>
       <div ref={containerRef} />
       <p className="muted-pequeno">
         Quanto mais unidades tem a malha, maior a intensidade medida. A inclinação de cada

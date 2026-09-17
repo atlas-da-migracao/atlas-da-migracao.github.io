@@ -125,6 +125,28 @@
 .formulas dd { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-secondary); }
 .link-metodologia { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 
+/* ---- Termo (tooltip explicativo do glossário) ---- */
+.termo { display: inline; }
+.termo-botao {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; margin-left: 3px; padding: 0; vertical-align: middle;
+  font-size: 11px; line-height: 1; border-radius: 50%; cursor: pointer;
+  background: transparent; border: 1px solid var(--ink-muted-texto); color: var(--ink-muted-texto);
+}
+.termo-botao:hover, .termo-botao:focus-visible, .termo-botao[aria-expanded="true"] {
+  background: var(--acento-ativo); border-color: var(--acento-ativo); color: #fff;
+}
+.termo-popover {
+  box-sizing: border-box;
+  z-index: 250; width: 280px; max-width: calc(100vw - 16px); padding: 10px 12px;
+  background: var(--surface-raised); color: var(--ink); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0,0,0,.3); font-size: 13px;
+}
+.termo-popover-titulo { font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+.termo-popover-secao { margin-top: 6px; }
+.termo-popover-secao strong { display: block; font-size: 12px; margin-bottom: 2px; }
+.termo-popover-secao p { margin: 0; line-height: 1.45; color: var(--ink-secondary); }
+
 /* ---- F6: tour de boas-vindas ---- */
 .tour-camada { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.35); }
 .tour-realce {

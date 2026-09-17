@@ -10,7 +10,7 @@ const COR_HOMENS = CATEGORICO_8[0];
 const COR_MULHERES = CATEGORICO_8[4];
 
 interface Props {
-  titulo: string;
+  titulo: React.ReactNode;
   rotuloGrupo: string;
   valoresGrupo: Record<string, number>;
   rotuloReferencia?: string;
@@ -45,8 +45,11 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
   const corH = corDeCategoria(COR_HOMENS, escuro);
   const corM = corDeCategoria(COR_MULHERES, escuro);
 
+  // `titulo` pode ser um nó React (ex.: rótulo envolvido em <Termo>) -- na string de
+  // aria-label, entra só quando é texto puro; caso contrário, o rótulo do grupo já basta.
+  const tituloTexto = typeof titulo === "string" ? titulo : "";
   const rotuloAria = [
-    `${titulo}. ${rotuloGrupo}:`,
+    `${tituloTexto}. ${rotuloGrupo}:`,
     ...pontosExibidos.map((p) =>
       `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`),
     ref && rotuloReferencia ? `Referência (${rotuloReferencia}):` : "",

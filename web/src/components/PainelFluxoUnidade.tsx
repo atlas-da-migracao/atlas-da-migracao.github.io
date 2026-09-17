@@ -7,6 +7,7 @@ import { usarDuckDBPronto } from "../db/duckdb";
 import { num, rotuloPrecisao, sinal } from "../lib/format";
 import { AvisoProxy } from "./AvisoProxy";
 import type { Meta } from "../lib/types";
+import { Termo } from "./Termo";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
@@ -88,8 +89,8 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
       </div>
 
       <div className="nota-precisao">
-        Precisão: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong> ·{" "}
-        {ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações na amostra.
+        <Termo chave="precisao">Precisão</Termo>: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong> ·{" "}
+        <Termo chave="n_faixa">{ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações</Termo> na amostra.
         Nível agregado: sem erro-padrão publicado.
       </div>
 

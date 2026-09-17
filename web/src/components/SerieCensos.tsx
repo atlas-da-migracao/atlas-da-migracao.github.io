@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from "react";
 import { GLOSSARIO } from "../lib/glossario";
+import { Termo } from "./Termo";
 import {
   serieDaUnidade, serieDosPares, serieDoSistema, serieFilhosDoMunicipio, seriePerfil,
 } from "../db/queries";
@@ -114,25 +115,27 @@ interface MedidaTabela {
   unidade: string;
   campo: keyof LinhaUnidadeSerie;
   formatar: (v: number) => string;
+  /** Chave em `GLOSSARIO`, quando há um termo correspondente. Nunca invente uma aproximada. */
+  glossario?: string;
 }
 
 const MEDIDAS_BLOCO1: MedidaTabela[] = [
-  { chave: "tlm", rotulo: "Taxa líquida de migração", unidade: "‰", campo: "tlm", formatar: (v) => `${sinal(v)}‰` },
-  { chave: "iem", rotulo: "Índice de eficácia migratória", unidade: "", campo: "iem", formatar: (v) => (v > 0 ? "+" : "") + v.toFixed(2) },
+  { chave: "tlm", rotulo: "Taxa líquida de migração", unidade: "‰", campo: "tlm", formatar: (v) => `${sinal(v)}‰`, glossario: "taxa_liquida" },
+  { chave: "iem", rotulo: "Índice de eficácia migratória", unidade: "", campo: "iem", formatar: (v) => (v > 0 ? "+" : "") + v.toFixed(2), glossario: "eficacia_iem" },
   { chave: "tbi", rotulo: "Taxa bruta de imigração", unidade: "‰", campo: "tbi", formatar: num1 },
   { chave: "tbe", rotulo: "Taxa bruta de emigração", unidade: "‰", campo: "tbe", formatar: num1 },
-  { chave: "imig", rotulo: "Imigrantes", unidade: "", campo: "imig", formatar: num },
-  { chave: "emig", rotulo: "Emigrantes", unidade: "", campo: "emig", formatar: num },
-  { chave: "saldo", rotulo: "Saldo", unidade: "", campo: "saldo", formatar: sinal },
-  { chave: "turnover", rotulo: "Rotatividade (entr.+saíd.)", unidade: "", campo: "turnover", formatar: num },
+  { chave: "imig", rotulo: "Imigrantes", unidade: "", campo: "imig", formatar: num, glossario: "imigrantes" },
+  { chave: "emig", rotulo: "Emigrantes", unidade: "", campo: "emig", formatar: num, glossario: "emigrantes" },
+  { chave: "saldo", rotulo: "Saldo", unidade: "", campo: "saldo", formatar: sinal, glossario: "saldo" },
+  { chave: "turnover", rotulo: "Rotatividade (entr.+saíd.)", unidade: "", campo: "turnover", formatar: num, glossario: "rotatividade" },
   // `distancia_media`/`distancia_mediana` são gravadas em METROS (distância euclidiana em Albers
   // -- ver pipeline/medidas.py::distancia_media_ponderada); converte para km só na exibição.
-  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000) },
-  { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%` },
+  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000), glossario: "distancia_media" },
+  { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%`, glossario: "pct_interestadual" },
   // Correção: `gini_linha` mede a concentração dos DESTINOS de quem sai da unidade (agrupa por
   // origem = a própria unidade, Gini sobre os destinos) -- o rótulo antigo ("origens") estava
   // trocado com `gini_coluna`. Ver pipeline/medidas.py::gini_linha e comparabilidade_regras.py.
-  { chave: "gini_linha", rotulo: "Concentração destinos (Gini)", unidade: "", campo: "gini_linha", formatar: num2 },
+  { chave: "gini_linha", rotulo: "Concentração destinos (Gini)", unidade: "", campo: "gini_linha", formatar: num2, glossario: "gini" },
 ];
 
 function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
@@ -162,7 +165,7 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
               });
               return (
                 <tr key={m.chave}>
-                  <td>{m.rotulo}</td>
+                  <td>{m.glossario ? <Termo chave={m.glossario}>{m.rotulo}</Termo> : m.rotulo}</td>
                   <LinhaSpark valores={valores} />
                   {edicoes.map((e, i) => (
                     <Celula key={e} valor={valores[i]} estado={estadoDoPonto(porEdicao.get(e))}
@@ -211,16 +214,20 @@ function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly
           })
           .map((l) => `${rotuloEdicao(l.edicao as EdicaoSerie)} ${num2(l.duncan_d_ant as number)}`);
         return duncans.length > 0 ? (
-          <p className="muted-pequeno" title="Índice de Duncan D: fração dos fluxos que teria de mudar de par origem-destino para a estrutura de um censo ficar igual à do anterior.">
-            Quanto a estrutura dos fluxos mudou entre censos (Duncan D, comparado à edição anterior): {duncans.join(" · ")}.
+          <p className="muted-pequeno">
+            Quanto a estrutura dos fluxos mudou entre censos (<Termo chave="duncan_d">Duncan D</Termo>, comparado à edição anterior): {duncans.join(" · ")}.
           </p>
         ) : null;
       })()}
       <div className="tabela-scroll">
         <table className="tabela-serie">
           <thead>
-            <tr><th>Edição</th><th>n unidades</th><th>CMI (%)</th><th>SMI (%)</th>
-                <th>MEI (%)</th><th>ANMR (%)</th><th>β Fielding</th><th>Duncan D (ant.)</th></tr>
+            <tr><th>Edição</th><th><Termo chave="n_unidades">n unidades</Termo></th>
+                <th><Termo chave="cmi">CMI</Termo> (%)</th><th><Termo chave="smi">SMI</Termo> (%)</th>
+                <th><Termo chave="mei_agregado">MEI</Termo> (%)</th>
+                <th><Termo chave="anmr">ANMR</Termo> (%)</th>
+                <th><Termo chave="beta_fielding">β Fielding</Termo></th>
+                <th><Termo chave="duncan_d">Duncan D</Termo> (ant.)</th></tr>
           </thead>
           <tbody>
             {linhasFiltradas.map((l) => {
@@ -350,7 +357,7 @@ function BlocoFluxos({ nivel, codigo, edicoes }: { nivel: NivelSerie; codigo: st
       <TabelaParceiros titulo="Principais origens" porParceiro={porOrigem} edicoes={edicoes} />
       <TabelaParceiros titulo="Principais destinos" porParceiro={porDestino} edicoes={edicoes} />
       <p className="muted-pequeno">
-        Posto (grande) e volume (pequeno) por edição, ordenado pela edição mais recente com número.
+        <Termo chave="posto">Posto</Termo> (grande) e volume (pequeno) por edição, ordenado pela edição mais recente com número.
       </p>
     </section>
   );
@@ -386,7 +393,7 @@ function BlocoPerfil({ nivel, codigo, escuro, edicoes }: {
     <section className="secao serie-bloco" id="bloco-4" aria-labelledby="bloco-4-titulo">
       <h3 id="bloco-4-titulo">Bloco 4 · Quem migra (chegaram)</h3>
       <BarraPerfil
-        titulo="Status migratório, por edição"
+        titulo={<><Termo chave="status_migratorio">Status migratório</Termo>, por edição</>}
         categorias={DIMENSOES.status.categorias}
         series={series}
         escuro={escuro}

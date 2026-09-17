@@ -13,6 +13,7 @@ import type { FluxoUF, UnidadeUF } from "../lib/acordes";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import { ResumoSerie } from "./ResumoSerie";
+import { Termo } from "./Termo";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
@@ -151,19 +152,19 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
 
       <div className="kpis">
         <div className="kpi">
-          <div className="kpi-rotulo">Imigrantes</div>
+          <div className="kpi-rotulo"><Termo chave="imigrantes">Imigrantes</Termo></div>
           <div className="kpi-valor">{num(unidade.imig)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo">Emigrantes</div>
+          <div className="kpi-rotulo"><Termo chave="emigrantes">Emigrantes</Termo></div>
           <div className="kpi-valor">{num(unidade.emig)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo">Saldo migratório</div>
+          <div className="kpi-rotulo"><Termo chave="saldo">Saldo migratório</Termo></div>
           <div className="kpi-valor">{sinal(unidade.saldo)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo">Taxa líquida (por mil)</div>
+          <div className="kpi-rotulo"><Termo chave="taxa_liquida">Taxa líquida</Termo> (por mil)</div>
           <div className="kpi-valor">{unidade.tlm != null ? sinal(unidade.tlm) : "—"}</div>
         </div>
       </div>
@@ -178,7 +179,7 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
 
       {unidade.iem != null && (
         <div className="nota-precisao">
-          Índice de eficácia migratória: <strong>{num2(unidade.iem)}</strong>{" "}
+          <Termo chave="eficacia_iem">Índice de eficácia migratória</Termo>: <strong>{num2(unidade.iem)}</strong>{" "}
           <span className="muted">
             ({unidade.iem > 0.1 ? "atração consolidada" : unidade.iem < -0.1 ? "evasão consolidada" : "trocas equilibradas"})
           </span>

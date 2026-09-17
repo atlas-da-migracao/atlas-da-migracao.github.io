@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import type { ResumoRM } from "../db/queries";
 import { edicao, type Censo } from "../lib/edicoes";
 import { num, num1, sinal } from "../lib/format";
+import { Termo } from "./Termo";
 
 interface Props {
   rms: ResumoRM[];
@@ -17,13 +18,13 @@ interface Props {
 
 type Coluna = "pop" | "mig_intra" | "saldo_externo" | "pct_pendular" | "tempo_mediano" | "pct_coletivo";
 
-const TODAS_COLUNAS: { chave: Coluna; rotulo: string }[] = [
+const TODAS_COLUNAS: { chave: Coluna; rotulo: string; glossario?: string }[] = [
   { chave: "pop", rotulo: "População" },
-  { chave: "mig_intra", rotulo: "Migração intra-RM" },
-  { chave: "saldo_externo", rotulo: "Saldo externo" },
-  { chave: "pct_pendular", rotulo: "% pendular" },
-  { chave: "tempo_mediano", rotulo: "Tempo mediano" },
-  { chave: "pct_coletivo", rotulo: "% coletivo" },
+  { chave: "mig_intra", rotulo: "Migração intra-RM", glossario: "rm_migracao_intra" },
+  { chave: "saldo_externo", rotulo: "Saldo externo", glossario: "rm_saldo_externo" },
+  { chave: "pct_pendular", rotulo: "% pendular", glossario: "pendular_taxa_saida" },
+  { chave: "tempo_mediano", rotulo: "Tempo mediano", glossario: "pendular_tempo_mediano" },
+  { chave: "pct_coletivo", rotulo: "% coletivo", glossario: "pendular_pct_coletivo" },
 ];
 
 export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
@@ -59,6 +60,9 @@ export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
                   <button className="th-ordenar" onClick={() => alternarOrdem(c.chave)}>
                     {c.rotulo}{ordem.col === c.chave ? (ordem.dir === 1 ? " ↑" : " ↓") : ""}
                   </button>
+                  {/* Termo/ⓘ como irmão do botão de ordenar, nunca dentro dele -- <button>
+                      dentro de <button> não é HTML válido. */}
+                  {c.glossario && <Termo chave={c.glossario} />}
                 </th>
               ))}
             </tr>

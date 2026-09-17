@@ -19,6 +19,7 @@ import { AvisoProxy } from "./AvisoProxy";
 import { num, num1, sinal } from "../lib/format";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
+import { Termo } from "./Termo";
 
 interface Props {
   cdRm: string;
@@ -35,7 +36,7 @@ interface Props {
   aoAbrirSerie?: () => void;
 }
 
-function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
+function Kpi({ rotulo, valor, detalhe }: { rotulo: React.ReactNode; valor: string; detalhe?: React.ReactNode }) {
   return (
     <div className="kpi">
       <div className="kpi-rotulo">{rotulo}</div>
@@ -219,7 +220,9 @@ export function PainelRM({
     <aside className="painel painel-rm">
       <header className="painel-topo">
         <div>
-          <div className="muted-pequeno">{resumo.tipo === "RIDE" ? "RIDE" : "Região metropolitana"}</div>
+          <div className="muted-pequeno">
+            {resumo.tipo === "RIDE" ? <Termo chave="ride">RIDE</Termo> : "Região metropolitana"}
+          </div>
           <h2>{resumo.nm_rm}</h2>
           <div className="muted">
             Núcleo: {resumo.nm_nucleo}{resumo.nucleo_uf && `/${resumo.nucleo_uf}`} ·{" "}
@@ -255,10 +258,10 @@ export function PainelRM({
           <AvisoProxy meta={meta} />
 
           <div className="kpis">
-            <Kpi rotulo="Migrantes intra-RM" valor={num(resumo.mig_intra)} />
-            <Kpi rotulo="Saldo com o resto do país" valor={sinal(resumo.saldo_externo)}
+            <Kpi rotulo={<Termo chave="rm_migracao_intra">Migrantes intra-RM</Termo>} valor={num(resumo.mig_intra)} />
+            <Kpi rotulo={<Termo chave="rm_saldo_externo">Saldo com o resto do país</Termo>} valor={sinal(resumo.saldo_externo)}
                  detalhe={`entradas ${num(resumo.entradas_externas)} · saídas ${num(resumo.saidas_externas)}`} />
-            <Kpi rotulo="Núcleo → periferia" valor={`${num1((resumo.nucleo_periferia / totalIntra) * 100)}%`}
+            <Kpi rotulo={<Termo chave="rm_nucleo_periferia">Núcleo → periferia</Termo>} valor={`${num1((resumo.nucleo_periferia / totalIntra) * 100)}%`}
                  detalhe={num(resumo.nucleo_periferia)} />
           </div>
 
@@ -266,7 +269,7 @@ export function PainelRM({
             <ResumoSerie nivel="rm" codigo={cdRm} nome={resumo.nm_rm} aoAbrirSerieCompleta={aoAbrirSerie} />
           )}
 
-          <h3 className="secao-titulo">Matriz núcleo × periferia</h3>
+          <h3 className="secao-titulo"><Termo chave="rm_nucleo_periferia">Matriz núcleo × periferia</Termo></h3>
           <table className="matriz-np">
             <thead>
               <tr><th /><th>Destino núcleo</th><th>Destino periferia</th></tr>
@@ -383,26 +386,26 @@ export function PainelRM({
         <>
           <div className="kpis">
             <Kpi rotulo="Ocupados" valor={num(resumo.ocupados)} />
-            <Kpi rotulo="Pendulares" valor={num(resumo.pendulares)}
+            <Kpi rotulo={<Termo chave="pendular_conceito">Pendulares</Termo>} valor={num(resumo.pendulares)}
                  detalhe={resumo.pct_pendular != null ? `${num1(resumo.pct_pendular)}% dos ocupados` : undefined} />
             {recursos.tempoMinutos && (
-              <Kpi rotulo="Tempo mediano" valor={resumo.tempo_mediano != null ? `${num(resumo.tempo_mediano)} min` : "—"} />
+              <Kpi rotulo={<Termo chave="pendular_tempo_mediano">Tempo mediano</Termo>} valor={resumo.tempo_mediano != null ? `${num(resumo.tempo_mediano)} min` : "—"} />
             )}
             {ed.rotuloRetorno != null && (
-              <Kpi rotulo="Retorno diário" valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"}
+              <Kpi rotulo={<Termo chave="pendular_retorno_diario">Retorno diário</Termo>} valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"}
                    detalhe={ed.rotuloRetorno} />
             )}
             {recursos.modo && (
-              <Kpi rotulo="Transporte coletivo" valor={resumo.pct_coletivo != null ? `${num1(resumo.pct_coletivo)}%` : "—"} />
+              <Kpi rotulo={<Termo chave="pendular_pct_coletivo">Transporte coletivo</Termo>} valor={resumo.pct_coletivo != null ? `${num1(resumo.pct_coletivo)}%` : "—"} />
             )}
           </div>
 
-          <h3 className="secao-titulo">Maior taxa de saída pendular</h3>
+          <h3 className="secao-titulo"><Termo chave="pendular_taxa_saida">Maior taxa de saída pendular</Termo></h3>
           <RankingDivergente
             itens={rankingTaxaSaida.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.taxa_saida_pendular ?? 0 }))}
             rotuloValor={(v) => `${num1(v)}%`} />
 
-          <h3 className="secao-titulo">Maior índice de atração</h3>
+          <h3 className="secao-titulo"><Termo chave="pendular_indice_atracao">Maior índice de atração</Termo></h3>
           <RankingDivergente
             itens={rankingAtracao.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.indice_atracao ?? 0 }))}
             rotuloValor={(v) => num1(v)} />

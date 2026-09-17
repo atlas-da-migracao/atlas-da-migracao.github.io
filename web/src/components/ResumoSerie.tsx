@@ -17,6 +17,7 @@ import {
   type EdicaoSerie, type EntradaFrase, type NivelSerie, type PontoFrase,
 } from "../lib/serie";
 import { num, sinal } from "../lib/format";
+import { Termo } from "./Termo";
 
 interface LinhaUnidadeSerie {
   edicao: EdicaoSerie;
@@ -158,20 +159,20 @@ export function ResumoSerie({
       {ultima && (
         <div className="serie-numeros">
           <div className="serie-numero" role="group" aria-label={`Saldo, ${sinal(ultima.saldo)}`}>
-            <div className="serie-numero-rotulo">Saldo ({ultima.edicao})</div>
+            <div className="serie-numero-rotulo"><Termo chave="saldo">Saldo</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">{sinal(ultima.saldo)}</div>
             <Sparkline valores={pontos.map((p) => p.saldo)} />
           </div>
           <div className="serie-numero" role="group"
                aria-label={`Eficácia, ${ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}`}>
-            <div className="serie-numero-rotulo">Eficácia ({ultima.edicao})</div>
+            <div className="serie-numero-rotulo"><Termo chave="eficacia_iem">Eficácia</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">
               {ultima.iem != null ? (ultima.iem > 0 ? "+" : "") + ultima.iem.toFixed(2) : "—"}
             </div>
             <div className="muted-pequeno">{ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}</div>
           </div>
           <div className="serie-numero" role="group" aria-label="Movimento total (entradas + saídas)">
-            <div className="serie-numero-rotulo">Movimento total ({ultima.edicao})</div>
+            <div className="serie-numero-rotulo"><Termo chave="rotatividade">Movimento total</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">
               {ultima.imig != null && ultima.emig != null ? num(ultima.imig + ultima.emig) : "—"}
             </div>

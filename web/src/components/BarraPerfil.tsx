@@ -16,7 +16,7 @@ export interface SeriePerfil {
 }
 
 interface Props {
-  titulo: string;
+  titulo: React.ReactNode;
   nota?: string | null;
   categorias: readonly Categoria[];
   series: SeriePerfil[];

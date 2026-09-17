@@ -13,6 +13,7 @@ import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import { AvisoProxy } from "./AvisoProxy";
 import type { Meta } from "../lib/types";
+import { Termo } from "./Termo";
 
 interface Props {
   origem: string;
@@ -135,7 +136,7 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
         <div className="kpi">
           <div className="kpi-rotulo">Migrantes no fluxo</div>
           <div className="kpi-valor">{num(ida.total)}</div>
-          <div className="kpi-detalhe">IC 95%: {ic95(ida.total, ida.se)}</div>
+          <div className="kpi-detalhe"><Termo chave="ic95">IC 95%</Termo>: {ic95(ida.total, ida.se)}</div>
         </div>
         <div className="kpi">
           <div className="kpi-rotulo">Fluxo inverso</div>
@@ -158,9 +159,9 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
       </div>
 
       <div className="nota-precisao">
-        Precisão: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong>
-        {ida.cv != null && <> (coeficiente de variação {num1(ida.cv)}%)</>} ·{" "}
-        {ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações na amostra
+        <Termo chave="precisao">Precisão</Termo>: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong>
+        {ida.cv != null && <> (<Termo chave="cv">coeficiente de variação</Termo> {num1(ida.cv)}%)</>} ·{" "}
+        <Termo chave="n_faixa">{ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações</Termo> na amostra
       </div>
 
       {!ida.tem_detalhe ? (
@@ -192,13 +193,19 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
                 valores: daReferencia(refs, ida.destino, "residente", dim),
               });
             }
+            const glossarioDim: Record<string, string> = {
+              status: "status_migratorio", edu: "escolaridade", renda: "renda_domiciliar",
+            };
+            const chaveGlossario = glossarioDim[dim];
             return (
-              <BarraPerfil key={dim} titulo={DIMENSOES[dim].titulo} nota={DIMENSOES[dim].nota}
+              <BarraPerfil key={dim}
+                           titulo={chaveGlossario ? <Termo chave={chaveGlossario}>{DIMENSOES[dim].titulo}</Termo> : DIMENSOES[dim].titulo}
+                           nota={DIMENSOES[dim].nota}
                            categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
             );
           })}
           <PiramideIdadeSexo
-            titulo="Idade e sexo" rotuloGrupo="Neste fluxo"
+            titulo={<Termo chave="idade_sexo">Idade e sexo</Termo>} rotuloGrupo="Neste fluxo"
             valoresGrupo={colunasLargasDoFluxo(ida, "idade_sexo")}
             rotuloReferencia={`Imigrantes de ${ida.nm_destino}`}
             valoresReferencia={daReferencia(refs, ida.destino, "imig", "idade_sexo")}

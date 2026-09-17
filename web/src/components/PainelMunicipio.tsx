@@ -12,6 +12,7 @@ import { AvisoProxy } from "./AvisoProxy";
 import { AvisoUnidade, unidadeAgregada } from "./AvisoUnidade";
 import { classificarIem, NOME_TIPO_IEM, seIem } from "../lib/serie";
 import { ResumoSerie } from "./ResumoSerie";
+import { Termo } from "./Termo";
 
 interface Props {
   municipio: Municipio | null;
@@ -79,14 +80,20 @@ function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
         ];
         // status migratório não se aplica a quem não migrou
         if (dim !== "status") series.push({ rotulo: `Residentes de ${nome}`, valores: d.residente ?? {} });
+        const glossarioDim: Record<string, string> = {
+          status: "status_migratorio", edu: "escolaridade", renda: "renda_domiciliar",
+        };
+        const chaveGlossario = glossarioDim[dim];
         return (
-          <BarraPerfil key={dim} titulo={DIMENSOES[dim].titulo} nota={DIMENSOES[dim].nota}
+          <BarraPerfil key={dim}
+                       titulo={chaveGlossario ? <Termo chave={chaveGlossario}>{DIMENSOES[dim].titulo}</Termo> : DIMENSOES[dim].titulo}
+                       nota={DIMENSOES[dim].nota}
                        categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
         );
       })}
       {dados.idade_sexo && (
         <PiramideIdadeSexo
-          titulo="Idade e sexo" rotuloGrupo={`Chegaram a ${nome}`}
+          titulo={<Termo chave="idade_sexo">Idade e sexo</Termo>} rotuloGrupo={`Chegaram a ${nome}`}
           valoresGrupo={dados.idade_sexo.imig ?? {}}
           rotuloReferencia={`Residentes de ${nome}`}
           valoresReferencia={dados.idade_sexo.residente ?? {}}
@@ -97,7 +104,7 @@ function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
   );
 }
 
-function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
+function Kpi({ rotulo, valor, detalhe }: { rotulo: React.ReactNode; valor: string; detalhe?: React.ReactNode }) {
   return (
     <div className="kpi">
       <div className="kpi-rotulo">{rotulo}</div>
@@ -186,14 +193,14 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
         <p className="muted carregando-recorte">Aplicando o recorte…</p>
       ) : (
       <div className="kpis">
-        <Kpi rotulo="Saldo migratório" valor={sinal(m.saldo)}
-             detalhe={`IC 95%: ${ic95(m.saldo, m.se_saldo)}`} />
-        <Kpi rotulo="Taxa líquida" valor={`${sinal(m.tlm)} ‰`}
+        <Kpi rotulo={<Termo chave="saldo">Saldo migratório</Termo>} valor={sinal(m.saldo)}
+             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.saldo, m.se_saldo)}</>} />
+        <Kpi rotulo={<Termo chave="taxa_liquida">Taxa líquida</Termo>} valor={`${sinal(m.tlm)} ‰`}
              detalhe="por mil habitantes de 5+ anos" />
-        <Kpi rotulo="Imigrantes" valor={num(m.imig)}
-             detalhe={`IC 95%: ${ic95(m.imig, m.se_imig)}`} />
-        <Kpi rotulo="Emigrantes" valor={num(m.emig)}
-             detalhe={`IC 95%: ${ic95(m.emig, m.se_emig)}`} />
+        <Kpi rotulo={<Termo chave="imigrantes">Imigrantes</Termo>} valor={num(m.imig)}
+             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.imig, m.se_imig)}</>} />
+        <Kpi rotulo={<Termo chave="emigrantes">Emigrantes</Termo>} valor={num(m.emig)}
+             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.emig, m.se_emig)}</>} />
       </div>)}
 
       {recorte && !recorteCarregando && (
@@ -204,8 +211,8 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
       )}
 
       {!recorte && <div className="nota-precisao">
-        Precisão da estimativa de imigração: <strong>{rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig}</strong>
-        {m.cv_imig != null && <> (coeficiente de variação {num1(m.cv_imig)}%)</>}
+        <Termo chave="precisao">Precisão</Termo> da estimativa de imigração: <strong>{rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig}</strong>
+        {m.cv_imig != null && <> (<Termo chave="cv">coeficiente de variação</Termo> {num1(m.cv_imig)}%)</>}
         {m.imig_ni > 0 && <> · {num(m.imig_ni)} imigrantes com origem não informada</>}
         {m.imig_int > 0 && <> · {num(m.imig_int)} vindos do exterior</>}
       </div>}
@@ -220,7 +227,7 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
         const tipo = classificarIem(m.iem, se);
         return (
           <div className="nota-precisao">
-            Índice de eficácia migratória: <strong>{num2(m.iem)}</strong>{" "}
+            <Termo chave="eficacia_iem">Índice de eficácia migratória</Termo>: <strong>{num2(m.iem)}</strong>{" "}
             <span className="muted">({tipo ? NOME_TIPO_IEM[tipo] : "—"})</span>
           </div>
         );

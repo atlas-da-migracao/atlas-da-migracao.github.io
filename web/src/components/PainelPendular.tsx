@@ -11,6 +11,7 @@ import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import type { Meta } from "../lib/types";
+import { Termo } from "./Termo";
 
 interface Props {
   origem: string;
@@ -116,7 +117,7 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">
-            Deslocamento pendular de {tipo === "trab" ? "trabalho" : "estudo"}
+            <Termo chave="pendular_conceito">Deslocamento pendular</Termo> de {tipo === "trab" ? "trabalho" : "estudo"}
           </div>
           <h2 className="titulo-fluxo">
             {ida.nm_origem}<span className="uf">/{ida.uf_origem}</span>
@@ -131,7 +132,7 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }
         <div className="kpi">
           <div className="kpi-rotulo">Pessoas neste fluxo</div>
           <div className="kpi-valor">{num(ida.total)}</div>
-          <div className="kpi-detalhe">IC 95%: {ic95(ida.total, ida.se)}</div>
+          <div className="kpi-detalhe"><Termo chave="ic95">IC 95%</Termo>: {ic95(ida.total, ida.se)}</div>
         </div>
         <div className="kpi">
           <div className="kpi-rotulo">Fluxo inverso</div>
@@ -146,20 +147,20 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }
           <>
             {recursos.tempoMinutos && (
               <div className="kpi">
-                <div className="kpi-rotulo">Tempo mediano</div>
+                <div className="kpi-rotulo"><Termo chave="pendular_tempo_mediano">Tempo mediano</Termo></div>
                 <div className="kpi-valor">{ida.tempo_mediano != null ? `${num(ida.tempo_mediano)} min` : "—"}</div>
               </div>
             )}
             {ed.rotuloRetorno != null && (
               <div className="kpi">
-                <div className="kpi-rotulo">Retorno diário</div>
+                <div className="kpi-rotulo"><Termo chave="pendular_retorno_diario">Retorno diário</Termo></div>
                 <div className="kpi-valor">{ida.pct_diario != null ? `${num1(ida.pct_diario)}%` : "—"}</div>
                 <div className="kpi-detalhe">{ed.rotuloRetorno}</div>
               </div>
             )}
             {recursos.modo && (
               <div className="kpi">
-                <div className="kpi-rotulo">Transporte coletivo</div>
+                <div className="kpi-rotulo"><Termo chave="pendular_pct_coletivo">Transporte coletivo</Termo></div>
                 <div className="kpi-valor">{ida.pct_coletivo != null ? `${num1(ida.pct_coletivo)}%` : "—"}</div>
               </div>
             )}
@@ -168,9 +169,9 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }
       </div>
 
       <div className="nota-precisao">
-        Precisão: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong>
-        {ida.cv != null && <> (coeficiente de variação {num1(ida.cv)}%)</>} ·{" "}
-        {ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações na amostra
+        <Termo chave="precisao">Precisão</Termo>: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong>
+        {ida.cv != null && <> (<Termo chave="cv">coeficiente de variação</Termo> {num1(ida.cv)}%)</>} ·{" "}
+        <Termo chave="n_faixa">{ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações</Termo> na amostra
       </div>
 
       {!ida.tem_detalhe ? (
