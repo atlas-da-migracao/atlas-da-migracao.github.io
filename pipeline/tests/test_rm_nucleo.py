@@ -29,7 +29,10 @@ def _req(*paths: pathlib.Path) -> None:
 
 def test_build_rm_nucleo_check_aprova():
     """subprocess.run([...build_rm_nucleo.py --check]) retorna 0."""
-    _req(SCRIPT, ROOT / "pipeline" / "rm_nucleo.csv")
+    _req(
+        SCRIPT, ROOT / "pipeline" / "rm_nucleo.csv",
+        ROOT / "data/interim/municipios_ref.parquet", ROOT / "data/interim/municipios_bruto.parquet",
+    )
     result = subprocess.run(
         [sys.executable, str(SCRIPT), "--check"],
         cwd=ROOT,
