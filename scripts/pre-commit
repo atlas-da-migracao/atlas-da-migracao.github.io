@@ -4,7 +4,11 @@
 # Instalado a partir de scripts/pre-commit -- ver README.md ("Como rodar") para reinstalar
 # depois de um clone novo (hooks não viajam com o git clone).
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
-blocked=$(printf '%s\n' "$staged" | grep -E '^(data/raw/|data/raw(19|20)[0-9][0-9]/|data/interim/|data/geo/raw/)|\.(csv|CSV)$|(^|/)\.env(\.|$)|\.(pem|key|p12|pfx)$|credentials.*\.json$' \
+# ^data/raw sem barra final: um symlink de edição entra no índice como "data/raw2010", sem
+# barra, e escapava do padrão antigo que exigia "data/raw2010/". O mesmo vale para as
+# variantes de nome criadas por Finder/iCloud ("data/raw2010 2"). Bloquear o prefixo inteiro
+# é o lado seguro do erro -- nada legítimo do repositório começa com "data/raw".
+blocked=$(printf '%s\n' "$staged" | grep -E '^(data/raw|data/interim/|data/geo/raw/)|\.(csv|CSV)$|(^|/)\.env(\.|$)|\.(pem|key|p12|pfx)$|credentials.*\.json$' \
           | grep -vE '^pipeline/(rm_nucleo|genealogia_municipios)\.csv$' || true)
 # docs/termos e docs/ibge (termos assinados, documentação técnica e correspondência com o IBGE,
 # que contêm dados pessoais do titular): tudo bloqueado, exceto o README de cada pasta

@@ -2,12 +2,12 @@
 data/raw
 data/raw/**
 # symlink por edição (ex.: data/raw2010, data/raw2000, data/raw1991 -> microdados de cada
-# censo); mesma regra do data/raw. Gitignore não suporta alternância {19,20}, então duas
-# linhas: uma para décadas 19xx (Censo 1991 em diante) e outra para 20xx.
-data/raw19[0-9][0-9]
-data/raw19[0-9][0-9]/**
-data/raw20[0-9][0-9]
-data/raw20[0-9][0-9]/**
+# censo); mesma regra do data/raw. O prefixo é genérico de propósito: o padrão antigo por
+# década (data/raw19[0-9][0-9]) deixava passar variantes de nome que o Finder e o iCloud
+# criam sozinhos ao resolver conflito, como "data/raw2010 2" — um symlink que expõe o
+# caminho dos microdados controlados. Nada legítimo do repositório começa com "data/raw".
+data/raw*
+data/raw*/**
 data/interim/
 data/geo/raw/
 *.csv
