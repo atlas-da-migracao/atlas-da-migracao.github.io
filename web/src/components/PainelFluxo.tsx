@@ -12,6 +12,7 @@ import { ic95, num, num1, rotuloPrecisao, sinal } from "../lib/format";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import { AvisoProxy } from "./AvisoProxy";
+import { unidadeAgregada } from "./AvisoUnidade";
 import type { Meta } from "../lib/types";
 import { Termo } from "./Termo";
 
@@ -109,6 +110,10 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
   }
 
   const saldoPar = ida.total - (volta?.total ?? 0);
+  // "os dois municípios" só vale quando as duas pontas SÃO municípios: uma unidade agregada da
+  // edição (meta.unidades_agregadas, hoje 'NORTEGO' em 1980) cobre vários e não é um município
+  const algumaAgregada = unidadeAgregada(meta, ida.origem) != null || unidadeAgregada(meta, ida.destino) != null;
+  const parDeTerritorios = algumaAgregada ? "as duas unidades" : "os dois municípios";
 
   return (
     <aside className="painel" aria-label="Painel de detalhes">
@@ -153,7 +158,7 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
               ? `${ida.nm_destino} ganha ${num(Math.abs(saldoPar))} pessoas na troca com ${ida.nm_origem}`
               : saldoPar < 0
               ? `${ida.nm_origem} ganha ${num(Math.abs(saldoPar))} pessoas na troca com ${ida.nm_destino}`
-              : "troca equilibrada entre os dois municípios"}
+              : `troca equilibrada entre ${parDeTerritorios}`}
           </div>
         </div>
       </div>

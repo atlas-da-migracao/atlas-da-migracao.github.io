@@ -191,32 +191,49 @@ async function iniciarSerie(): Promise<duckdb.AsyncDuckDBConnection> {
     await con.query(`CREATE OR REPLACE VIEW ${t} AS SELECT * FROM read_parquet('${t}.parquet')`);
   }
 
-  // Nomes das unidades para os cinco níveis, resolvidos a partir de `municipios_ref` de 2022
-  // (a base territorial da série -- todo `codigo` em unidades_serie/pares_serie é um código de
-  // 2022, ver plano F12 "Base territorial"). Registrado só aqui, na conexão `serie` -- as
-  // conexões por edição (db/duckdb.ts::TABELAS_BASE) já resolvem nome por join direto com o
-  // `municipios_ref` da própria edição, que não serve à série (ela cruza as cinco edições).
-  const baseEdicao2022 = new URL("data/", document.baseURI).href;
-  await db.registerFileURL(
-    "municipios_ref_2022.parquet", `${baseEdicao2022}municipios_ref.parquet`,
-    duckdb.DuckDBDataProtocol.HTTP, false,
-  );
+  // Nomes das unidades para os cinco níveis. A base territorial da série é a de 2022 (todo
+  // `codigo` em unidades_serie/pares_serie é, em princípio, um código de 2022 -- ver plano F12
+  // "Base territorial"), então os nomes vêm de `municipios_ref` de 2022 COM PRIORIDADE. Mas uma
+  // edição antiga pode publicar uma unidade que não existe em 2022 (hoje 'NORTEGO', em 1980), e
+  // `pares_serie`/`unidades_serie` a referenciam: sem nome, o Bloco 3 mostraria o código cru.
+  // Por isso os `municipios_ref` das outras quatro edições entram também, e cada (nível, código)
+  // fica com o nome da edição mais recente que o publica (`arg_min(..., prio)`: 2022 vence 2010,
+  // que vence 2000 etc.; `em_2022` marca os que pertencem à base territorial 2022 -- a busca
+  // do modo "Ao longo dos censos" só lista esses). Tabela materializada uma única vez -- as cinco `municipios_ref` somam
+  // ~0,6 MB, e as junções de nome se repetem a cada consulta do Bloco 3 e da busca.
+  // Só as colunas de nome/UF são lidas (o parquet é colunar).
+  const EDICOES_NOMES = ["2022", "2010", "2000", "1991", "1980"] as const;
+  for (const e of EDICOES_NOMES) {
+    await db.registerFileURL(
+      `municipios_ref_${e}.parquet`,
+      new URL(`${basePath(e)}municipios_ref.parquet`, document.baseURI).href,
+      duckdb.DuckDBDataProtocol.HTTP, false,
+    );
+  }
+  const refs = EDICOES_NOMES.map((e, prio) => `
+    SELECT ${prio} AS prio, cd_mun, nm_mun, uf, uf_nome, uf_sigla, cd_rgi, nm_rgi, cd_rgint, nm_rgint,
+           cd_rm, nm_rm
+    FROM read_parquet('municipios_ref_${e}.parquet')`).join("\nUNION ALL");
   // `uf_sigla` (F13.1): preenchida em mun/rgi/rgint/uf -- RGI e RGInt não cruzam UF, por isso
-  // `ANY_VALUE` sobre o `GROUP BY` código/nome basta; UF já É a sigla. RM fica NULL: uma
-  // RIDE pode cruzar UF, então não há uma sigla única para atribuir à unidade.
+  // basta um valor por código; UF já É a sigla. RM fica NULL: uma RIDE pode cruzar UF, então
+  // não há uma sigla única para atribuir à unidade.
   await con.query(`
-    CREATE OR REPLACE VIEW unidades_nomes AS
-    SELECT 'mun' AS nivel, cd_mun AS codigo, nm_mun AS nome, uf_sigla FROM read_parquet('municipios_ref_2022.parquet')
-    UNION ALL
-    SELECT 'rgi', cd_rgi, nm_rgi, ANY_VALUE(uf_sigla) FROM read_parquet('municipios_ref_2022.parquet')
-    WHERE cd_rgi IS NOT NULL GROUP BY cd_rgi, nm_rgi
-    UNION ALL
-    SELECT 'rgint', cd_rgint, nm_rgint, ANY_VALUE(uf_sigla) FROM read_parquet('municipios_ref_2022.parquet')
-    WHERE cd_rgint IS NOT NULL GROUP BY cd_rgint, nm_rgint
-    UNION ALL
-    SELECT DISTINCT 'uf', uf, uf_nome, uf_sigla FROM read_parquet('municipios_ref_2022.parquet') WHERE uf IS NOT NULL
-    UNION ALL
-    SELECT DISTINCT 'rm', cd_rm, nm_rm, NULL FROM read_parquet('municipios_ref_2022.parquet') WHERE cd_rm IS NOT NULL
+    CREATE OR REPLACE TABLE unidades_nomes AS
+    WITH refs AS (${refs}
+    ), todos AS (
+      SELECT 'mun' AS nivel, cd_mun AS codigo, nm_mun AS nome, uf_sigla, prio FROM refs
+      UNION ALL
+      SELECT 'rgi', cd_rgi, nm_rgi, uf_sigla, prio FROM refs WHERE cd_rgi IS NOT NULL
+      UNION ALL
+      SELECT 'rgint', cd_rgint, nm_rgint, uf_sigla, prio FROM refs WHERE cd_rgint IS NOT NULL
+      UNION ALL
+      SELECT 'uf', uf, uf_nome, uf_sigla, prio FROM refs WHERE uf IS NOT NULL
+      UNION ALL
+      SELECT 'rm', cd_rm, nm_rm, NULL, prio FROM refs WHERE cd_rm IS NOT NULL
+    )
+    SELECT nivel, codigo, arg_min(nome, prio) AS nome, arg_min(uf_sigla, prio) AS uf_sigla,
+           bool_or(prio = 0) AS em_2022
+    FROM todos GROUP BY nivel, codigo
   `);
   return con;
 }
@@ -248,6 +265,9 @@ export async function consultarSerie<T = Record<string, unknown>>(sql: string): 
 /** true enquanto o motor da edição ATIVA não estiver pronto -- painéis usam para trocar
  *  "carregando fluxos…" por "preparando os dados…" durante a carga a frio. Acompanha a
  *  edição ativa automaticamente (troca de censo tem sua própria carga a frio). */
+/* É um hook de verdade; o linter só não o reconhece porque o nome segue o português do projeto
+   ("usar...") em vez do prefixo "use" que a regra exige. Renomear tocaria todos os painéis. */
+/* oxlint-disable react-hooks/rules-of-hooks */
 export function usarDuckDBPronto(): boolean {
   const censo = useStore((s) => s.censo);
   const [pronto, setPronto] = useState(() => progressoDe(censo).estagio === "pronto");
@@ -257,3 +277,4 @@ export function usarDuckDBPronto(): boolean {
   }, [censo]);
   return pronto;
 }
+/* oxlint-enable react-hooks/rules-of-hooks */

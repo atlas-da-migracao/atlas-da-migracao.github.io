@@ -10,7 +10,7 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Fluxo, Metrica } from "../lib/types";
 import { fitBoundsCartesiano, validarEExpandirBbox, type Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
-import { num, sinal, rotuloPrecisao } from "../lib/format";
+import { num, sinal, sinal1, rotuloPrecisao } from "../lib/format";
 import { FLUXO_MAPA, hexParaRgb } from "../lib/paletas";
 import { poligonoFluxo, RAIO_NO_PX } from "../lib/fluxos";
 import {
@@ -130,7 +130,10 @@ export const VISTA_BRASIL: VistaCartesiana = { target: [0, 0, 0], zoom: -12 };
 /** Campos mínimos usados na coloração do coroplético -- Municipio e UnidadeAgregada (F6:
  *  níveis RGI/RGInt/UF) satisfazem essa forma, então o mapa não precisa saber qual é qual. */
 export interface ValorMapa {
-  saldo: number; tlm: number | null; imig: number; emig: number; iem: number | null;
+  /** `null` = sem dado (sob recorte por característica, o município sem a célula publicada para
+   *  o subgrupo): a dica diz "sem dados" em vez de "saldo 0", e nenhuma espiga é desenhada. Nas
+   *  taxas (TLM/IEM) o nulo pinta o cinza de "sem dado", distinto de "baixa variação". */
+  saldo: number | null; tlm: number | null; imig: number | null; emig: number | null; iem: number | null;
   /** só existe no nível município (níveis agregados não têm erro-padrão próprio) */
   cv_imig?: number | null; precisao_imig?: string;
 }
@@ -183,11 +186,19 @@ interface Props {
    *  (~35%) para não esconder a imagem nem ser escondida por ela -- os contornos continuam
    *  com opacidade normal. */
   mostrarSatelite?: boolean;
-  /** F3: maior fluxo municipal publicado NESTA edição (meta.maior_fluxo) -- base da escala de
-   *  espessura absoluta dos arcos. Se ausente (meta ainda não carregou), cai de volta no maior
-   *  fluxo EM TELA (comportamento anterior), só para não desenhar arcos invisíveis antes da
-   *  1a resposta de `meta.json`. */
-  maiorFluxoEdicao?: number | null;
+  /** Âncora da escala de espessura absoluta dos fluxos: o volume que vale a largura máxima
+   *  (14 px). Quem chama escolhe a âncora certa para o que está em tela e passa a MESMA à
+   *  legenda: o maior fluxo municipal de migração da edição (meta.maior_fluxo) nos níveis
+   *  município e nas abas de migração da RM; o maior da tabela de fluxos do nível (RGI/RGInt/UF)
+   *  ou da aba pendular nos demais casos -- aqueles volumes são muito maiores que o maior fluxo
+   *  municipal e saturariam a escala. Se ausente (ainda não calculada), cai de volta no maior
+   *  fluxo EM TELA, só para não desenhar arcos invisíveis nesse instante. */
+  ancoraFluxos?: number | null;
+  /** Modo metropolitano: a métrica nacional não é desenhada nem explicada pela legenda (que só
+   *  mostra a tipologia dos fluxos intra-RM), então a malha usa o preenchimento neutro das
+   *  métricas de contagem e as espigas não aparecem -- nem as de fora da RM, que a cor alfa
+   *  reduzida de `destacar` não esconderia. */
+  modoRM?: boolean;
   /** F10: bounds (metros, Albers) da malha nacional desta edição (`meta.bounds_albers`) --
    *  usado para enquadrar o Brasil (foco=null) sem esperar o TopoJSON de municípios (mais
    *  pesado) carregar. `null`/ausente cai no fallback aproximado `LIMITES_BRASIL_FALLBACK`. */
@@ -205,7 +216,7 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
     case "saldo": return m.saldo;
     case "tlm": return m.tlm;
     case "imig": return m.imig;
-    case "emig": return -m.emig;   // saídas lidas como perda, para manter a divergência
+    case "emig": return m.emig == null ? null : -m.emig;   // saídas lidas como perda, para manter a divergência
     case "iem": return m.iem == null ? null : m.iem * 100;
   }
 };
@@ -215,14 +226,15 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
  *  contagem). Antes só existia a frase de saldo/TLM; imigrantes e emigrantes caíam por engano
  *  na frase de saldo (o valor de `valorDaMetrica`, com sinal invertido para o coroplético, não
  *  o valor bruto que o leitor espera ver na dica). */
+
 const textoMetrica = (m: ValorMapa | undefined, metrica: Metrica): string => {
   if (!m) return "sem dados";
   switch (metrica) {
-    case "tlm": return `${sinal(m.tlm)} por mil habitantes`;
-    case "saldo": return `saldo ${sinal(m.saldo)} pessoas`;
-    case "imig": return `${num(m.imig)} imigrantes`;
-    case "emig": return `${num(m.emig)} emigrantes`;
-    case "iem": return m.iem == null ? "sem dados" : `eficácia ${sinal(Math.round(m.iem * 1000) / 10)}%`;
+    case "tlm": return m.tlm == null ? "sem dados" : `${sinal1(m.tlm)} por mil habitantes`;
+    case "saldo": return m.saldo == null ? "sem dados" : `saldo ${sinal(m.saldo)} pessoas`;
+    case "imig": return m.imig == null ? "sem dados" : `${num(m.imig)} imigrantes`;
+    case "emig": return m.emig == null ? "sem dados" : `${num(m.emig)} emigrantes`;
+    case "iem": return m.iem == null ? "sem dados" : `eficácia ${sinal1(m.iem * 100)}%`;
   }
 };
 
@@ -230,8 +242,8 @@ export function MapaAtlas({
   malha, contornos = null, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
   foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
-  mostrarFluxos = true, maiorFluxoEdicao = null, boundsNacional = null, centroides = null,
-  mostrarSatelite = false,
+  mostrarFluxos = true, ancoraFluxos = null, boundsNacional = null, centroides = null,
+  mostrarSatelite = false, modoRM = false,
 }: Props) {
   const [hover, setHover] = useState<PickingInfo | null>(null);
   const feicaoSobCursor = useRef<string | null>(null);
@@ -247,6 +259,10 @@ export function MapaAtlas({
     }
   };
   const metricaContagem = ESPIGAS_METRICAS.has(metrica);
+  // Preenchimento neutro da malha: nas métricas de contagem (o valor sai nas espigas) e no modo
+  // RM (a métrica nacional não é o dado em tela -- ver `modoRM` em Props). Só as espigas ficam
+  // restritas à contagem; o contorno mais escuro acompanha o neutro, não a métrica.
+  const preenchimentoNeutro = metricaContagem || modoRM;
   // vista controlada: garante que a carga da página sempre comece enquadrando o Brasil
   const [vista, setVista] = useState<VistaCartesiana>(VISTA_BRASIL);
   const [moveu, setMoveu] = useState(false);
@@ -307,14 +323,14 @@ export function MapaAtlas({
   }, [focoChave, tamanho?.width, tamanho?.height, zoomMaximo]);
 
   // Espessura dos arcos: proporcional à raiz quadrada do volume (área ~ volume, leitura
-  // perceptualmente honesta). F3 (mapa-representação): normalizada pelo maior fluxo
-  // MUNICIPAL PUBLICADO NESTA EDIÇÃO (meta.maior_fluxo via `maiorFluxoEdicao`), não pelo
-  // maior fluxo em tela -- escala absoluta, para que 14px signifiquem o mesmo volume em
-  // qualquer vista (Brasil, um município, um nível agregado). Antes da 1a resposta de
-  // meta.json (maiorFluxoEdicao null), cai de volta no maior valor em tela, só para não
-  // desenhar tudo invisível nesse instante inicial.
+  // perceptualmente honesta). F3 (mapa-representação): normalizada por uma âncora ABSOLUTA
+  // (`ancoraFluxos`), não pelo maior fluxo em tela, para que 14px signifiquem o mesmo volume em
+  // qualquer vista do mesmo tipo (Brasil, um município). A âncora depende do que se desenha --
+  // ver `ancoraFluxos` em Props: com o maior fluxo MUNICIPAL (meta.maior_fluxo) nos níveis
+  // agregados e no pendular, 44 dos 300 arcos da UF saturavam em 14px. Enquanto a âncora não
+  // existe (null), cai de volta no maior valor em tela, só para não desenhar tudo invisível.
   const maiorVolumeEmTela = useMemo(() => Math.max(1, ...arcos.map((a) => a.total)), [arcos]);
-  const maiorVolume = maiorFluxoEdicao ?? maiorVolumeEmTela;
+  const maiorVolume = ancoraFluxos ?? maiorVolumeEmTela;
   const LARGURA_MIN = 1.5, LARGURA_MAX = 14;
   const larguraDoArco = (total: number) =>
     LARGURA_MIN + (LARGURA_MAX - LARGURA_MIN) * Math.sqrt(Math.min(1, Math.max(0, total) / maiorVolume));
@@ -324,7 +340,8 @@ export function MapaAtlas({
   // |valor| ASCENDENTE (maiores por último = desenhados por cima), mesmo padrão já usado nos
   // arcos (ver larguraDoArco acima e o comentário de ordenação em App.tsx).
   const pontosEspiga = useMemo<PontoEspiga[]>(() => {
-    if (!metricaContagem || !centroides || centroides.size === 0) return [];
+    // modo RM: sem espigas (nem as de fora da RM) -- ver `modoRM` em Props
+    if (modoRM || !metricaContagem || !centroides || centroides.size === 0) return [];
     const pontos: PontoEspiga[] = [];
     for (const [cd, ponto] of centroides) {
       const dado = espigaDaMetrica(porCodigo.get(cd), metrica);
@@ -333,7 +350,7 @@ export function MapaAtlas({
     }
     pontos.sort((a, b) => Math.abs(a.valor) - Math.abs(b.valor));
     return pontos;
-  }, [metricaContagem, metrica, porCodigo, centroides]);
+  }, [modoRM, metricaContagem, metrica, porCodigo, centroides]);
   // Âncora da escala: no nível MUNICÍPIO, uma constante FIXA entre as 5 edições
   // (ANCORA_ESPIGA_MUNICIPIO, ver lib/espigas.ts) -- pedido do usuário, que notou 1980
   // parecendo muito mais "cheio" de espigas grandes que as demais edições. O motivo era a
@@ -385,6 +402,13 @@ export function MapaAtlas({
   const idFluxos = arcos.length
     ? `fluxos-${arcos.length}-${arcos[0].origem}-${arcos[0].destino}-${arcos[arcos.length - 1].total}`
     : "fluxos-vazio";
+
+  // `data` de GeoJsonLayer compara por identidade: `[contornos]` escrito dentro do useMemo das
+  // camadas era um array NOVO a cada quadro de zoom (`vista.zoom` está nas dependências), e o
+  // deck.gl re-tesselava a malha de arestas inteira (a maior camada) a cada quadro. Memoizados
+  // aqui, só mudam quando a própria geometria muda.
+  const dadosContornos = useMemo(() => (contornos ? [contornos] : null), [contornos]);
+  const dadosPerimetro = useMemo(() => (perimetro ? [perimetro] : null), [perimetro]);
 
   const camadas = useMemo(() => {
     if (!malha) return [];
@@ -441,7 +465,9 @@ export function MapaAtlas({
         // F5 (mapa-representação): contagem (saldo/imig/emig) não pinta a malha -- o valor sai
         // nas espigas (ver camada "espigas" abaixo); a malha fica num neutro fixo, sem
         // competir com a cor de ganho/perda das espigas. Só TLM/IEM continuam coropléticas.
-        const c = metricaContagem
+        // O modo RM usa o mesmo neutro (ver `modoRM`). Valor nulo em TLM/IEM sai no cinza de
+        // "sem dado" (corDivergente), distinto do de "baixa variação".
+        const c = preenchimentoNeutro
           ? (escuro ? NEUTRO_ESCURO : NEUTRO_CLARO)
           : corDivergente(valorDaMetrica(porCodigo.get(cd), metrica), quebras, escuro);
         // F. mapa base de satélite: preenchimento reduzido a ~35% quando a imagem está
@@ -457,7 +483,7 @@ export function MapaAtlas({
         return true;
       },
       updateTriggers: {
-        getFillColor: [metrica, metricaContagem, quebras.join(","), escuro, porCodigo.size, destacar, mostrarSatelite],
+        getFillColor: [metrica, preenchimentoNeutro, quebras.join(","), escuro, porCodigo.size, porCodigo, destacar, mostrarSatelite],
       },
     });
 
@@ -465,9 +491,9 @@ export function MapaAtlas({
     // vem de topojson.mesh((a,b) => a !== b) em App.tsx -- some tanto a duplicação de uma
     // fronteira compartilhada (desenhada 1x em vez de 2x) quanto a aresta interna de um
     // MultiPolygon da mesma feição (ex.: a grade que aparecia dentro do NORTEGO em 1980).
-    const contornosMalha = contornos && new GeoJsonLayer({
+    const contornosMalha = dadosContornos && new GeoJsonLayer({
       id: "contornos-malha",
-      data: [contornos],
+      data: dadosContornos,
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: false,
       stroked: true,
@@ -477,8 +503,8 @@ export function MapaAtlas({
       getLineWidth: ehUf ? 1.1 : 0.3,
       getLineColor: ehUf
         ? [...(escuro ? [150, 150, 145] as RGB : [120, 118, 108] as RGB), comAlfaSat(220)] as [number, number, number, number]
-        : [...(metricaContagem ? contornoMunContagem : contorno), comAlfaSat(metricaContagem ? 210 : 180)] as [number, number, number, number],
-      updateTriggers: { getLineColor: [escuro, ehUf, metricaContagem, mostrarSatelite], getLineWidth: [ehUf] },
+        : [...(preenchimentoNeutro ? contornoMunContagem : contorno), comAlfaSat(preenchimentoNeutro ? 210 : 180)] as [number, number, number, number],
+      updateTriggers: { getLineColor: [escuro, ehUf, preenchimentoNeutro, mostrarSatelite], getLineWidth: [ehUf] },
     });
 
     // Contorno de seleção e de núcleo de RM: continuam desenhados por feição (precisam da
@@ -510,9 +536,9 @@ export function MapaAtlas({
       },
     });
 
-    const contornoRM = perimetro && new GeoJsonLayer({
+    const contornoRM = dadosPerimetro && new GeoJsonLayer({
       id: "perimetro-rm",
-      data: [perimetro],
+      data: dadosPerimetro,
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       pickable: false,
       stroked: true,
@@ -688,9 +714,9 @@ export function MapaAtlas({
     return [satelite, municipios, contornosMalha, contornoRM, contornoSelecao, espigas, fluxos, fluxosNos,
             capitalPontos, capitalRotulos];
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [malha, contornos, porCodigo, metrica, metricaContagem, quebras, arcos, selecionado, escuro, aoSelecionar,
-      aoSelecionarFluxo, maiorVolume, destacar, perimetro, nucleo, campoId, mostrarFluxos, mostrarSatelite,
-      pontosEspiga, maiorAbsolutoEspiga, vista.zoom, pontosCapital, idFluxos]);
+  }, [malha, dadosContornos, porCodigo, metrica, preenchimentoNeutro, quebras, arcos, selecionado, escuro,
+      aoSelecionar, aoSelecionarFluxo, maiorVolume, destacar, dadosPerimetro, nucleo, campoId, mostrarFluxos,
+      mostrarSatelite, pontosEspiga, maiorAbsolutoEspiga, vista.zoom, pontosCapital, idFluxos]);
 
   // F11 (mapa-representação): repintura forçada a cada reconstrução das camadas.
   //

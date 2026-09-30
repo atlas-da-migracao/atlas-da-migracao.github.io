@@ -45,6 +45,9 @@
   /* fundo do banner de erro (EstadoDados) com texto branco -- --arc-out só tem 3,2-3,9:1
      com branco nos dois temas; mesma razão do --acento-ativo. 7,0:1 com branco. */
   --acento-erro: #9c390c;
+  /* borda "há mais conteúdo aqui" das tabelas com rolagem horizontal (.tabela-scroll): escura no
+     claro, clara no escuro -- uma sombra preta some sobre o fundo #0d0d0d */
+  --sombra-rolagem: rgba(11, 11, 11, 0.30);
   --radius: 6px;
   --font: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -72,6 +75,7 @@
     --arc-in: #3987e5;
     --arc-out: #d95926;
     --acento-ativo: #256abf;
+    --sombra-rolagem: rgba(255, 255, 255, 0.30);
   }
 }
 
@@ -97,6 +101,7 @@
   --arc-in: #3987e5;
   --arc-out: #d95926;
   --acento-ativo: #256abf;
+  --sombra-rolagem: rgba(255, 255, 255, 0.30);
 }
 
 * { box-sizing: border-box; }

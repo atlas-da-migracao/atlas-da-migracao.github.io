@@ -234,6 +234,9 @@ export const useStore = create<Estado>((set, get) => ({
 }));
 
 /** true quando a interface está renderizando em modo escuro. */
+/* É um hook de verdade; o linter só não o reconhece porque o nome segue o português do projeto
+   ("usar...") em vez do prefixo "use" que a regra exige (mesmo caso de usarDuckDBPronto). */
+/* oxlint-disable react-hooks/rules-of-hooks */
 export function usarModoEscuro(): boolean {
   const tema = useStore((s) => s.tema);
   if (tema === "escuro") return true;

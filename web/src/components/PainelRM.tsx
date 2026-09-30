@@ -28,6 +28,11 @@ interface Props {
   topN: number;
   escuro: boolean;
   meta: Meta | null;
+  /** "Comparativo entre as 20 maiores RMs" aberto: estado do App, não do painel -- o painel é
+   *  remontado (`key` = edição + RM) a cada troca de RM, e escolher outra RM DENTRO do
+   *  comparativo não pode fechá-lo. */
+  comparativoAberto: boolean;
+  aoAlternarComparativo: (aberto: boolean) => void;
   aoMudarAba: (a: AbaRM) => void;
   aoMudarCruzar: (v: boolean) => void;
   aoSair: () => void;
@@ -97,8 +102,8 @@ function RankingDivergente({ itens, rotuloValor }: {
 }
 
 export function PainelRM({
-  cdRm, aba, cruzar, topN, escuro, meta, aoMudarAba, aoMudarCruzar, aoSair, aoEscolherRM, aoSelecionarFluxo,
-  aoAbrirSerie,
+  cdRm, aba, cruzar, topN, escuro, meta, comparativoAberto, aoAlternarComparativo, aoMudarAba, aoMudarCruzar,
+  aoSair, aoEscolherRM, aoSelecionarFluxo, aoAbrirSerie,
 }: Props) {
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
@@ -115,23 +120,40 @@ export function PainelRM({
   const [rankingPendular, setRankingPendular] = useState<Awaited<ReturnType<typeof municipiosPendularDaRM>>>([]);
   const [estudoResumo, setEstudoResumo] = useState<{ saida_estudo: number; entrada_estudo: number } | null>(null);
   const [migEstudo, setMigEstudo] = useState<{ classe_estudo: string; total: number }[]>([]);
-  const [mostrarComparativo, setMostrarComparativo] = useState(false);
   // distingue "ainda buscando" de "buscou e não achou" (cdRm inexistente nesta edição), para não
   // travar em "Carregando…" para sempre -- ver achado do auditor F9.7-b sobre `?rm=<inexistente>`.
   const [carregado, setCarregado] = useState(false);
 
+  // Todo dado aqui é de UMA edição e de UMA RM: a edição entra nas dependências de todos os
+  // efeitos abaixo (as consultas vão para a conexão DuckDB da edição ativa) e, quando ela ou a
+  // RM mudam, tudo é zerado ANTES de qualquer consulta nova -- senão o painel mostra os números
+  // da edição anterior sob o título da nova, e os KPIs/Sankey/tabelas nunca recarregam. O App
+  // também remonta o painel por `key={censo:rm}`; isto mantém o componente correto sozinho.
+  // Este efeito vem antes dos de dados, então roda primeiro no mesmo commit; os `setX` das
+  // consultas só chegam depois (assíncronos), sem risco de serem apagados por ele.
+  useEffect(() => {
+    setResumo(null); setCarregado(false); setFluxosIntra([]); setMigResumo(null); setSankeyDados(null);
+    setPendularTrab([]); setPendularEstudo([]); setRankingPendular([]); setEstudoResumo(null);
+    setMigEstudo([]);
+  }, [censo, cdRm]);
+
   // dados que não dependem da aba
   useEffect(() => {
     let vivo = true;
-    setCarregado(false);
     Promise.all([resumoDaRM(cdRm), fluxosIntraDaRM(cdRm)]).then(([r, f]) => {
       if (!vivo) return;
       setResumo(r); setFluxosIntra(f);
-    }).finally(() => { if (vivo) setCarregado(true); });
+    }).catch((e) => { console.error(e); })
+      .finally(() => { if (vivo) setCarregado(true); });
     return () => { vivo = false; };
-  }, [cdRm]);
+  }, [cdRm, censo]);
 
-  useEffect(() => { listarRMs().then(setRms); }, []);
+  useEffect(() => {
+    let vivo = true;
+    setRms([]);
+    listarRMs().then((r) => { if (vivo) setRms(r); }).catch((e) => { console.error(e); });
+    return () => { vivo = false; };
+  }, [censo]);
 
   // aba "mig": sub-painel migrantes e trabalho -- só existe em edições com deslocamento
   // pendular (ver lib/edicoes.ts); em 1991 as tabelas rm_mig_pendular* nem são registradas
@@ -139,33 +161,40 @@ export function PainelRM({
   useEffect(() => {
     if (aba !== "mig" || !recursos.pendular) return;
     let vivo = true;
-    migPendularResumoDaRM(cdRm).then((r) => { if (vivo) setMigResumo(r); });
+    migPendularResumoDaRM(cdRm).then((r) => { if (vivo) setMigResumo(r); })
+      .catch((e) => { console.error(e); });
     caminhosPendularDaRM(cdRm).then(async (caminhos) => {
       const codigos = [...new Set(caminhos.flatMap((c) => [c.origem_mig, c.destino_mig, c.destino_trab]))];
       const nomes = await nomesDeMunicipios(codigos);
       const mapa = new Map(nomes.map((n) => [n.cd_mun, `${n.nm_mun}/${n.uf_sigla}`]));
       if (vivo) setSankeyDados(prepararSankey(caminhos, mapa, 12));
+    }).catch((e) => {
+      // sem isto o diagrama ficaria em "Carregando…" para sempre; vazio cai no aviso de "insuficientes"
+      console.error(e);
+      if (vivo) setSankeyDados({ nodes: [], links: [], caminhos: [] });
     });
     return () => { vivo = false; };
-  }, [cdRm, aba]);
+  }, [cdRm, aba, censo, recursos.pendular]);
 
   // aba "trab"
   useEffect(() => {
     if (aba !== "trab") return;
     let vivo = true;
     Promise.all([pendularDaRM(cdRm, "pendular_trab", topN, cruzar), municipiosPendularDaRM(cdRm)])
-      .then(([p, r]) => { if (vivo) { setPendularTrab(p); setRankingPendular(r); } });
+      .then(([p, r]) => { if (vivo) { setPendularTrab(p); setRankingPendular(r); } })
+      .catch((e) => { console.error(e); });
     return () => { vivo = false; };
-  }, [cdRm, aba, topN, cruzar]);
+  }, [cdRm, aba, topN, cruzar, censo]);
 
   // aba "estudo"
   useEffect(() => {
     if (aba !== "estudo") return;
     let vivo = true;
     Promise.all([pendularDaRM(cdRm, "pendular_estudo", topN, cruzar), estudoPendularDaRM(cdRm), migEstudoDaRM(cdRm)])
-      .then(([p, r, e]) => { if (vivo) { setPendularEstudo(p); setEstudoResumo(r); setMigEstudo(e); } });
+      .then(([p, r, e]) => { if (vivo) { setPendularEstudo(p); setEstudoResumo(r); setMigEstudo(e); } })
+      .catch((e) => { console.error(e); });
     return () => { vivo = false; };
-  }, [cdRm, aba, topN, cruzar]);
+  }, [cdRm, aba, topN, cruzar, censo]);
 
   const rankingSaldo = useMemo(() => {
     const nomes = new Map<string, string>();
@@ -374,6 +403,8 @@ export function PainelRM({
                 </table>
               </details>
             </>
+          ) : sankeyDados == null ? (
+            <p className="muted">Carregando o diagrama…</p>
           ) : (
             <p className="muted">Caminhos insuficientes para o diagrama nesta RM.</p>
           )}
@@ -474,10 +505,10 @@ export function PainelRM({
         </>
       )}
 
-      <details className="comparativo-toggle" open={mostrarComparativo}
-                onToggle={(e) => setMostrarComparativo((e.target as HTMLDetailsElement).open)}>
+      <details className="comparativo-toggle" open={comparativoAberto}
+                onToggle={(e) => aoAlternarComparativo((e.target as HTMLDetailsElement).open)}>
         <summary>Comparativo entre as 20 maiores regiões metropolitanas</summary>
-        {mostrarComparativo && <ComparativoRM rms={rms} ativa={cdRm} censo={censo} aoEscolher={aoEscolherRM} />}
+        {comparativoAberto && <ComparativoRM rms={rms} ativa={cdRm} censo={censo} aoEscolher={aoEscolherRM} />}
       </details>
     </aside>
   );

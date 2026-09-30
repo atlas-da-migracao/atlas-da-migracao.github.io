@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   classificarIem, seIem, harmonizarStatus, fraseSintese, tramaDoEstado,
   classeSequencial, QUEBRAS_FIXAS, ordenarEdicoes, alternarEdicao, filtrarEdicoes,
-  edicaoAnterior, slotEdicao, rotuloIntervalo, type EntradaFrase, type PontoFrase, type EdicaoSerie,
+  edicaoAnterior, slotEdicao, rotuloIntervalo, tipoFluxoPredominante, fracaoParaPct,
+  normalizarLinhaUnidade, formatarIem, formatarQuebra, maeDaSerie, filhosNoIntervalo,
+  pontosDaSerie, perfilStatusDaEdicao, estadoNoMapa, tramaDoEstadoMapa, ordenarPorPostoRecente,
+  geometriaSpark, ressalvasDoBloco,
+  type Comparabilidade, type EntradaFrase, type PontoFrase, type EdicaoSerie, type LinhaSerieFrase,
 } from "../serie";
 
 const ponto = (p: Partial<PontoFrase> & { edicao: EdicaoSerie }): PontoFrase => ({
@@ -165,8 +169,77 @@ describe("fraseSintese", () => {
       mae: { nome: "Norte de Goiás (atual Tocantins)", edicoes: ["1980"], agregada: true },
     };
     const frase = fraseSintese(entrada);
-    expect(frase).toContain("unidade agregada");
-    expect(frase).toContain("Norte de Goiás");
+    // mãe de código não numérico = unidade agregada: o território é PUBLICADO (junto com outros),
+    // a frase não afirma criação posterior
+    expect(frase).toContain("publicado agregado em Norte de Goiás (atual Tocantins)");
+    expect(frase).toContain("Em 1980");
+    expect(frase).not.toContain("foi criado depois");
+  });
+
+  it("T6 -- mãe agregada: 'Abra a série' diz 'em que o território está agregado'", () => {
+    const entrada: EntradaFrase = {
+      nome: "Palmas", nivel: "mun",
+      pontos: [ponto({ edicao: "1980", estado: "nao_existia" })],
+      mae: { nome: "Norte de Goiás (atual Tocantins)", edicoes: ["1980"], agregada: true },
+    };
+    const frase = fraseSintese(entrada);
+    expect(frase).toContain("em que o território está agregado");
+    expect(frase).not.toContain("fazia parte");
+  });
+
+  it("T3 -- usa a edição mais recente sem existir (mae.ultimaEdicaoAusente), não a primeira", () => {
+    const entrada: EntradaFrase = {
+      nome: "Município X", nivel: "mun",
+      pontos: [
+        ponto({ edicao: "1980", estado: "nao_existia" }),
+        ponto({ edicao: "1991", estado: "nao_existia" }),
+        ponto({ edicao: "2022", iem: 0.3, tipo: "absorcao", imig: 500, emig: 200 }),
+      ],
+      mae: { nome: "Mãe Y", edicoes: ["1980", "1991"], agregada: false, ultimaEdicaoAusente: "1991" },
+    };
+    expect(fraseSintese(entrada)).toContain("foi criado depois de 1991");
+  });
+
+  it("T7 -- município-mãe: complemento por taxas e sufixo de fronteira só quando as taxas existem", () => {
+    const base: Omit<EntradaFrase, "pontos"> = {
+      nome: "Santarém", nivel: "mun",
+      filhos: { nomes: ["Mojuí dos Campos"], ultimaEdicaoJunto: "2010" },
+    };
+    // volumes caem, mas as TAXAS ficam estáveis: o complemento é por taxa, não por volume
+    const comTaxas = fraseSintese({
+      ...base,
+      pontos: [
+        ponto({ edicao: "1991", iem: 0.4, tipo: "absorcao_forte", imig: 900, emig: 300, tbi: 80, tbe: 30 }),
+        ponto({ edicao: "2022", iem: 0.05, tipo: "rotatividade", imig: 500, emig: 300, tbi: 82, tbe: 31 }),
+      ],
+    });
+    expect(comTaxas).toContain("Até 2010, Santarém incluía o território que hoje é Mojuí dos Campos");
+    expect(comTaxas).toContain("entradas e saídas mudaram pouco");
+    expect(comTaxas).toContain("pelas taxas, que descontam em parte a mudança de fronteira");
+    // sem taxas nas pontas: volta aos volumes e NÃO afirma desconto nenhum
+    const semTaxas = fraseSintese({
+      ...base,
+      pontos: [
+        ponto({ edicao: "1991", iem: 0.4, tipo: "absorcao_forte", imig: 900, emig: 300 }),
+        ponto({ edicao: "2022", iem: 0.05, tipo: "rotatividade", imig: 500, emig: 300 }),
+      ],
+    });
+    expect(semTaxas).toContain("chega menos gente do que antes");
+    expect(semTaxas).not.toContain("descontam");
+    expect(semTaxas).not.toContain("descontada");
+  });
+
+  it("T7 -- sem ano confiável dos filhos, a frase não inventa 'Até {ano}'", () => {
+    const frase = fraseSintese({
+      nome: "Santarém", nivel: "mun",
+      filhos: { nomes: ["Mojuí dos Campos"] },
+      pontos: [
+        ponto({ edicao: "1991", iem: 0.2, tipo: "absorcao", imig: 500, emig: 300 }),
+        ponto({ edicao: "2022", iem: 0.22, tipo: "absorcao", imig: 600, emig: 350 }),
+      ],
+    });
+    expect(frase).toContain("Antes, Santarém incluía o território que hoje é Mojuí dos Campos");
+    expect(frase).not.toContain("Até ");
   });
 
   it("T4 -- iem = 0,20 e se = 0,15 é indefinido (margem maior que o valor)", () => {
@@ -418,5 +491,313 @@ describe("rotuloIntervalo", () => {
 
   it("todas as cinco edições", () => {
     expect(rotuloIntervalo(["1980", "1991", "2000", "2010", "2022"])).toBe("1980→2022");
+  });
+});
+
+
+describe("pct_interestadual (fração 0-1 -> percentual)", () => {
+  it("fracaoParaPct converte uma vez; null continua null", () => {
+    expect(fracaoParaPct(0.66)).toBeCloseTo(66, 10);
+    expect(fracaoParaPct(0.007)).toBeCloseTo(0.7, 10);
+    expect(fracaoParaPct(null)).toBeNull();
+    expect(fracaoParaPct(undefined)).toBeNull();
+  });
+
+  it("normalizarLinhaUnidade converte só pct_interestadual e não muta a linha original", () => {
+    const l = { edicao: "2022", pct_interestadual: 0.66, imig: 10 };
+    const n = normalizarLinhaUnidade(l);
+    expect(n.pct_interestadual).toBeCloseTo(66, 10);
+    expect(n.imig).toBe(10);
+    expect(l.pct_interestadual).toBe(0.66);
+  });
+
+  it("tipoFluxoPredominante: 0,66 convertido (66%) é interestadual; 0,66 cru nunca seria", () => {
+    const longa = tipoFluxoPredominante(300_000, 0.66 * 100);
+    expect(longa?.chave).toBe("longa_inter");
+    const curta = tipoFluxoPredominante(50_000, 0.66 * 100);
+    expect(curta?.chave).toBe("curta_inter");
+    // o bug original: a fração crua (0,66) ficava sempre abaixo do limiar de 50
+    expect(tipoFluxoPredominante(300_000, 0.66)?.chave).toBe("longa_intra");
+  });
+
+  it("tipoFluxoPredominante: 30% -> intraestadual", () => {
+    expect(tipoFluxoPredominante(300_000, 0.3 * 100)?.chave).toBe("longa_intra");
+  });
+});
+
+describe("formatação", () => {
+  it("formatarIem: pt-BR, sinal tipográfico, duas casas", () => {
+    expect(formatarIem(0.14)).toBe("+0,14");
+    expect(formatarIem(-0.04)).toBe("−0,04");
+    expect(formatarIem(0)).toBe("0,00");
+    expect(formatarIem(-0.001)).toBe("0,00");
+    expect(formatarIem(null)).toBe("—");
+  });
+
+  it("formatarQuebra: IEM com 2 casas em pt-BR (nunca 0.3333333333333333); ‰ inteiro", () => {
+    expect(QUEBRAS_FIXAS.iem.map((q) => formatarQuebra("iem", q))).toEqual(["0,15", "0,33", "0,60"]);
+    expect(QUEBRAS_FIXAS.tbi.map((q) => formatarQuebra("tbi", q))).toEqual(["25", "50", "80", "130"]);
+  });
+});
+
+describe("maeDaSerie", () => {
+  const lin = (edicao: EdicaoSerie, existia: boolean, cd?: string, nm?: string) =>
+    ({ edicao, existia, cd_mun_mae: cd ?? null, nm_mun_mae: nm ?? null });
+  const TODAS: EdicaoSerie[] = ["1980", "1991", "2000", "2010", "2022"];
+
+  it("escolhe a mãe da edição MAIS RECENTE sem existir, não a primeira cronológica", () => {
+    // criado depois de 1991: em 1980 a mãe era B; em 1991 (já desmembrada de B) a mãe é A
+    const mae = maeDaSerie([
+      lin("1980", false, "1111111", "B"), lin("1991", false, "2222222", "A"),
+      lin("2000", true), lin("2010", true), lin("2022", true),
+    ], TODAS);
+    expect(mae?.nome).toBe("A");
+    expect(mae?.codigo).toBe("2222222");
+    expect(mae?.ultimaEdicaoAusente).toBe("1991");
+    expect(mae?.agregada).toBe(false);
+    expect(mae?.edicoes).toEqual(["1991"]);
+  });
+
+  it("undefined quando nenhuma edição MARCADA é 'não existia' (série marcada completa)", () => {
+    const mae = maeDaSerie([
+      lin("1980", false, "1111111", "B"), lin("2000", true), lin("2022", true),
+    ], ["2000", "2022"]);
+    expect(mae).toBeUndefined();
+  });
+
+  it("mãe de código não numérico (NORTEGO) = agregada", () => {
+    const mae = maeDaSerie([
+      lin("1980", false, "NORTEGO", "Norte de Goiás (atual Tocantins)"),
+      lin("1991", true), lin("2022", true),
+    ], TODAS);
+    expect(mae?.agregada).toBe(true);
+    expect(mae?.edicoes).toEqual(["1980"]);
+  });
+});
+
+describe("filhosNoIntervalo", () => {
+  const f = (codigo: string, nome: string, ultima?: string) =>
+    ({ codigo, nome, ultima_edicao_ausente: ultima ?? null });
+
+  it("só entram filhos cuja separação cai dentro das edições marcadas", () => {
+    const filhos = [f("a", "A", "1980"), f("b", "B", "2010")];
+    // [1991, 2022]: A foi criado entre 1980 e 1991 (antes da janela) -> fora; B entre 2010 e 2022 -> dentro
+    expect(filhosNoIntervalo(filhos, ["1991", "2022"])?.nomes).toEqual(["B"]);
+    // [1980, 2022]: ambos dentro
+    expect(filhosNoIntervalo(filhos, ["1980", "2022"])?.nomes).toEqual(["A", "B"]);
+    // [1980, 2000]: B (2010) foi criado depois da janela -> fora
+    expect(filhosNoIntervalo(filhos, ["1980", "2000"])?.nomes).toEqual(["A"]);
+  });
+
+  it("ultimaEdicaoJunto = menor edição ausente do grupo; usa nome, não código", () => {
+    const r = filhosNoIntervalo([f("x", "Xis", "2010"), f("y", "Ípsilon", "1991")], ["1980", "2022"]);
+    expect(r?.ultimaEdicaoJunto).toBe("1991");
+    expect(r?.nomes).toContain("Xis");
+    expect(r?.nomes).not.toContain("x");
+  });
+
+  it("undefined quando nenhum filho cai na janela; sem edição na fonte o filho entra", () => {
+    expect(filhosNoIntervalo([f("a", "A", "1980")], ["1991", "2022"])).toBeUndefined();
+    const r = filhosNoIntervalo([f("a", "A")], ["1991", "2022"]);
+    expect(r?.nomes).toEqual(["A"]);
+    expect(r?.ultimaEdicaoJunto).toBeUndefined();
+  });
+
+  it("sem nome cai no código", () => {
+    const r = filhosNoIntervalo([{ codigo: "1234567", ultima_edicao_ausente: "2010" }], ["2000", "2022"]);
+    expect(r?.nomes).toEqual(["1234567"]);
+  });
+});
+
+describe("pontosDaSerie", () => {
+  const linha = (edicao: EdicaoSerie, extra: Partial<LinhaSerieFrase> = {}): LinhaSerieFrase => ({
+    edicao, imig: 100, emig: 50, saldo: 50, tlm: 5, tbi: 10, tbe: 5, iem: 0.33, se_iem: null,
+    existia: true, estado_cobertura: "plena", ...extra,
+  });
+
+  it("um ponto por edição marcada, em ordem; edição sem linha = nao_medido", () => {
+    const p = pontosDaSerie([linha("1991"), linha("2022")], ["1980", "1991", "2022"]);
+    expect(p.map((x) => x.edicao)).toEqual(["1980", "1991", "2022"]);
+    expect(p[0].estado).toBe("nao_medido");
+    expect(p[1].estado).toBe("numero");
+    expect(p[1].tbi).toBe(10);
+  });
+
+  it("não existia / cobertura insuficiente / iem nulo zeram os números", () => {
+    const p = pontosDaSerie([
+      linha("1980", { existia: false }),
+      linha("1991", { estado_cobertura: "insuficiente" }),
+      linha("2000", { iem: null }),
+    ], ["1980", "1991", "2000"]);
+    expect(p.map((x) => x.estado)).toEqual(["nao_existia", "cobertura_insuficiente", "suprimido"]);
+    expect(p.every((x) => x.iem == null && x.imig == null && x.tipo == null)).toBe(true);
+  });
+});
+
+describe("perfilStatusDaEdicao (Bloco 4)", () => {
+  it("2022 com nao_natural suprimido (parcela ausente): 'suprimido', sem renormalizar", () => {
+    // etapas_multiplas ausente -> harmonização devolve nao_natural = null
+    const r = perfilStatusDaEdicao({ primeira_saida: 50, retorno_natal: 30, outros: 5 }, "2022", "numero");
+    expect(r.motivo).toBe("suprimido");
+    expect(r.valores).toEqual({});
+  });
+
+  it("2022 completo: soma as duas parcelas, sem motivo", () => {
+    const r = perfilStatusDaEdicao(
+      { primeira_saida: 50, etapas_multiplas: 20, retorno_natal: 30 }, "2022", "numero");
+    expect(r.motivo).toBeNull();
+    expect(r.valores.nao_natural).toBe(70);
+    expect(r.valores.retorno_natal).toBe(30);
+  });
+
+  it("o motivo vem do estado da unidade, não do rótulo da edição", () => {
+    expect(perfilStatusDaEdicao({ nao_natural: 10 }, "1980", "nao_existia").motivo).toBe("nao_existia");
+    expect(perfilStatusDaEdicao({ nao_natural: 10 }, "2010", "cobertura_insuficiente").motivo)
+      .toBe("cobertura_insuficiente");
+    expect(perfilStatusDaEdicao({ nao_natural: 10 }, "1991", "sem_cobertura").motivo).toBe("sem_cobertura");
+    // 1980 medido e publicado: desenha normalmente
+    const r1980 = perfilStatusDaEdicao({ nao_natural: 10, retorno_natal: 5 }, "1980", "numero");
+    expect(r1980.motivo).toBeNull();
+    expect(r1980.valores).toEqual({ nao_natural: 10, retorno_natal: 5 });
+  });
+
+  it("nenhuma linha de perfil na edição (unidade existe): 'suprimido'", () => {
+    expect(perfilStatusDaEdicao({}, "2000", "numero").motivo).toBe("suprimido");
+  });
+});
+
+describe("estadoNoMapa", () => {
+  const ok = { existia: true, estado_cobertura: "plena", rm_unitaria: null, se_iem: null };
+
+  it("sem linha = nao_medido; existia=false = nao_existia; cobertura; RM unitária", () => {
+    expect(estadoNoMapa(undefined, "iem", null)).toBe("nao_medido");
+    expect(estadoNoMapa({ ...ok, existia: false }, "iem", null)).toBe("nao_existia");
+    expect(estadoNoMapa({ ...ok, estado_cobertura: "sem_cobertura" }, "iem", 0.5)).toBe("sem_cobertura");
+    expect(estadoNoMapa({ ...ok, estado_cobertura: "insuficiente" }, "iem", 0.5)).toBe("cobertura_insuficiente");
+    expect(estadoNoMapa({ ...ok, rm_unitaria: true }, "iem", 0.5)).toBe("cobertura_insuficiente");
+  });
+
+  it("valor nulo = suprimido; valor = numero", () => {
+    expect(estadoNoMapa(ok, "tlm", null)).toBe("suprimido");
+    expect(estadoNoMapa(ok, "tlm", 12)).toBe("numero");
+  });
+
+  it("IEM com margem maior que o valor = indefinido (trama própria, sem cor de valor)", () => {
+    // iem 0,20, se 0,15 -> z*se = 0,29 > 0,20 (mesmo caso de T4)
+    expect(estadoNoMapa({ ...ok, se_iem: 0.15 }, "iem", 0.2)).toBe("indefinido");
+    expect(tramaDoEstadoMapa("indefinido")).toBe("horizontal");
+    // a guarda só vale para o IEM
+    expect(estadoNoMapa({ ...ok, se_iem: 0.15 }, "tlm", 0.2)).toBe("numero");
+    // sem se (1980, ou campo fora da consulta): sem guarda
+    expect(estadoNoMapa(ok, "iem", 0.2)).toBe("numero");
+    // abaixo do limiar de rotatividade o valor é rotatividade mesmo com margem grande
+    expect(estadoNoMapa({ ...ok, se_iem: 0.15 }, "iem", 0.1)).toBe("numero");
+  });
+
+  it("as tramas dos demais estados continuam as mesmas", () => {
+    expect(tramaDoEstadoMapa("nao_existia")).toBe("diagonal");
+    expect(tramaDoEstadoMapa("suprimido")).toBe("cruzada");
+    expect(tramaDoEstadoMapa("nao_medido")).toBe("pontilhada");
+    expect(tramaDoEstadoMapa("numero")).toBeNull();
+  });
+});
+
+describe("ordenarPorPostoRecente (Bloco 3)", () => {
+  type P = { nome: string; postos: Partial<Record<EdicaoSerie, number | null>> };
+  const postoEm = (p: P, e: EdicaoSerie) => p.postos[e];
+  const EDS: EdicaoSerie[] = ["1980", "1991", "2022"];
+
+  it("ordena pelo posto na edição mais recente marcada, desempatando pelas anteriores", () => {
+    const itens: P[] = [
+      { nome: "Antigo", postos: { "1980": 1, "1991": 1 } },               // sem 2022
+      { nome: "Segundo", postos: { "1980": 5, "1991": 4, "2022": 2 } },
+      { nome: "Primeiro", postos: { "1980": 9, "1991": 9, "2022": 1 } },  // o principal de 2022
+      { nome: "Empatado", postos: { "1980": 3, "1991": 2, "2022": 2 } },  // empata em 2022, vence em 1991
+    ];
+    expect(ordenarPorPostoRecente(itens, EDS, postoEm).map((p) => p.nome))
+      .toEqual(["Primeiro", "Empatado", "Segundo", "Antigo"]);
+  });
+
+  it("o principal parceiro de 2022 não some ao cortar, mesmo vindo por último na consulta", () => {
+    // consulta em ordem de edição antiga: 12 parceiros fortes em 1980 e o de 2022 por último
+    const itens: P[] = Array.from({ length: 12 }, (_, i) => (
+      { nome: `Antigo ${i}`, postos: { "1980": i + 1 } } as P));
+    itens.push({ nome: "Principal 2022", postos: { "2022": 1 } });
+    expect(ordenarPorPostoRecente(itens, EDS, postoEm).slice(0, 12).map((p) => p.nome))
+      .toContain("Principal 2022");
+  });
+
+  it("posto ausente vale +infinito; não muta a entrada; desempate final por nome", () => {
+    const itens: P[] = [
+      { nome: "B", postos: { "2022": 3 } }, { nome: "A", postos: { "2022": 3 } },
+      { nome: "Sem", postos: { "2022": null } },
+    ];
+    const copia = [...itens];
+    const ord = ordenarPorPostoRecente(itens, EDS, postoEm);
+    expect(ord.map((p) => p.nome)).toEqual(["A", "B", "Sem"]);
+    expect(itens).toEqual(copia);
+  });
+});
+
+describe("geometriaSpark", () => {
+  it("lacuna abre a linha: segmentos só entre pontos contíguos", () => {
+    const g = geometriaSpark([1, null, 3, 4, null, 5], 100, 20);
+    expect(g.segmentos).toHaveLength(1);          // só o trecho [3, 4]; os isolados não formam segmento
+    expect(g.segmentos[0]).toHaveLength(2);
+    expect(g.pontos.map((p) => p.i)).toEqual([0, 2, 3, 5]);
+    expect(g.ausentes.map((a) => a.i)).toEqual([1, 4]);
+  });
+
+  it("um único valor: ponto sem segmento, e as demais posições marcadas como ausentes", () => {
+    const g = geometriaSpark([null, null, null, null, 7], 100, 20);
+    expect(g.segmentos).toHaveLength(0);
+    expect(g.pontos).toHaveLength(1);
+    expect(g.ausentes).toHaveLength(4);
+  });
+
+  it("tudo nulo: nenhuma linha nem ponto, todas as posições ausentes", () => {
+    const g = geometriaSpark([null, null, null], 100, 20);
+    expect(g.pontos).toHaveLength(0);
+    expect(g.segmentos).toHaveLength(0);
+    expect(g.ausentes).toHaveLength(3);
+  });
+
+  it("posições equidistantes dentro da largura; zero sempre na escala (valor 0 na base)", () => {
+    const g = geometriaSpark([0, 10], 100, 20, 0);
+    expect(g.pontos[0].x).toBe(0);
+    expect(g.pontos[1].x).toBe(100);
+    expect(g.pontos[0].y).toBe(20);   // 0 = base
+    expect(g.pontos[1].y).toBe(0);    // máximo = topo
+  });
+});
+
+describe("ressalvasDoBloco", () => {
+  const comp = {
+    matriz: [
+      { medida: "imig", edicao: "1980", nivel: "mun", estado: "comparavel_com_ressalva", nota: "proxy_1980_volume" },
+      { medida: "emig", edicao: "1980", nivel: "mun", estado: "comparavel_com_ressalva", nota: "proxy_1980_volume" },
+      { medida: "emig", edicao: "2022", nivel: "mun", estado: "comparavel", nota: null },
+      { medida: "gini_linha", edicao: "2022", nivel: "mun", estado: "comparavel_com_ressalva", nota: "gini_supressao" },
+    ],
+    notas: { proxy_1980_volume: "Texto do proxy.", gini_supressao: "Texto do Gini." },
+  } as unknown as Comparabilidade;
+  const medidas = [
+    { medidaComp: "imig", rotulo: "Imigrantes" }, { medidaComp: "emig", rotulo: "Emigrantes" },
+    { medidaComp: "gini_linha", rotulo: "Gini" },
+  ];
+
+  it("agrupa por nota, junta medidas e edições, na ordem das medidas", () => {
+    const r = ressalvasDoBloco(comp, "mun", medidas, ["1980", "2022"], new Set<EdicaoSerie>(["1980", "2022"]));
+    expect(r.map((x) => x.nota)).toEqual(["proxy_1980_volume", "gini_supressao"]);
+    expect(r[0].medidas).toEqual(["Imigrantes", "Emigrantes"]);
+    expect(r[0].edicoes).toEqual(["1980"]);
+    expect(r[0].texto).toBe("Texto do proxy.");
+  });
+
+  it("ignora edições em que a unidade não tem número (não existia) e as não marcadas", () => {
+    expect(ressalvasDoBloco(comp, "mun", medidas, ["1980", "2022"], new Set<EdicaoSerie>(["2022"])).map((x) => x.nota))
+      .toEqual(["gini_supressao"]);
+    expect(ressalvasDoBloco(comp, "mun", medidas, ["2022"], new Set<EdicaoSerie>(["1980", "2022"])).map((x) => x.nota))
+      .toEqual(["gini_supressao"]);
   });
 });

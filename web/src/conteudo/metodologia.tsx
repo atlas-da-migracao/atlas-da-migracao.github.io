@@ -18,8 +18,34 @@
  *  edições publicadas com o texto de 2022. */
 import { edicao } from "../lib/edicoes";
 import type { Censo } from "../lib/edicoes";
+import { DIMENSOES } from "../lib/paletas";
 import type { Meta } from "../lib/types";
 import { useStore } from "../state/store";
+
+/** Versão do atlas a que o DOI de versão de "Como citar" se refere. Mesma versão que
+ *  pipeline/build_paginas.py usa ao lado de `DOI_VERSAO` ("v2.0.0"). Fica aqui, e não em
+ *  `meta.citacao`, porque pipeline/build_meta.py ainda não publica `citacao.versao` -- só
+ *  `doi_versao`; quando publicar, troque esta constante pelo campo do meta e o rótulo nunca mais
+ *  diverge do DOI (era "(v1.0.0)" fixo ao lado do DOI da v2.0.0). */
+const VERSAO_ATLAS = "v2.0.0";
+
+/** Moeda em que o salário mínimo de referência de cada edição está expresso. `meta.json` traz só o
+ *  número (`salario_minimo_referencia`), sem a moeda: 1991 e 1980 são em cruzeiros (Cr$), as
+ *  demais em reais -- o valor de 1991, por exemplo, aparecia como "(36.161,6)", sem unidade. */
+const MOEDA_SALARIO: Record<Censo, string> = {
+  "2022": "R$", "2010": "R$", "2000": "R$", "1991": "Cr$", "1980": "Cr$",
+};
+
+/** "Cr$ 36.161,60" / "R$ 1.212,00": sempre duas casas, separadores do pt-BR. */
+function salarioMinimoBR(valor: number, censo: Censo): string {
+  const n = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${MOEDA_SALARIO[censo]}\u00a0${n}`;
+}
+
+/** Rótulo de "migrante não natural" exatamente como os gráficos o mostram (lib/paletas.ts,
+ *  DIMENSOES.status), para que o texto cite o que o leitor vê na legenda. */
+const ROTULO_NAO_NATURAL =
+  DIMENSOES.status.categorias.find((c) => c.chave === "nao_natural")?.rotulo ?? "Não natural do destino";
 
 /** Base do erro-padrão publicado pela edição. "area_ponderacao" é o caso das edições com o
  *  desenho amostral completo (domicílio como UPA, área de ponderação como estrato);
@@ -155,14 +181,23 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
   const t = TEXTO[censo];
+  // Durante a troca de edição o meta da anterior pode continuar em uso até o novo chegar: sem
+  // esta guarda o texto da edição nova saía com fonte, limiares e citação da velha.
+  const edicaoDoMeta = meta?.edicao;
+  if (meta && edicaoDoMeta && edicaoDoMeta !== censo) {
+    return (
+      <div className="metodologia-conteudo">
+        <p className="muted" role="status">Carregando a metodologia do Censo {ed.nome}…</p>
+      </div>
+    );
+  }
+
   const r = meta?.revelacao;
   const sm = meta?.salario_minimo_referencia;
 
   const anoDe = ed.periodo.de.slice(0, 4);
   const anoAte = ed.periodo.ate.slice(0, 4);
   const fonte = meta?.fonte ?? `IBGE, Censo Demográfico ${ed.nome}, microdados da amostra`;
-  const rotuloNaoNatural = meta?.rotulos?.status?.nao_natural
-    ?? "não nasceu no município nem no exterior";
   // R2 só pode prometer detalhe nas dimensões que a edição publica (1980 não tem renda, 1991
   // não tem módulo pendular) -- mesmo padrão de recursos.* usado em Filtro/PainelPendular.
   const dimensoesDetalhe = [
@@ -268,7 +303,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
               <em>município</em> de nascimento — apenas se a pessoa nasceu no município onde mora e,
               em caso negativo, a unidade da federação ou o país. Sem o município natal é impossível
               separar a primeira saída do município natal da migração de etapas múltiplas, e as duas
-              ficam juntas na categoria que os gráficos chamam de “{rotuloNaoNatural}”.
+              ficam juntas na categoria que os gráficos chamam de “{ROTULO_NAO_NATURAL}”.
             </p>
           </>
         )}
@@ -283,7 +318,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
           já concluiu (ou não) sua trajetória escolar.
           {ed.recursos.renda
             ? <> A renda domiciliar per capita é expressa em múltiplos do salário mínimo de
-                referência de cada Censo{sm ? ` (${sm.toLocaleString("pt-BR")})` : ""}, para não
+                referência de cada Censo{sm ? ` (${salarioMinimoBR(sm, censo)})` : ""}, para não
                 perder o sentido com a inflação.</>
             : null}
         </p>
@@ -371,7 +406,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
               ? " amostradas — nesta edição o censo não identifica o domicílio, então o piso"
                 + " usual de domicílios amostrados foi substituído por esse piso de pessoas,"
                 + " mais alto que o das demais edições"
-              : ` (estimativa ponderada) ou menos de ${r?.min_domicilios ?? 3} domicílios amostrados`};</li>
+              : ` amostradas ou menos de ${r?.min_domicilios ?? 3} domicílios amostrados`};</li>
           <li>o detalhamento por característica ({dimensoesDetalhe})
             só aparece para fluxos com pelo menos {r?.min_pessoas_detalhe ?? 20} observações amostrais;</li>
           <li>toda contagem ponderada é arredondada a múltiplos de {r?.arredondamento ?? 5};</li>
@@ -476,7 +511,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
             da migração interna no Brasil</em>. Dados do Censo Demográfico {ed.nome} (IBGE).
             DOI: <a href={`https://doi.org/${meta.citacao.doi_conceito}`}>{meta.citacao.doi_conceito}</a>
             {" "}(todas as versões) /{" "}
-            <a href={`https://doi.org/${meta.citacao.doi_versao}`}>{meta.citacao.doi_versao}</a> (v1.0.0).
+            <a href={`https://doi.org/${meta.citacao.doi_versao}`}>{meta.citacao.doi_versao}</a> ({VERSAO_ATLAS}).
           </p>
           <p className="muted-pequeno">
             Dados e conteúdo sob{" "}

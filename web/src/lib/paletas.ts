@@ -37,7 +37,20 @@ const CATEGORICO = [
   { claro: "#1baf7a", escuro: "#199e70" },
   { claro: "#eda100", escuro: "#c98500" },
 ];
+/** Cinza de "sem informação" (ignorado, não determinado, não se aplica, sem declaração). */
 const NEUTRO = { claro: "#c3c2b7", escuro: "#52514e" };
+/** Segundo cinza, mais escuro no tema claro e mais claro no escuro, só para o residual
+ *  "Outros ou suprimido" (categoria `outros`: células abaixo do limiar de divulgação somadas à
+ *  categoria residual da dimensão). Fica distinto de NEUTRO para que as duas categorias possam
+ *  aparecer na MESMA barra sem se confundir -- antes `nao_determinado`/`nao_aplicavel` e
+ *  `outros` dividiam o mesmo cinza. Um token, um significado: toda categoria `outros` de
+ *  DIMENSOES e DIMENSOES_PENDULAR usa este. */
+const SUPRIMIDO = { claro: "#8f8e85", escuro: "#7c7b75" };
+
+/** Categoria residual genérica, para barras cuja paleta não declara `outros` (BarraPerfil a
+ *  acrescenta quando uma série traz valores fora da paleta, p.ex. uma categoria nova que o
+ *  pipeline publicou e a paleta ainda não conhece) -- assim o denominador nunca perde massa. */
+export const CATEGORIA_OUTROS: Categoria = { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO };
 
 /** Paleta categórica de 8 slots (módulo metropolitano), validada aos pares adjacentes
  *  com o validador da skill dataviz. Usada quando uma dimensão nominal precisa de mais
@@ -62,7 +75,7 @@ export const DIMENSOES = {
       // fica depois de nascido_exterior de propósito, para não entrar nos 4 primeiros slots
       // categóricos que o teste de contraste valida como simultaneamente distintos)
       { chave: "nao_natural", rotulo: "Não natural do destino", cor: CATEGORICO[1] },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   edu: {
@@ -74,7 +87,7 @@ export const DIMENSOES = {
       { chave: "medio_completo_superior_incompleto", rotulo: "Médio completo", cor: AZUL(2) },
       { chave: "superior_completo", rotulo: "Superior completo", cor: AZUL(4) },
       { chave: "nao_determinado", rotulo: "Não determinado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   renda: {
@@ -87,12 +100,25 @@ export const DIMENSOES = {
       { chave: "de_1_a_2_sm", rotulo: "De 1 a 2", cor: LARANJA(3) },
       { chave: "mais_de_2_sm", rotulo: "Mais de 2", cor: LARANJA(4) },
       { chave: "nao_aplicavel", rotulo: "Domicílio coletivo", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
 } as const;
 
 export type NomeDimensao = keyof typeof DIMENSOES;
+
+/** Categorias residuais, que não fazem sentido como RECORTE analítico (o seletor Filtro não as
+ *  oferece e `lerUrl` rejeita `?f=` com elas). Única definição: seletor e URL concordam. */
+export const CATEGORIAS_OCULTAS_NO_RECORTE: ReadonlySet<string> =
+  new Set(["outros", "nao_determinado", "nao_aplicavel"]);
+
+/** Separa a chave de um recorte, "dimensao__categoria", na dimensão e na categoria (ex.:
+ *  "edu__superior_completo" -> { dim: "edu", cat: "superior_completo" }). Divide só no PRIMEIRO
+ *  "__", então categorias com sublinhado duplo não se perdem. Sem "__", `cat` vem vazio. */
+export function separarRecorte(chave: string): { dim: string; cat: string } {
+  const i = chave.indexOf("__");
+  return i < 0 ? { dim: chave, cat: "" } : { dim: chave.slice(0, i), cat: chave.slice(i + 2) };
+}
 
 /** Nome legível de um recorte, a partir da chave "dimensao__categoria". */
 export function rotuloRecorte(chave: string): string {
@@ -172,6 +198,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "retorno_diario", rotulo: "Retorna 3+ dias/semana", cor: FREQUENCIA_8(0) },
       { chave: "semanal_longa", rotulo: "Retorno semanal ou mais longo", cor: FREQUENCIA_8(1) },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   /** só na edição 2010: V0661 pergunta "retorna DIARIAMENTE" (sim/não), não "3+ dias por
@@ -183,6 +210,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "retorno_diario", rotulo: "Retorna diariamente", cor: FREQUENCIA_8(0) },
       { chave: "semanal_longa", rotulo: "Não retorna diariamente", cor: FREQUENCIA_8(1) },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   modo: {
@@ -194,7 +222,12 @@ export const DIMENSOES_PENDULAR = {
       { chave: "automovel_taxi", rotulo: "Automóvel ou táxi", cor: FREQUENCIA_8(2) },
       { chave: "onibus_van_brt", rotulo: "Ônibus, van ou BRT", cor: FREQUENCIA_8(3) },
       { chave: "trem_metro", rotulo: "Trem ou metrô", cor: FREQUENCIA_8(4) },
-      { chave: "outros", rotulo: "Outros", cor: FREQUENCIA_8(5) },
+      // `outros` aqui mistura duas coisas que o dado publicado NÃO distingue: a categoria
+      // "outros meios de transporte" do questionário (02_classify.sql: códigos 11-14 e 99) e o
+      // residual de supressão (células com poucas observações, somadas a `outros` em
+      // publish.py). As duas saem na mesma linha de `pendular_*_dim` (GROUP BY categoria), então
+      // o rótulo diz as duas e a cor é a do residual, não a de um meio de transporte.
+      { chave: "outros", rotulo: "Outros meios ou suprimido", cor: SUPRIMIDO },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
     ],
   },
@@ -208,7 +241,9 @@ export const DIMENSOES_PENDULAR = {
       { chave: "de_31min_a_1h", rotulo: "31 min a 1 h", cor: AZUL(2) },
       { chave: "de_1_a_2h", rotulo: "1 a 2 h", cor: AZUL(3) },
       { chave: "mais_de_2h", rotulo: "Mais de 2 h", cor: AZUL(4) },
-      { chave: "outros", rotulo: "Não se desloca / ignorado", cor: NEUTRO },
+      // `outros` = "não se desloca" + "ignorado" (agruparTempo, lib/rm.ts) + o residual de
+      // supressão, que o dado publicado também chama de `outros`
+      { chave: "outros", rotulo: "Não se desloca, ignorado ou suprimido", cor: SUPRIMIDO },
     ],
   },
   /** só na edição 2010: V0662 tem 5 faixas próprias (ver 02_classify.sql), não aninhadas nas
@@ -223,6 +258,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "de_1_a_2h", rotulo: "1 a 2 h", cor: AZUL(3) },
       { chave: "mais_de_2h", rotulo: "Mais de 2 h", cor: AZUL(4) },
       { chave: "nao_se_aplica", rotulo: "Não retorna diariamente", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   posicao: {
@@ -235,6 +271,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "empregador", rotulo: "Empregador", cor: FREQUENCIA_8(3) },
       { chave: "conta_propria_familiar", rotulo: "Conta própria ou familiar", cor: FREQUENCIA_8(4) },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   setor: {
@@ -250,6 +287,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "admin_educacao_saude", rotulo: "Administração, educação e saúde", cor: FREQUENCIA_8(6) },
       { chave: "outros_servicos", rotulo: "Outros serviços", cor: FREQUENCIA_8(7) },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   /** grandes grupos ocupacionais (01..11), agrupados em 8 classes por semelhança de conteúdo */
@@ -264,7 +302,9 @@ export const DIMENSOES_PENDULAR = {
       { chave: "industria_operadores", rotulo: "Indústria, construção e operadores", cor: FREQUENCIA_8(4) },
       { chave: "elementares", rotulo: "Ocupações elementares", cor: FREQUENCIA_8(5) },
       { chave: "forcas_seguranca", rotulo: "Forças armadas, polícia e bombeiros", cor: FREQUENCIA_8(6) },
-      { chave: "mal_definidas", rotulo: "Mal definidas / ignorado", cor: NEUTRO },
+      // `agruparOcupacao` (lib/rm.ts) joga em `mal_definidas` tudo o que não é um dos códigos
+      // 01-11, inclusive o residual `outros` de supressão -- por isso não há `outros` aqui.
+      { chave: "mal_definidas", rotulo: "Mal definidas, ignorado ou suprimido", cor: NEUTRO },
     ],
   },
   renda_trab: {
@@ -277,6 +317,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "de_3_a_5_sm", rotulo: "De 3 a 5 salários mínimos", cor: LARANJA(3) },
       { chave: "mais_de_5_sm", rotulo: "Mais de 5 salários mínimos", cor: LARANJA(4) },
       { chave: "sem_declaracao", rotulo: "Sem declaração", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
   edu: DIMENSOES.edu,
@@ -295,6 +336,7 @@ export const DIMENSOES_PENDULAR = {
       { chave: "graduacao", rotulo: "Graduação", cor: AZUL(2) },
       { chave: "pos_graduacao", rotulo: "Pós-graduação", cor: AZUL(4) },
       { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
     ],
   },
 } as const;

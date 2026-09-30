@@ -28,23 +28,81 @@ export function bboxDeCentroides(pontos: { lon: number; lat: number }[], margem 
   return [minLon - dx * margem, minLat - dy * margem, maxLon + dx * margem, maxLat + dy * margem];
 }
 
-/** Bbox de uma geometria GeoJSON (Polygon ou MultiPolygon), com margem relativa. */
-export function bboxDeGeometria(geom: { type: string; coordinates: unknown }, margem = 0.12): Bbox | null {
+/** Extremos [minX, minY, maxX, maxY] de qualquer aninhamento de coordenadas GeoJSON; `null`
+ *  se não houver nenhum ponto. */
+function extremosDe(coords: unknown): Bbox | null {
   let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity;
-  const visitar = (coords: unknown): void => {
-    if (!Array.isArray(coords) || coords.length === 0) return;
-    if (typeof coords[0] === "number") {
-      const [lon, lat] = coords as [number, number];
+  const visitar = (c: unknown): void => {
+    if (!Array.isArray(c) || c.length === 0) return;
+    if (typeof c[0] === "number") {
+      const [lon, lat] = c as [number, number];
       if (lon < minLon) minLon = lon;
       if (lon > maxLon) maxLon = lon;
       if (lat < minLat) minLat = lat;
       if (lat > maxLat) maxLat = lat;
       return;
     }
-    for (const c of coords) visitar(c);
+    for (const filho of c) visitar(filho);
   };
-  visitar(geom.coordinates);
-  if (!Number.isFinite(minLon)) return null;
+  visitar(coords);
+  return Number.isFinite(minLon) ? [minLon, minLat, maxLon, maxLat] : null;
+}
+
+/** Área (fórmula do cadarço) do anel externo de um polígono GeoJSON. Só serve para comparar
+ *  partes entre si, então a unidade das coordenadas não importa. */
+function areaDoPoligono(poligono: unknown): number {
+  const anel = Array.isArray(poligono) ? poligono[0] : null;
+  if (!Array.isArray(anel)) return 0;
+  let soma = 0;
+  for (let i = 0; i < anel.length - 1; i++) {
+    const [x1, y1] = anel[i] as [number, number];
+    const [x2, y2] = anel[i + 1] as [number, number];
+    soma += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(soma) / 2;
+}
+
+/** Menor distância entre dois retângulos (0 se se tocam ou se sobrepõem). */
+function distanciaEntreBboxes(a: Bbox, b: Bbox): number {
+  const dx = Math.max(0, a[0] - b[2], b[0] - a[2]);
+  const dy = Math.max(0, a[1] - b[3], b[1] - a[3]);
+  return Math.hypot(dx, dy);
+}
+
+/** Uma parte de um MultiPolygon só entra no enquadramento se for relevante E vizinha da maior:
+ *  área de pelo menos 5% da maior parte e a até duas vezes a maior dimensão dela. Só a área não
+ *  basta -- Trindade e Martim Vaz somam ~11% da parte continental de Vitória, e com 5% de corte
+ *  ainda arrastariam o enquadramento 1.100 km para o oceano; a distância as tira (e mantém as
+ *  ilhas costeiras e os enclaves, sempre a poucas dezenas de km). Nas UFs, RGIs e RGInts, as
+ *  ilhas oceânicas (Trindade, Fernando de Noronha) têm ~0,02% da área e caem já pelo primeiro
+ *  critério. A feição continua inteira no mapa; isto só decide para onde a câmera olha. */
+const FRACAO_MIN_DA_MAIOR_PARTE = 0.05;
+const DISTANCIA_MAX_EM_DIMENSOES = 2;
+
+function partesParaEnquadrar(geom: { type: string; coordinates: unknown }): unknown {
+  if (geom.type !== "MultiPolygon" || !Array.isArray(geom.coordinates) || geom.coordinates.length < 2) {
+    return geom.coordinates;
+  }
+  const partes = geom.coordinates
+    .map((coords) => ({ coords, area: areaDoPoligono(coords), ext: extremosDe(coords) }))
+    .filter((p): p is { coords: unknown; area: number; ext: Bbox } => p.ext != null);
+  if (partes.length === 0) return geom.coordinates;
+  const maior = partes.reduce((m, p) => (p.area > m.area ? p : m));
+  const dimMaior = Math.max(maior.ext[2] - maior.ext[0], maior.ext[3] - maior.ext[1]);
+  return partes
+    .filter((p) => p === maior
+      || (p.area >= maior.area * FRACAO_MIN_DA_MAIOR_PARTE
+          && distanciaEntreBboxes(p.ext, maior.ext) <= DISTANCIA_MAX_EM_DIMENSOES * dimMaior))
+    .map((p) => p.coords);
+}
+
+/** Bbox para ENQUADRAR uma geometria GeoJSON (Polygon ou MultiPolygon), com margem relativa.
+ *  Num MultiPolygon considera só as partes relevantes (ver `partesParaEnquadrar`): a ilha
+ *  oceânica de uma feição não pode esticar a câmera até ela. */
+export function bboxDeGeometria(geom: { type: string; coordinates: unknown }, margem = 0.12): Bbox | null {
+  const ext = extremosDe(partesParaEnquadrar(geom));
+  if (!ext) return null;
+  const [minLon, minLat, maxLon, maxLat] = ext;
   // F10: fallback (geometria degenerada) recalibrado de 0,05° (~5,5km) para 5,5km em metros.
   const dx = maxLon - minLon || 5_500;
   const dy = maxLat - minLat || 5_500;

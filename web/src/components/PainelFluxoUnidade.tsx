@@ -13,6 +13,11 @@ const ROTULO_NIVEL: Record<NivelAgregado, string> = {
   rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
 };
 
+/** "as duas ..." no plural do nível, para a frase de troca equilibrada: nunca "municípios". */
+const PAR_DO_NIVEL: Record<NivelAgregado, string> = {
+  rgi: "as duas regiões imediatas", rgint: "as duas regiões intermediárias", uf: "as duas UFs",
+};
+
 interface Props {
   nivel: NivelAgregado;
   origem: string;
@@ -85,6 +90,13 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
         <div className="kpi kpi-largo">
           <div className="kpi-rotulo">Saldo do par</div>
           <div className="kpi-valor">{sinal(saldo)}</div>
+          <div className="kpi-detalhe">
+            {saldo > 0
+              ? `${ida.nm_destino} ganha ${num(Math.abs(saldo))} pessoas na troca com ${ida.nm_origem}`
+              : saldo < 0
+              ? `${ida.nm_origem} ganha ${num(Math.abs(saldo))} pessoas na troca com ${ida.nm_destino}`
+              : `troca equilibrada entre ${PAR_DO_NIVEL[nivel]}`}
+          </div>
         </div>
       </div>
 

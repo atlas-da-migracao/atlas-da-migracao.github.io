@@ -45,8 +45,12 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
     return () => { vivo = false; };
   }, [censo]);
 
+  // A lista é zerada ao trocar de edição (e de recorte): durante a carga a frio da edição nova
+  // (10-18 s na primeira visita) ela ficava com os maiores fluxos da anterior sob o título da
+  // nova, e com o rótulo do recorte antigo sob o novo. `alcance` e `capa` já faziam isto.
   useEffect(() => {
     let vivo = true;
+    setTop5([]);
     maioresFluxos(5, recorte).then((f) => { if (vivo) setTop5(f); }).catch(() => {});
     return () => { vivo = false; };
   }, [censo, recorte]);

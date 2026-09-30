@@ -103,6 +103,10 @@
       </main>
     </div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Rodapé estático: só para quem não executa JS (links para as páginas de SEO, fonte e
+         aviso). O React monta o próprio rodapé (.rodape, por edição e por tema) e src/main.tsx
+         remove este elemento logo após montar -- antes, ele ficava visível abaixo do app, dizia
+         sempre "Censo 2022" e ignorava o tema escuro. -->
     <footer id="rodape-estatico">
       <nav aria-label="Links do rodapé">
         <a href="/municipios/">Municípios</a> ·

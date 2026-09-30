@@ -3,9 +3,16 @@
  *  Marcas seguem a skill dataviz: 2px de respiro entre segmentos, extremidades
  *  arredondadas, rótulos diretos só nos segmentos grandes o suficiente, e legenda
  *  sempre presente -- a identidade nunca fica só na cor.
+ *
+ *  O denominador de cada barra é a soma de TODOS os valores da série, não só os das categorias
+ *  da paleta: a massa suprimida pelo pipeline vem na categoria `outros` (que as paletas
+ *  declaram, "Outros ou suprimido") e qualquer chave fora da paleta cai nesse mesmo residual.
+ *  Descartá-las renormalizava as barras sobre o que sobrou e inflava todos os percentuais
+ *  (setor de atividade pendular: mediana de 19% de massa escondida em 2022, 26,7% em 1980).
  */
 import type { Categoria } from "../lib/paletas";
 import { cor } from "../lib/paletas";
+import { prepararPerfil } from "../lib/perfil";
 import { num1 } from "../lib/format";
 import { corTextoLegivel } from "../lib/contraste";
 
@@ -29,7 +36,7 @@ interface Props {
 }
 
 export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVazio }: Props) {
-  const usadas = categorias.filter((c) => series.some((s) => (s.valores[c.chave] ?? 0) > 0));
+  const { usadas, valor: valorDe, total: totalDe } = prepararPerfil(categorias, series);
   if (usadas.length === 0) return null;
 
   return (
@@ -40,7 +47,7 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVa
       </h4>
 
       {series.map((s) => {
-        const total = usadas.reduce((acc, c) => acc + (s.valores[c.chave] ?? 0), 0);
+        const total = totalDe(s);
         if (total <= 0) {
           return (
             <div className="perfil-linha" key={s.rotulo}>
@@ -54,9 +61,9 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVa
             <div className="perfil-rotulo">{s.rotulo}</div>
             <div className="perfil-barra" role="img"
                  aria-label={`${s.rotulo}: ${usadas.map((c) =>
-                   `${c.rotulo} ${num1(((s.valores[c.chave] ?? 0) / total) * 100)}%`).join(", ")}`}>
+                   `${c.rotulo} ${num1((valorDe(s, c) / total) * 100)}%`).join(", ")}`}>
               {usadas.map((c) => {
-                const pct = ((s.valores[c.chave] ?? 0) / total) * 100;
+                const pct = (valorDe(s, c) / total) * 100;
                 if (pct <= 0) return null;
                 const fundo = cor(c.cor, escuro);
                 return (

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Fluxo, Meta, Municipio } from "../lib/types";
-import { ic95, num, num1, num2, rotuloPrecisao, sinal } from "../lib/format";
+import { ic95, num, num1, num2, rotuloPrecisao, sinal, sinal1 } from "../lib/format";
 import { perfilDoMunicipio } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
@@ -191,11 +191,15 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
 
       {recorteCarregando ? (
         <p className="muted carregando-recorte">Aplicando o recorte…</p>
+      ) : m.semDado ? (
+        // sob recorte, município sem nenhuma célula publicada para o subgrupo: os zeros que o
+        // App preenche são ausência de dado, não zero -- dizer isso em vez de mostrar "0"
+        <p className="muted carregando-recorte">Sem dado publicado para este recorte neste município.</p>
       ) : (
       <div className="kpis">
         <Kpi rotulo={<Termo chave="saldo">Saldo migratório</Termo>} valor={sinal(m.saldo)}
-             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.saldo, m.se_saldo)}</>} />
-        <Kpi rotulo={<Termo chave="taxa_liquida">Taxa líquida</Termo>} valor={`${sinal(m.tlm)} ‰`}
+             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.saldo, m.se_saldo, false)}</>} />
+        <Kpi rotulo={<Termo chave="taxa_liquida">Taxa líquida</Termo>} valor={m.tlm != null ? `${sinal1(m.tlm)} ‰` : "—"}
              detalhe="por mil habitantes de 5+ anos" />
         <Kpi rotulo={<Termo chave="imigrantes">Imigrantes</Termo>} valor={num(m.imig)}
              detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.imig, m.se_imig)}</>} />

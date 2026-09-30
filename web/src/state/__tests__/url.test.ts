@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  lerUrl, montarQuery, lerUnidadeSerie, lerEdicoesSerie,
+  lerUrl, montarQuery, lerUnidadeSerie, lerEdicoesSerie, lerTopN, lerFiltro,
+  TOP_MAX, TOP_PADRAO,
   type EstadoUrl,
 } from "../url";
 import { CENSO_PADRAO } from "../../lib/edicoes";
@@ -257,5 +258,90 @@ describe("lerEdicoesSerie (testes unitários)", () => {
 
   it("'2022,2010,2000' (3 edições em ordem reversa) → cronológico", () => {
     expect(lerEdicoesSerie("2022,2010,2000")).toEqual(["2000", "2010", "2022"]);
+  });
+});
+
+describe("lerUrl: ?top= (arcos exibidos)", () => {
+  const topDe = (q: string) => lerUrl(new URLSearchParams(q)).topN;
+
+  it("ausente -> padrão (15)", () => {
+    expect(topDe("")).toBe(TOP_PADRAO);
+  });
+
+  it("?top=abc -> padrão (antes virava LIMIT NaN)", () => {
+    expect(topDe("top=abc")).toBe(TOP_PADRAO);
+  });
+
+  it("?top= (vazio) -> padrão (antes virava LIMIT 0)", () => {
+    expect(topDe("top=")).toBe(TOP_PADRAO);
+  });
+
+  it("zero e negativos -> padrão", () => {
+    expect(topDe("top=0")).toBe(TOP_PADRAO);
+    expect(topDe("top=-5")).toBe(TOP_PADRAO);
+  });
+
+  it("valores válidos passam; decimais truncam; acima do teto -> 50", () => {
+    expect(topDe("top=1")).toBe(1);
+    expect(topDe("top=25")).toBe(25);
+    expect(topDe("top=7.9")).toBe(7);
+    expect(topDe("top=999")).toBe(TOP_MAX);
+    expect(TOP_MAX).toBe(50);
+  });
+
+  it("lerTopN aceita null", () => {
+    expect(lerTopN(null)).toBe(TOP_PADRAO);
+  });
+
+  it("round-trip: 15 não aparece na query; 30 sim", () => {
+    expect(montarQuery(estadoPadrao({ topN: 15 }))).not.toContain("top=");
+    const q = montarQuery(estadoPadrao({ topN: 30 }));
+    expect(q).toContain("top=30");
+    expect(lerUrl(new URLSearchParams(q)).topN).toBe(30);
+  });
+});
+
+describe("lerUrl: ?f= (recorte) validado contra a edição", () => {
+  const filtroDe = (q: string) => lerUrl(new URLSearchParams(q)).filtro;
+
+  it("recorte válido em 2022 passa", () => {
+    expect(filtroDe("f=edu__superior_completo")).toBe("edu__superior_completo");
+    expect(filtroDe("f=status__primeira_saida")).toBe("status__primeira_saida");
+    expect(filtroDe("f=renda__ate_1_4_sm")).toBe("renda__ate_1_4_sm");
+  });
+
+  it("?censo=2010&f=status__primeira_saida -> null (2010 não tem essa categoria)", () => {
+    expect(filtroDe("censo=2010&f=status__primeira_saida")).toBeNull();
+    expect(filtroDe("censo=2010&f=status__etapas_multiplas")).toBeNull();
+  });
+
+  it("?f=status__nao_natural em 2022 -> null (só existe em 2010)", () => {
+    expect(filtroDe("f=status__nao_natural")).toBeNull();
+  });
+
+  it("?censo=2010&f=status__nao_natural passa", () => {
+    expect(filtroDe("censo=2010&f=status__nao_natural")).toBe("status__nao_natural");
+  });
+
+  it("categorias residuais (ocultas no seletor) são rejeitadas", () => {
+    expect(filtroDe("f=status__outros")).toBeNull();
+    expect(filtroDe("f=edu__outros")).toBeNull();
+    expect(filtroDe("f=edu__nao_determinado")).toBeNull();
+    expect(filtroDe("f=renda__nao_aplicavel")).toBeNull();
+  });
+
+  it("renda__* em edição sem renda (1980) -> null", () => {
+    expect(filtroDe("censo=1980&f=renda__ate_1_4_sm")).toBeNull();
+    expect(filtroDe("censo=1980&f=edu__superior_completo")).toBe("edu__superior_completo");
+  });
+
+  it("pares desconhecidos ou com SQL embutido -> null", () => {
+    expect(filtroDe("f=foo__bar")).toBeNull();
+    expect(filtroDe("f=edu__superior_completo\";DROP TABLE fluxos;--")).toBeNull();
+    expect(filtroDe("f=")).toBeNull();
+  });
+
+  it("lerFiltro aceita null", () => {
+    expect(lerFiltro(null, CENSO_PADRAO)).toBeNull();
   });
 });

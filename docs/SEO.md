@@ -62,7 +62,9 @@ de `vite build`. Nunca escreve em `web/public` (não infla o repositório com HT
 Título, parágrafo do que é o atlas, os números nacionais já apurados (12,9 milhões de pessoas,
 5.570 municípios, 53.097 pares publicados) e links para os índices — tudo dentro de `#root`,
 substituído quando o React monta. Um `<footer id="rodape-estatico">` **fora** de `#root`
-permanece visível mesmo depois da montagem. `<title>`, description, canonical, OG/Twitter,
+serve a quem lê o HTML sem executar JS (rastreadores, leitores de texto); `web/src/main.tsx` o
+remove logo depois da montagem, porque o app tem o próprio rodapé (por edição e por tema) e os
+dois juntos faziam a página rolar 88-152 px além do app, sempre com o texto do Censo 2022. `<title>`, description, canonical, OG/Twitter,
 JSON-LD `WebSite` (com `SearchAction` apontando para `/?q={search_term_string}`) e `Dataset`.
 
 O `SearchAction` funciona de verdade: `web/src/App.tsx` lê `?q=` uma vez que os municípios

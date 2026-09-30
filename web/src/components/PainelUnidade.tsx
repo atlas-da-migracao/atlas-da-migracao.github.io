@@ -4,7 +4,7 @@
  *  agregados são somas de fluxos municipais publicados, não uma nova estimativa). */
 import type { Fluxo, Meta } from "../lib/types";
 import type { NivelAgregado, UnidadeAgregada } from "../db/queries";
-import { num, num2, sinal } from "../lib/format";
+import { num, num2, sinal, sinal1 } from "../lib/format";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { DiagramaAcordes } from "./DiagramaAcordes";
 import { AvisoProxy } from "./AvisoProxy";
@@ -13,6 +13,7 @@ import type { FluxoUF, UnidadeUF } from "../lib/acordes";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import { ResumoSerie } from "./ResumoSerie";
+import { classificarIem, NOME_TIPO_IEM } from "../lib/serie";
 import { Termo } from "./Termo";
 
 const ROTULO_NIVEL: Record<NivelAgregado, string> = {
@@ -165,11 +166,12 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
         </div>
         <div className="kpi">
           <div className="kpi-rotulo"><Termo chave="taxa_liquida">Taxa líquida</Termo> (por mil)</div>
-          <div className="kpi-valor">{unidade.tlm != null ? sinal(unidade.tlm) : "—"}</div>
+          <div className="kpi-valor">{sinal1(unidade.tlm)}</div>
         </div>
       </div>
       <p className="muted-pequeno explicacao">
-        Indicadores agregados: soma dos fluxos municipais publicados; sem erro-padrão próprio.
+        Indicadores agregados: soma dos pares publicados neste nível (após o limiar de revelação);
+        podem diferir da soma dos municípios; sem erro-padrão próprio.
       </p>
 
       {aoAbrirSerie && (
@@ -177,14 +179,18 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
                      aoAbrirSerieCompleta={aoAbrirSerie} />
       )}
 
-      {unidade.iem != null && (
-        <div className="nota-precisao">
-          <Termo chave="eficacia_iem">Índice de eficácia migratória</Termo>: <strong>{num2(unidade.iem)}</strong>{" "}
-          <span className="muted">
-            ({unidade.iem > 0.1 ? "atração consolidada" : unidade.iem < -0.1 ? "evasão consolidada" : "trocas equilibradas"})
-          </span>
-        </div>
-      )}
+      {unidade.iem != null && (() => {
+        // mesma tipologia de Baeninger do PainelMunicipio e do ResumoSerie logo acima (fonte
+        // única em lib/serie.ts: limiares ±0,15/1/3). Sem erro-padrão neste nível (soma de
+        // fluxos publicados), a classificação sai sem a guarda estatística -- `se = null`.
+        const tipo = classificarIem(unidade.iem, null);
+        return (
+          <div className="nota-precisao">
+            <Termo chave="eficacia_iem">Índice de eficácia migratória</Termo>: <strong>{num2(unidade.iem)}</strong>{" "}
+            <span className="muted">({tipo ? NOME_TIPO_IEM[tipo] : "—"})</span>
+          </div>
+        );
+      })()}
 
       {nivel === "uf" && acordes && (
         <section className="secao">

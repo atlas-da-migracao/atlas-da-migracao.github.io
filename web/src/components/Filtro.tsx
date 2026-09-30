@@ -1,13 +1,14 @@
 /** Filtro por característica do migrante.
  *  Recorta mapa, arcos e tabelas a um subgrupo -- por exemplo, só quem tem superior
  *  completo, ou só quem voltou ao município natal. */
-import { DIMENSOES, type NomeDimensao, cor } from "../lib/paletas";
+import { CATEGORIAS_OCULTAS_NO_RECORTE, DIMENSOES, type NomeDimensao, cor } from "../lib/paletas";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 
 const ORDEM: NomeDimensao[] = ["status", "edu", "renda"];
-/** categorias residuais não fazem sentido como recorte analítico */
-const OCULTAS = new Set(["outros", "nao_determinado", "nao_aplicavel"]);
+/** categorias residuais não fazem sentido como recorte analítico (mesma lista que `lerUrl`
+ *  usa para rejeitar `?f=` -- ver lib/paletas.ts) */
+const OCULTAS = CATEGORIAS_OCULTAS_NO_RECORTE;
 
 export function Filtro({ valor, aoMudar, escuro }: {
   valor: string | null; aoMudar: (v: string | null) => void; escuro: boolean;

@@ -13,58 +13,41 @@
 import { useEffect, useState } from "react";
 import { serieDaUnidade, serieFilhosDoMunicipio } from "../db/queries";
 import {
-  EDICOES_SERIE, NOME_TIPO_IEM, classificarIem, fraseSintese, rotuloEdicao,
-  type EdicaoSerie, type EntradaFrase, type NivelSerie, type PontoFrase,
+  EDICOES_SERIE, NOME_TIPO_IEM, filhosNoIntervalo, formatarIem, fraseSintese, geometriaSpark,
+  maeDaSerie, pontosDaSerie, rotuloEdicao,
+  type EdicaoSerie, type EntradaFrase, type FilhoMunicipio, type LinhaSerieFrase, type NivelSerie,
 } from "../lib/serie";
 import { num, sinal } from "../lib/format";
 import { Termo } from "./Termo";
 
-interface LinhaUnidadeSerie {
-  edicao: EdicaoSerie;
-  imig: number | null; emig: number | null; saldo: number | null; tlm: number | null;
-  iem: number | null; se_iem: number | null; tipo_iem: string | null;
-  turnover: number | null;
-  existia: boolean; estado_cobertura: string | null;
-  cd_mun_mae: string | null; nm_mun_mae: string | null;
-}
+type LinhaUnidadeSerie = LinhaSerieFrase & { tipo_iem: string | null; turnover: number | null };
 
-function estadoDoPonto(l: LinhaUnidadeSerie): PontoFrase["estado"] {
-  if (l.existia === false) return "nao_existia";
-  if (l.estado_cobertura === "sem_cobertura") return "sem_cobertura";
-  if (l.estado_cobertura === "insuficiente") return "cobertura_insuficiente";
-  if (l.iem == null) return "suprimido";
-  return "numero";
-}
+const SPARK_W = 64, SPARK_H = 22;
 
-function Sparkline({ valores, positivo = true }: { valores: (number | null)[]; positivo?: boolean }) {
-  const validos = valores.filter((v): v is number => v != null);
-  if (validos.length === 0) return <span className="serie-spark-vazia" aria-hidden />;
-  const min = Math.min(0, ...validos);
-  const max = Math.max(0, ...validos);
-  const span = max - min || 1;
-  const w = 60, h = 20, passo = w / (valores.length - 1 || 1);
-  const y = (v: number) => h - ((v - min) / span) * h;
-  let pontoAtual: { x: number; y: number }[] = [];
-  const segmentos: { x: number; y: number }[][] = [];
-  valores.forEach((v, i) => {
-    if (v == null) {
-      if (pontoAtual.length > 0) segmentos.push(pontoAtual);
-      pontoAtual = [];
-      return;
-    }
-    pontoAtual.push({ x: i * passo, y: y(v) });
-  });
-  if (pontoAtual.length > 0) segmentos.push(pontoAtual);
+/** Sparkline de uma posição por edição marcada: segmentos só entre pontos contíguos (lacuna =
+ *  linha aberta), um ponto em cada valor -- inclusive quando só há um --, marca tracejada nas
+ *  posições sem número e losango vazado em 1980 (proxy; o marcador segue a EDIÇÃO, não o índice:
+ *  com [1991, 2022] o primeiro ponto é 1991). Geometria em `geometriaSpark` (lib/serie.ts),
+ *  a mesma da coluna "tend." da seção completa. */
+function Sparkline({ valores, edicoes, positivo = true }: {
+  valores: (number | null)[]; edicoes: readonly EdicaoSerie[]; positivo?: boolean;
+}) {
+  const g = geometriaSpark(valores, SPARK_W, SPARK_H);
   return (
-    <svg className="serie-spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
-      {segmentos.map((seg, i) => (
+    <svg className="serie-spark" width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} aria-hidden>
+      {g.segmentos.map((seg, i) => (
         <polyline key={i} points={seg.map((p) => `${p.x},${p.y}`).join(" ")}
                   fill="none" stroke={positivo ? "var(--arc-in)" : "currentColor"} strokeWidth={1.5} />
       ))}
-      {valores.map((v, i) => v == null ? null : (
-        <circle key={i} cx={i * passo} cy={y(v)} r={i === 0 ? 2.6 : 2}
-                fill={i === 0 ? "none" : "currentColor"}
-                stroke={i === 0 ? "currentColor" : "none"} strokeWidth={i === 0 ? 1.2 : 0} />
+      {g.ausentes.map((a) => (
+        <rect key={`a${a.i}`} x={a.x - 2} y={SPARK_H / 2 - 4} width={4} height={8} fill="none"
+              stroke="var(--ink-muted)" strokeWidth={1} strokeDasharray="1.5 1.5" />
+      ))}
+      {g.pontos.map((p) => edicoes[p.i] === "1980" ? (
+        <polygon key={p.i} fill="var(--plane)" stroke="currentColor" strokeWidth={1.2}
+                 points={`${p.x},${p.y - 3.4} ${p.x + 3.4},${p.y} ${p.x},${p.y + 3.4} ${p.x - 3.4},${p.y}`} />
+      ) : (
+        <circle key={p.i} cx={p.x} cy={p.y} r={2} fill="currentColor" />
       ))}
     </svg>
   );
@@ -76,6 +59,7 @@ interface Props {
   nome: string;
   /** true quando o município é mãe de algum desmembramento (nota `municipio_mae`, seção 1.2). */
   aoAbrirSerieCompleta: () => void;
+  /** Recebe o CÓDIGO do município de origem (não o nome). */
   aoAbrirMae?: (cdMae: string) => void;
   /** Subconjunto de edições a exibir (F13) -- default: as cinco, para não quebrar os usos
    *  existentes em `PainelMunicipio`/`PainelUnidade`, que ainda não passam esta prop. */
@@ -85,56 +69,41 @@ interface Props {
 export function ResumoSerie({
   nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrirMae, edicoes = EDICOES_SERIE,
 }: Props) {
-  const [linhas, setLinhas] = useState<LinhaUnidadeSerie[] | null>(null);
-  const [filhos, setFilhos] = useState<string[]>([]);
+  // Cada resultado carrega a chave da unidade que o pediu, e só vale se ainda for a unidade
+  // atual: ao trocar de município a frase NUNCA sai com as linhas ou os filhos do anterior (nem
+  // por um quadro, que é o que um `setFilhos([])` dentro do efeito deixaria passar). `null` =
+  // carregando; a frase só é montada com as DUAS consultas da unidade atual terminadas.
+  const chave = `${nivel}:${codigo}`;
+  const [linhasSt, setLinhasSt] = useState<{ chave: string; linhas: LinhaUnidadeSerie[] } | null>(null);
+  const [filhosSt, setFilhosSt] = useState<{ chave: string; filhos: FilhoMunicipio[] } | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    setLinhas(null);
     serieDaUnidade(nivel, codigo).then((r) => {
-      if (vivo) setLinhas(r as unknown as LinhaUnidadeSerie[]);
-    }).catch(() => { if (vivo) setLinhas([]); });
+      if (vivo) setLinhasSt({ chave, linhas: r as unknown as LinhaUnidadeSerie[] });
+    }).catch(() => { if (vivo) setLinhasSt({ chave, linhas: [] }); });
     if (nivel === "mun") {
+      // Contrato: `nome` e `ultima_edicao_ausente` por filho (ver `filhosNoIntervalo`).
       serieFilhosDoMunicipio(codigo).then((r) => {
-        if (vivo) setFilhos(r.map((f) => f.codigo));
-      }).catch(() => {});
-    } else {
-      setFilhos([]);
+        if (vivo) setFilhosSt({ chave, filhos: r as unknown as FilhoMunicipio[] });
+      }).catch(() => { if (vivo) setFilhosSt({ chave, filhos: [] }); });
     }
     return () => { vivo = false; };
-  }, [nivel, codigo]);
+  }, [nivel, codigo, chave]);
 
-  if (linhas === null) return <p className="muted serie-carregando">Carregando a série…</p>;
+  const linhas = linhasSt?.chave === chave ? linhasSt.linhas : null;
+  const filhos = nivel !== "mun" ? [] : filhosSt?.chave === chave ? filhosSt.filhos : null;
+
+  if (linhas === null || filhos === null) return <p className="muted serie-carregando">Carregando a série…</p>;
   if (linhas.length === 0) return null;
 
-  const porEdicao = new Map(linhas.map((l) => [l.edicao, l]));
-  const pontos: PontoFrase[] = edicoes.map((edicao) => {
-    const l = porEdicao.get(edicao);
-    if (!l) return { edicao, estado: "nao_medido", iem: null, seIem: null, tipo: null,
-                      imig: null, emig: null, saldo: null, tlm: null, coberturaPop: null };
-    const estado = estadoDoPonto(l);
-    return {
-      edicao, estado,
-      iem: estado === "numero" ? l.iem : null,
-      seIem: l.se_iem,
-      tipo: estado === "numero" ? classificarIem(l.iem, l.se_iem) : null,
-      imig: estado === "numero" ? l.imig : null,
-      emig: estado === "numero" ? l.emig : null,
-      saldo: estado === "numero" ? l.saldo : null,
-      tlm: estado === "numero" ? l.tlm : null,
-      coberturaPop: null,
-    };
-  });
-
-  const primeiraMae = linhas.find((l) => l.cd_mun_mae);
+  const pontos = pontosDaSerie(linhas, edicoes);
   const entrada: EntradaFrase = {
     nome, nivel, pontos,
-    mae: primeiraMae ? {
-      nome: primeiraMae.nm_mun_mae ?? primeiraMae.cd_mun_mae!,
-      edicoes: linhas.filter((l) => l.cd_mun_mae).map((l) => l.edicao),
-      agregada: primeiraMae.cd_mun_mae === "NORTEGO",
-    } : undefined,
-    filhos: filhos.length > 0 ? { nomes: filhos, ultimaEdicaoJunto: "2010" } : undefined,
+    // Mãe = a da edição MAIS RECENTE em que a unidade ainda não existia; filhos = só os cuja
+    // separação cai dentro das edições marcadas (ver `maeDaSerie`/`filhosNoIntervalo`).
+    mae: maeDaSerie(linhas, edicoes),
+    filhos: filhosNoIntervalo(filhos, edicoes),
   };
 
   const frase = fraseSintese(entrada);
@@ -151,7 +120,7 @@ export function ResumoSerie({
       <p className="serie-frase">{frase}</p>
 
       {entrada.mae && aoAbrirMae && (
-        <button className="link-serie" onClick={() => aoAbrirMae(entrada.mae!.nome)}>
+        <button className="link-serie" onClick={() => aoAbrirMae(entrada.mae!.codigo ?? entrada.mae!.nome)}>
           Abrir a série de {entrada.mae.nome} ↗
         </button>
       )}
@@ -161,15 +130,16 @@ export function ResumoSerie({
           <div className="serie-numero" role="group" aria-label={`Saldo, ${sinal(ultima.saldo)}`}>
             <div className="serie-numero-rotulo"><Termo chave="saldo">Saldo</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">{sinal(ultima.saldo)}</div>
-            <Sparkline valores={pontos.map((p) => p.saldo)} />
+            <Sparkline valores={pontos.map((p) => p.saldo)} edicoes={edicoes} />
           </div>
           <div className="serie-numero" role="group"
                aria-label={`Eficácia, ${ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}`}>
             <div className="serie-numero-rotulo"><Termo chave="eficacia_iem">Eficácia</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">
-              {ultima.iem != null ? (ultima.iem > 0 ? "+" : "") + ultima.iem.toFixed(2) : "—"}
+              {formatarIem(ultima.iem)}
             </div>
             <div className="muted-pequeno">{ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}</div>
+            <Sparkline valores={pontos.map((p) => p.iem)} edicoes={edicoes} />
           </div>
           <div className="serie-numero" role="group" aria-label="Movimento total (entradas + saídas)">
             <div className="serie-numero-rotulo"><Termo chave="rotatividade">Movimento total</Termo> ({ultima.edicao})</div>
@@ -179,7 +149,7 @@ export function ResumoSerie({
             <div className="muted-pequeno">
               entraram {num(ultima.imig)}, saíram {num(ultima.emig)}
             </div>
-            <Sparkline valores={pontos.map((p) => (p.imig != null && p.emig != null ? p.imig + p.emig : null))} />
+            <Sparkline valores={pontos.map((p) => (p.imig != null && p.emig != null ? p.imig + p.emig : null))} edicoes={edicoes} />
           </div>
         </div>
       )}

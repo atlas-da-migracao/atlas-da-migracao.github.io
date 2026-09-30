@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { corDivergente, quebrasSimetricas, DIVERGENTE } from "../escalas";
+import { corDivergente, corSemDado, quebrasSimetricas, DIVERGENTE, SEM_DADO, type RGB } from "../escalas";
+import { luminancia } from "../contraste";
 import { ic95, sinal } from "../format";
+
+const paraHex = (c: RGB) => `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 
 describe("quebrasSimetricas", () => {
   it("devolve três quebras crescentes e positivas", () => {
@@ -32,7 +35,17 @@ describe("corDivergente", () => {
   it("usa o cinza neutro perto de zero", () => {
     expect(corDivergente(50, q, false)).toEqual(DIVERGENTE.claro.zero);
     expect(corDivergente(-50, q, false)).toEqual(DIVERGENTE.claro.zero);
-    expect(corDivergente(null, q, false)).toEqual(DIVERGENTE.claro.zero);
+  });
+
+  it("valor nulo ou não finito tem cor própria de \"sem dado\", distinta de \"baixa variação\"", () => {
+    for (const escuro of [false, true]) {
+      const zero = (escuro ? DIVERGENTE.escuro : DIVERGENTE.claro).zero;
+      const semDado = escuro ? SEM_DADO.escuro : SEM_DADO.claro;
+      expect(corDivergente(null, q, escuro)).toEqual(semDado);
+      expect(corDivergente(NaN, q, escuro)).toEqual(semDado);
+      expect(semDado).not.toEqual(zero);
+      expect(corSemDado(escuro)).toBe(`rgb(${semDado.join(",")})`);
+    }
   });
 
   it("distingue ganho de perda", () => {
@@ -44,6 +57,24 @@ describe("corDivergente", () => {
     expect(corDivergente(3000, q, true)).toEqual(DIVERGENTE.escuro.pos[2]);
     expect(corDivergente(3000, q, true)).not.toEqual(corDivergente(3000, q, false));
   });
+});
+
+describe("rampa divergente: claridade monotônica a partir do zero", () => {
+  // Regra do coroplético: cada passo se afasta da superfície e o extremo é o mais saliente.
+  // Tema claro: a superfície é clara, então a luminância CAI do zero ao extremo; tema escuro: a
+  // superfície é escura, então SOBE. Antes o braço do escuro estava na ordem do claro e a classe
+  // fraca era a mais clara (mais saliente sobre o fundo escuro).
+  for (const [tema, sentido] of [["claro", -1], ["escuro", 1]] as const) {
+    for (const braco of ["neg", "pos"] as const) {
+      it(`${tema}/${braco}: luminância ${sentido < 0 ? "decresce" : "cresce"} estritamente do zero ao extremo`, () => {
+        const p = DIVERGENTE[tema];
+        const seq = [p.zero, ...p[braco]].map((c) => luminancia(paraHex(c)));
+        for (let i = 1; i < seq.length; i++) {
+          expect((seq[i] - seq[i - 1]) * sentido).toBeGreaterThan(0);
+        }
+      });
+    }
+  }
 });
 
 describe("formatação", () => {

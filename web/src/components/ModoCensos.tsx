@@ -8,6 +8,11 @@ import { serieUnidadesParaBusca, type UnidadeBusca } from "../db/queries";
 import { lerUnidadeSerie } from "../state/url";
 import { useStore } from "../state/store";
 
+/** Unidade agregada de uma edição antiga -> UF de hoje que cobre o território. */
+const UF_DA_UNIDADE_AGREGADA: Record<string, { uf: string; nome: string }> = {
+  NORTEGO: { uf: "17", nome: "Tocantins" },
+};
+
 export function ModoCensos({ escuro, aoAbrirMetodologia }: {
   escuro: boolean; aoAbrirMetodologia: () => void;
 }) {
@@ -44,6 +49,11 @@ export function ModoCensos({ escuro, aoAbrirMetodologia }: {
         ? `${unidadeAtual.nome}/${unidadeAtual.uf_sigla}` : unidadeAtual.nome)
     : null;
   const naoEncontrada = Boolean(unidadeSerie) && unidades != null && !unidadeAtual;
+  // Unidade agregada de uma edição antiga (hoje só `NORTEGO`, os 52 municípios do norte de Goiás
+  // em 1980) não existe na base de 2022 -- mas o território existe: a UF de hoje é o caminho, em
+  // vez de um beco sem saída. Sai junto com a unidade agregada, se ela deixar de existir nos dados.
+  const ufDaAgregada = unidadeSerie && unidadeSerie.nivel === "mun"
+    ? UF_DA_UNIDADE_AGREGADA[unidadeSerie.codigo] ?? null : null;
 
   return (
     <main className="conteudo modo-censos" id="conteudo-principal">
@@ -72,6 +82,17 @@ export function ModoCensos({ escuro, aoAbrirMetodologia }: {
         ) : naoEncontrada ? (
           <section className="modo-censos-vazio">
             <h2>Esta unidade não existe na base territorial de 2022</h2>
+            {ufDaAgregada && (
+              <p>
+                {unidadeSerie.codigo === "NORTEGO" ? "Norte de Goiás (atual Tocantins) é" : "Esta unidade é"}{" "}
+                uma unidade agregada de uma edição antiga, sem série própria. O território existe
+                hoje como {ufDaAgregada.nome}.{" "}
+                <button className="link-serie"
+                        onClick={() => setUnidadeSerie({ nivel: "uf", codigo: ufDaAgregada.uf })}>
+                  Ver a série de {ufDaAgregada.nome}
+                </button>
+              </p>
+            )}
             <button className="link-serie" onClick={() => setUnidadeSerie(null)}>Escolher outra</button>
           </section>
         ) : unidadeAtual && nome ? (

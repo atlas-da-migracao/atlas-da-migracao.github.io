@@ -8,6 +8,7 @@ import { sankey, sankeyLinkHorizontal } from "d3-sankey";
 import type { SankeyGraph, SankeyLink, SankeyNode } from "d3-sankey";
 import type { DadosSankey } from "../lib/rm";
 import { CLASSE_TRAB, cor } from "../lib/paletas";
+import { rotulosVisiveisEmColunas } from "../lib/rotulos";
 
 interface NoDatum { id: string; rotulo: string }
 interface LinkDatum { classe: string }
@@ -26,6 +27,9 @@ interface Props {
 }
 
 const CINZA_RESIDENCIA = { claro: "#c3c2b7", escuro: "#52514e" };
+/** altura de uma linha de rótulo (fonte de 9,5 px) -- rótulos de nós mais próximos que isso
+ *  se sobrepõem */
+const ALTURA_ROTULO = 11;
 
 function corDoLink(classe: string, escuro: boolean): string {
   if (classe === "residencia" || classe === "outros") return cor(CINZA_RESIDENCIA, escuro);
@@ -52,6 +56,17 @@ export function Sankey({ dados, escuro, anoOrigem, anoDestino, largura = 340, al
 
   const path = sankeyLinkHorizontal<NoDatum, LinkDatum>();
   const profundidadeMax = Math.max(...layout.nodes.map((n) => n.depth ?? 0));
+  // Nós pequenos ficam tão próximos dos vizinhos que os rótulos se sobrepõem (colunas do meio e
+  // da direita, com muitos destinos de trabalho). Em cada coluna os maiores têm prioridade e o
+  // rótulo de um nó que colidiria com um já aceito é omitido; o nó segue desenhado e o nome
+  // continua disponível no <title> (dica ao passar o mouse).
+  const rotulosVisiveis = rotulosVisiveisEmColunas(
+    (layout.nodes as No[]).map((n) => ({
+      id: n.id, coluna: n.depth ?? 0,
+      y: ((n.y0 ?? 0) + (n.y1 ?? 0)) / 2, tamanho: (n.y1 ?? 0) - (n.y0 ?? 0),
+    })),
+    ALTURA_ROTULO,
+  );
 
   return (
     <svg viewBox={`0 0 ${largura} ${altura}`} width="100%" height={altura} role="img"
@@ -68,15 +83,18 @@ export function Sankey({ dados, escuro, anoOrigem, anoDestino, largura = 340, al
           const fimDaColuna = (n.depth ?? 0) === profundidadeMax;
           return (
             <g key={n.id}>
+              <title>{n.rotulo}</title>
               <rect x={n.x0} y={n.y0} width={(n.x1 ?? 0) - (n.x0 ?? 0)}
                     height={Math.max(1, (n.y1 ?? 0) - (n.y0 ?? 0))}
                     fill={escuro ? "#c3c2b7" : "#52514e"} />
-              <text x={fimDaColuna ? (n.x0 ?? 0) - 5 : (n.x1 ?? 0) + 5}
-                    y={((n.y0 ?? 0) + (n.y1 ?? 0)) / 2} dy="0.32em" fontSize={9.5}
-                    textAnchor={fimDaColuna ? "end" : "start"}
-                    fill={escuro ? "#ffffff" : "#0b0b0b"}>
-                {n.rotulo}
-              </text>
+              {rotulosVisiveis.has(n.id) && (
+                <text x={fimDaColuna ? (n.x0 ?? 0) - 5 : (n.x1 ?? 0) + 5}
+                      y={((n.y0 ?? 0) + (n.y1 ?? 0)) / 2} dy="0.32em" fontSize={9.5}
+                      textAnchor={fimDaColuna ? "end" : "start"}
+                      fill={escuro ? "#ffffff" : "#0b0b0b"}>
+                  {n.rotulo}
+                </text>
+              )}
             </g>
           );
         })}

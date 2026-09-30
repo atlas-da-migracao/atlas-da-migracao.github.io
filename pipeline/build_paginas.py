@@ -34,6 +34,7 @@ from markupsafe import Markup
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROCESSED = ROOT / "data/processed"
 DIST = ROOT / "web/dist"
+ASSETS = ROOT / "pipeline/assets"  # fontes da imagem OG (ver pipeline/assets/README.md)
 
 NOME_SITE = "Atlas da migração interna no Brasil"
 DESCRICAO_SITE = ("Saldos e fluxos migratórios entre os municípios brasileiros no "
@@ -78,6 +79,15 @@ ROTULO_PRECISAO = {
     "sem_estimativa": "sem estimativa",
 }
 
+# Rótulos da tipologia do fluxo intra-RM (chave de rm_fluxos_intra.tipologia) -- os mesmos de
+# TIPOLOGIA_INTRA_RM em web/src/lib/paletas.ts, para a página estática e o atlas interativo
+# nomearem igual; antes a tabela das páginas de RM mostrava a chave crua ("nucleo_periferia").
+TIPOLOGIA_ROTULO = {
+    "nucleo_periferia": "Núcleo → periferia",
+    "periferia_nucleo": "Periferia → núcleo",
+    "periferia_periferia": "Periferia → periferia",
+}
+
 
 # ============================== utilidades ==============================
 def slugify(s: str) -> str:
@@ -106,11 +116,34 @@ def precisao_de(cv: float | None) -> str:
     return "baixa"
 
 
-def ic95(valor: float | None, se: float | None) -> str | None:
+def _limite_ic(x: float, piso_zero: bool) -> str:
+    """Um limite do IC em inteiro pt-BR. Com `piso_zero` (contagens) o limite inferior nunca passa
+    de 0 -- uma contagem de pessoas não é negativa, e "-120 a 340" imigrantes não significa nada;
+    sem ele (saldo, que pode ser negativo) o sinal sai com o "−" tipográfico, como em `fmt_sinal`."""
+    v = int(round(x))
+    if piso_zero:
+        v = max(v, 0)
+    return f"−{fmt_int(-v)}" if v < 0 else fmt_int(v)
+
+
+def ic95(valor: float | None, se: float | None, piso_zero: bool = True) -> str | None:
+    """IC 95% = valor ± 1,96 × erro-padrão. `piso_zero=False` só para grandezas com sinal (saldo)."""
     if valor is None or se is None:
         return None
     m = 1.96 * se
-    return f"{fmt_int(valor - m)} a {fmt_int(valor + m)}"
+    return f"{_limite_ic(valor - m, piso_zero)} a {_limite_ic(valor + m, piso_zero)}"
+
+
+_RE_TABELA = re.compile(r"<table\b.*?</table>", re.S)
+
+
+def envolver_tabelas(html: str) -> str:
+    """Põe cada <table> dentro de <div class="rolagem">. Tabelas com colunas largas (nomes de
+    município + "ver par no atlas") estouravam a largura da tela no celular e arrastavam a página
+    inteira para o lado; o contêiner rola sozinho (`overflow-x: auto`, ver STATIC_CSS). Feito na
+    hora de escrever, e não em cada template, para que uma tabela nova não possa esquecê-lo.
+    `tabindex="0"` deixa a área rolável acessível ao teclado."""
+    return _RE_TABELA.sub(lambda m: f'<div class="rolagem" tabindex="0">{m.group(0)}</div>', html)
 
 
 def fmt_int(x: Any) -> str:
@@ -352,7 +385,7 @@ _MUNICIPIO = """{% extends "_base.html" %}
   <tbody>
     <tr><th scope="row">Imigrantes</th><td class="num tabular">{{ m.imig|fmtint }}</td><td class="num tabular">{{ m.ic_imig or "sem estimativa" }}</td><td>{{ m.precisao_imig_rotulo }}</td></tr>
     <tr><th scope="row">Emigrantes</th><td class="num tabular">{{ m.emig|fmtint }}</td><td class="num tabular">{{ m.ic_emig or "sem estimativa" }}</td><td>{{ m.precisao_emig_rotulo }}</td></tr>
-    <tr><th scope="row">Saldo migratório</th><td class="num tabular">{{ m.saldo|fmtsinal }}</td><td class="num tabular">{{ m.ic_saldo or "sem estimativa" }}</td><td>sem classificação própria (ver imigrantes/emigrantes)</td></tr>
+    <tr><th scope="row">Saldo migratório</th><td class="num tabular">{{ m.saldo|fmtsinal }}</td><td class="num tabular">{{ m.ic_saldo or "sem estimativa" }}</td><td>sem classificação</td></tr>
     <tr><th scope="row">Taxa líquida de migração (por mil hab.)</th><td class="num tabular">{{ m.tlm|fmtdec(2) if m.tlm is not none else "sem estimativa" }}</td><td class="num">-</td><td>-</td></tr>
     <tr><th scope="row">Índice de eficácia migratória</th><td class="num tabular">{{ m.iem|fmtdec(3) if m.iem is not none else "sem estimativa" }}</td><td class="num">-</td><td>-</td></tr>
   </tbody>
@@ -632,6 +665,7 @@ class Gerador:
         """`caminho` sempre termina com '/'; escreve <caminho>/index.html."""
         destino = DIST / caminho.lstrip("/") / "index.html"
         destino.parent.mkdir(parents=True, exist_ok=True)
+        html = envolver_tabelas(html)
         destino.write_text(html, encoding="utf-8")
         self.paginas.append(caminho)
         self.tamanhos.append(len(html.encode("utf-8")))
@@ -732,7 +766,7 @@ class Gerador:
                 precisao_imig_rotulo=ROTULO_PRECISAO.get(m["precisao_imig"], m["precisao_imig"]),
                 precisao_emig_rotulo=ROTULO_PRECISAO.get(precisao_emig, precisao_emig),
                 ic_imig=ic95(m["imig"], m.get("se_imig")), ic_emig=ic95(m["emig"], m.get("se_emig")),
-                ic_saldo=ic95(saldo, m.get("se_saldo")),
+                ic_saldo=ic95(saldo, m.get("se_saldo"), piso_zero=False),  # saldo pode ser negativo
             )
 
             titulo = f"Migração em {m['nm_mun']}/{m['uf_sigla']} (2017-2022)"
@@ -867,7 +901,7 @@ class Gerador:
                 top_intra.append({
                     "slug_o": slug_municipio(mo["nm_mun"], mo["uf_sigla"], f["origem"]), "nome_o": f"{mo['nm_mun']}/{mo['uf_sigla']}",
                     "slug_d": slug_municipio(md["nm_mun"], md["uf_sigla"], f["destino"]), "nome_d": f"{md['nm_mun']}/{md['uf_sigla']}",
-                    "tipologia": f["tipologia"], "total": f["total"],
+                    "tipologia": TIPOLOGIA_ROTULO.get(f["tipologia"], f["tipologia"]), "total": f["total"],
                 })
 
             mp = d["mig_pend_soma_por_rm"].get(cd_rm, {})
@@ -1379,9 +1413,15 @@ h3 { font-size:1.05em; }
 .nota, .muted, .nota-caption { color: var(--ink-muted-texto); font-size:0.9em; }
 table { border-collapse:collapse; width:100%; margin:12px 0 20px; font-size:0.93em; }
 caption { text-align:left; font-weight:600; margin-bottom:6px; }
-th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--hairline); }
+th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--hairline); overflow-wrap:anywhere; }
 th[scope="col"] { border-bottom:2px solid var(--hairline); }
-.num { text-align:right; }
+/* números nunca quebram no meio (overflow-wrap: anywhere nas células acima faria "1.234.567" virar
+   uma coluna de dígitos no celular) */
+.num { text-align:right; white-space:nowrap; }
+/* cada <table> vem dentro de .rolagem (envolver_tabelas): se mesmo com a quebra de linha a tabela
+   ainda for mais larga que a tela, ela rola dentro do contêiner em vez de alargar a página */
+.rolagem { overflow-x:auto; margin:12px 0 20px; }
+.rolagem > table { margin:0; }
 .tabular { font-variant-numeric: tabular-nums; }
 .colunas-2 { display:grid; grid-template-columns:1fr; gap:0 24px; }
 @media (min-width:760px) { .colunas-2 { grid-template-columns:1fr 1fr; } }
@@ -1404,6 +1444,27 @@ def gerar_css() -> None:
 
 
 # ============================== imagem OG (Pillow, com fallback) ==============================
+# DejaVu Sans versionada em pipeline/assets/ (origem, licença e SHA-256 no README da pasta). O
+# caminho antigo apontava para fontes do macOS (/System/Library/Fonts/Supplemental/Arial*.ttf),
+# que não existem no runner Linux do CI: caía em `load_default()` (bitmap de ~10 px, sem acentos)
+# e a imagem publicada saía com o texto minúsculo e incompleto.
+FONTE_OG_TITULO = ASSETS / "DejaVuSans-Bold.ttf"
+FONTE_OG_SUBTITULO = ASSETS / "DejaVuSans.ttf"
+
+
+def fonte_og(caminho: pathlib.Path, tamanho: int):
+    """TTF versionada no tamanho pedido; se faltar, a fonte embutida do Pillow **no mesmo
+    tamanho** (`load_default(size=...)`, Pillow >= 10.1) -- nunca o bitmap fixo de ~10 px."""
+    from PIL import ImageFont
+    try:
+        return ImageFont.truetype(str(caminho), tamanho)
+    except OSError:
+        try:
+            return ImageFont.load_default(size=tamanho)
+        except TypeError:  # Pillow < 10.1 não aceita `size`
+            return ImageFont.load_default()
+
+
 def gerar_og_image() -> bool:
     try:
         from PIL import Image, ImageDraw, ImageFont
@@ -1412,12 +1473,8 @@ def gerar_og_image() -> bool:
     largura, altura = 1200, 630
     img = Image.new("RGB", (largura, altura), (13, 13, 13))
     draw = ImageDraw.Draw(img)
-    try:
-        fonte_titulo = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 56)
-        fonte_sub = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 32)
-    except OSError:
-        fonte_titulo = ImageFont.load_default()
-        fonte_sub = ImageFont.load_default()
+    fonte_titulo = fonte_og(FONTE_OG_TITULO, 56)
+    fonte_sub = fonte_og(FONTE_OG_SUBTITULO, 32)
 
     draw.rectangle([0, altura - 12, largura, altura], fill=(28, 92, 171))
     linhas = ["Atlas da migração", "interna no Brasil"]

@@ -7,7 +7,7 @@
  */
 import type { AbaRM, Nivel } from "./store";
 import type { Metrica } from "../lib/types";
-import { DIMENSOES } from "../lib/paletas";
+import { CATEGORIAS_OCULTAS_NO_RECORTE, DIMENSOES, separarRecorte } from "../lib/paletas";
 import { CENSOS, CENSO_PADRAO, edicao, type Censo } from "../lib/edicoes";
 import {
   EDICOES_SERIE, MIN_EDICOES_SERIE, NIVEIS_SERIE, ordenarEdicoes,
@@ -25,12 +25,38 @@ export interface UnidadeSerieSel { nivel: NivelSerie; codigo: string }
 
 const NIVEIS: Nivel[] = ["mun", "rgi", "rgint", "uf"];
 
-// o recorte vira nome de coluna no SQL: só aceita pares dimensão__categoria conhecidos (a
-// validação por edição -- ex.: "status__primeira_saida" não existe em 2010 -- fica a cargo de
-// quem monta as opções do seletor (Filtro.tsx), não daqui; aqui só garante que é um par
-// dimensão__categoria conhecido em ALGUMA edição, evitando SQL arbitrário vindo da URL)
+// o recorte vira nome de coluna no SQL: só aceita pares dimensão__categoria conhecidos em
+// ALGUMA edição (evita SQL arbitrário vindo da URL); `lerFiltro` restringe depois à edição e
+// às categorias que o seletor (Filtro.tsx) realmente oferece
 const RECORTES = new Set(Object.entries(DIMENSOES).flatMap(([dim, d]) =>
   d.categorias.map((c) => `${dim}__${c.chave}`)));
+
+/** `?top=` (arcos exibidos por município/unidade): inteiro finito >= 1, com teto em
+ *  `TOP_MAX`; qualquer outra coisa ("abc", "", "0", "-3") cai no padrão. Sem esta guarda,
+ *  `?top=abc` virava `LIMIT NaN` e `?top=` virava `LIMIT 0` nas consultas de fluxos. */
+export const TOP_PADRAO = 15;
+export const TOP_MAX = 50;
+export function lerTopN(s: string | null): number {
+  const n = Number.parseInt(s ?? "", 10);
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, TOP_MAX) : TOP_PADRAO;
+}
+
+/** `?f=` (recorte por característica), validado contra a edição -- a MESMA regra do seletor
+ *  (Filtro.tsx): par dimensão__categoria conhecido; sem categorias residuais
+ *  (`CATEGORIAS_OCULTAS_NO_RECORTE`); `renda__*` só em edição que publica renda; `status__X`
+ *  só se X é uma das `statusCategorias` da edição (em 2022 não existe `status__nao_natural`; em
+ *  2010 não existe `status__primeira_saida`). A coluna larga de um recorte inexistente nem
+ *  existe no parquet da edição: a consulta daria erro de binder e o painel ficaria preso em
+ *  "Aplicando o recorte…". Devolve null se o recorte não vale para a edição. */
+export function lerFiltro(f: string | null, censo: Censo): string | null {
+  if (!f || !RECORTES.has(f)) return null;
+  const { dim, cat } = separarRecorte(f);
+  if (CATEGORIAS_OCULTAS_NO_RECORTE.has(cat)) return null;
+  const ed = edicao(censo);
+  if (dim === "renda" && !ed.recursos.renda) return null;
+  if (dim === "status" && !ed.statusCategorias.includes(cat)) return null;
+  return f;
+}
 
 const RE_CODIGO_SERIE = /^[0-9A-Z]{1,12}$/;
 
@@ -96,13 +122,11 @@ export function lerUrl(p: URLSearchParams): EstadoUrl {
     nivel: (n && NIVEIS.includes(n) ? n : "mun") as Nivel,
     origem: p.get("o"),
     destino: p.get("d"),
-    // como ?rm=/?aba= abaixo: ignora ?f=renda__* vindo de um link para uma edição sem essa
-    // dimensão (hoje só 1980, ver lib/edicoes.ts `recursos.renda`) -- a coluna larga
-    // correspondente nem existe no parquet publicado dessa edição.
-    filtro: RECORTES.has(p.get("f") ?? "") && (edicao(censo).recursos.renda || !p.get("f")?.startsWith("renda__"))
-      ? p.get("f") : null,
+    // como ?rm=/?aba= abaixo: ignora ?f= que não vale para a edição (renda__* sem renda, hoje
+    // só 1980; status__X fora de `statusCategorias`; categorias residuais) -- ver `lerFiltro`.
+    filtro: lerFiltro(p.get("f"), censo),
     metrica: (m && ["saldo", "tlm", "imig", "emig", "iem"].includes(m) ? m : "tlm") as Metrica,
-    topN: Number(p.get("top") ?? 15),
+    topN: lerTopN(p.get("top")),
     // módulo metropolitano: ignora ?rm= vindo de um link para uma edição sem esse recurso
     // (ver lib/edicoes.ts) -- nunca chega a chamar as consultas de RM, que dariam erro de
     // "tabela não encontrada" na conexão DuckDB dessa edição (ver db/duckdb.ts).
@@ -141,7 +165,7 @@ export function montarQuery(e: EstadoUrl): string {
   if (e.selecao) p.set("sel", e.selecao);
   if (e.origem && e.destino) { p.set("o", e.origem); p.set("d", e.destino); }
   if (e.metrica !== "tlm") p.set("m", e.metrica);
-  if (e.topN !== 15) p.set("top", String(e.topN));
+  if (e.topN !== TOP_PADRAO) p.set("top", String(e.topN));
   if (e.filtro) p.set("f", e.filtro);
   if (!e.mostrarFluxos) p.set("fluxos", "0");
   if (e.mostrarSatelite) p.set("sat", "1");

@@ -17,14 +17,20 @@ import type { Meta } from "../../lib/types";
 /** Mesma forma do meta.json gerado por pipeline/build_meta.py (só os campos que a página lê).
  *  `acesso` e os limiares acompanham o que cada edição realmente publicou: 1980 não tem chave
  *  de domicílio, então `min_domicilios` é null e os pisos de pessoas são mais altos. */
+const SALARIO_MINIMO: Record<Censo, number> = {
+  "2022": 1212, "2010": 510, "2000": 151, "1991": 36161.6, "1980": 4149.6,
+};
+
 function fakeMeta(censo: Censo): Meta {
   const publico = censo !== "2022";
   const semChaveDomicilio = censo === "1980";
+  // `edicao` já vem no meta.json real (pipeline/build_meta.py), mas ainda não está no tipo Meta
   return {
+    edicao: censo,
     versao_dados: `1.0.0-${censo}`,
     fonte: `IBGE, Censo Demográfico ${censo}, microdados da amostra `
       + `(${publico ? "dados públicos" : "acesso controlado"})`,
-    salario_minimo_referencia: 1212,
+    salario_minimo_referencia: SALARIO_MINIMO[censo],
     maior_fluxo: 23425,
     revelacao: {
       min_pessoas: semChaveDomicilio ? 20 : 5,
@@ -44,15 +50,16 @@ function fakeMeta(censo: Censo): Meta {
     aviso: `Estimativas ... Censo Demográfico ${censo} (IBGE, ...)`,
     aviso_proxy: semChaveDomicilio ? "Esta edição não tem quesito de data fixa: ..." : null,
     aviso_proxy_resumo: semChaveDomicilio ? "O Censo 1980 não perguntou ..." : null,
-  };
+  } as Meta;
 }
 
-async function renderizar(censo: Censo): Promise<string> {
+/** `meta` permite simular o meta de OUTRA edição ainda em uso durante a troca de censo. */
+async function renderizar(censo: Censo, meta: Meta = fakeMeta(censo)): Promise<string> {
   vi.resetModules();
   vi.stubGlobal("location", { search: `?censo=${censo}`, pathname: "/", href: "/" });
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {} });
   const { Metodologia } = await import("../metodologia");
-  return renderToStaticMarkup(createElement(Metodologia, { meta: fakeMeta(censo) }));
+  return renderToStaticMarkup(createElement(Metodologia, { meta }));
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -75,7 +82,9 @@ describe("página de metodologia por edição", () => {
     expect(html).toContain("31/07/2005");
     expect(html).toContain("31/07/2010");
     expect(html).not.toContain("primeira saída do município natal</strong>");
-    expect(html).toContain("Não nasceu no município nem no exterior");
+    // o texto cita o rótulo que os gráficos mostram (lib/paletas.ts), não o de meta.rotulos
+    expect(html).toContain("Não natural do destino");
+    expect(html).not.toContain("Não nasceu no município nem no exterior");
     expect(html).toContain("Censo Demográfico 2010 (IBGE)");
   });
 
@@ -112,6 +121,36 @@ describe("página de metodologia por edição", () => {
     expect(html).toContain("menos de 20 pessoas");
     expect(html).not.toContain("domicílios amostrados;");
     expect(html).toContain("Censo Demográfico 1980 (IBGE)");
+  });
+
+  it("o piso de revelação é sobre registros AMOSTRADOS, não sobre estimativa ponderada", async () => {
+    const html = await renderizar("2022");
+    expect(html).toContain("menos de 5 pessoas amostradas ou menos de 3 domicílios amostrados");
+    expect(html).not.toContain("estimativa ponderada");
+  });
+
+  it("o DOI de versão é rotulado com a versão vigente do atlas (não mais \"v1.0.0\")", async () => {
+    const html = await renderizar("2022");
+    expect(html).toContain("10.5281/zenodo.22469792</a> (v2.0.0)");
+    expect(html).not.toContain("v1.0.0");
+  });
+
+  it("salário mínimo de referência com duas casas e a moeda da edição", async () => {
+    const nbsp = "\u00a0";
+    expect(await renderizar("2022")).toContain(`(R$${nbsp}1.212,00)`);
+    expect(await renderizar("2010")).toContain(`(R$${nbsp}510,00)`);
+    expect(await renderizar("2000")).toContain(`(R$${nbsp}151,00)`);
+    expect(await renderizar("1991")).toContain(`(Cr$${nbsp}36.161,60)`);
+    // 1980 não publica renda: o salário mínimo nem é mencionado
+    expect(await renderizar("1980")).not.toContain("salário mínimo de referência");
+  });
+
+  it("meta de outra edição ainda em uso (troca de censo) mostra \"carregando\" em vez de misturar", async () => {
+    const html = await renderizar("2010", fakeMeta("2022"));
+    expect(html).toContain("Carregando a metodologia do Censo 2010");
+    expect(html).not.toContain("acesso controlado");
+    expect(html).not.toContain("Censo Demográfico 2022");
+    expect(html).not.toContain("10.5281/zenodo");
   });
 
   it("nenhuma edição pública alega acesso controlado, e toda edição cita a si mesma", async () => {

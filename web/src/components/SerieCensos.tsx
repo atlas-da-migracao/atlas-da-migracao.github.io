@@ -2,12 +2,12 @@
  *  no mesmo padrão de `PaginaMetodologia.tsx` (foco no fechar, Esc, devolve foco ao gatilho).
  *  Ver docs/design_serie_censos.md, seções 1.2 (wireframe), 3 (blocos) e 6 (responsivo/teclado).
  *
- *  Desvios do documento de desenho, registrados no relatório de entrega (não decisão
- *  silenciosa): por limite de tempo desta fase, os gráficos do Bloco 2 (plano MEI×CMI com
- *  contornos de ANMR, dispersão de Fielding, figura de Courgeau) e o mapa comparativo do
- *  Bloco 1 NÃO foram implementados como visualização gráfica -- aparecem como tabela de
- *  números (mesmos dados, mesma fonte, sem a peça visual). `@observablehq/plot` já é
- *  dependência do projeto para isso ser completado depois sem nova biblioteca.
+ *  Unidades: `pct_interestadual` chega de `unidades_serie` como FRAÇÃO (0-1) e é convertida para
+ *  percentual UMA vez, na leitura (`normalizarLinhaUnidade`, lib/serie.ts) -- daí em diante tudo
+ *  aqui lê percentual. `iem` é sempre o índice [-1, 1], formatado por `formatarIem`.
+ *
+ *  O Bloco 2 (gráficos MEI×CMI, Fielding, Courgeau) mora em `GraficosSistema.tsx` e o mapa
+ *  comparativo do Bloco 1 em `MapaSerieCensos.tsx`; aqui ficam as tabelas, a frase e os Blocos 3-4.
  */
 import { useEffect, useState } from "react";
 import { GLOSSARIO } from "../lib/glossario";
@@ -16,11 +16,14 @@ import {
   serieDaUnidade, serieDosPares, serieDoSistema, serieFilhosDoMunicipio, seriePerfil,
 } from "../db/queries";
 import {
-  classificarIem, edicaoAnterior, filtrarEdicoes, fraseSintese, harmonizarStatus, rotuloEdicao,
+  carregarComparabilidade, edicaoAnterior, estadoDaCelula, filhosNoIntervalo, filtrarEdicoes,
+  formatarIem, fraseSintese, geometriaSpark, maeDaSerie, normalizarLinhaUnidade,
+  ordenarPorPostoRecente, perfilStatusDaEdicao, pontosDaSerie, ressalvasDoBloco, ROTULO_NIVEL_PLURAL, rotuloEdicao,
   rotuloIntervalo, tipoFluxoPredominante, tramaDoEstado, PALAVRA_ESTADO,
-  type EdicaoSerie, type EntradaFrase, type EstadoCelula, type NivelSerie, type PontoFrase,
+  type Comparabilidade, type EdicaoSerie, type EntradaFrase, type EstadoCelula,
+  type FilhoMunicipio, type NivelSerie,
 } from "../lib/serie";
-import { num, num1, num2, sinal } from "../lib/format";
+import { num, num1, num2, sinal, sinal1 } from "../lib/format";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { DIMENSOES } from "../lib/paletas";
 import { MapaSerieCensos } from "./MapaSerieCensos";
@@ -49,7 +52,7 @@ interface LinhaUnidadeSerie {
   distancia_media: number | null; distancia_mediana: number | null; pct_interestadual: number | null;
   n_parceiros: number | null; gini_linha: number | null; gini_coluna: number | null;
   saida_trab: number | null; entrada_trab: number | null; pct_pendular: number | null;
-  existia: boolean; estado_cobertura: string | null;
+  existia: boolean; estado_cobertura: string | null; cobertura_pop: number | null;
   cd_mun_mae: string | null; nm_mun_mae: string | null;
 }
 
@@ -59,6 +62,19 @@ function estadoDoPonto(l: LinhaUnidadeSerie | undefined): EstadoCelula {
   if (l.estado_cobertura === "sem_cobertura") return "sem_cobertura";
   if (l.estado_cobertura === "insuficiente") return "cobertura_insuficiente";
   return "numero";
+}
+
+/** Ressalva de comparabilidade de UMA célula (`comparabilidade.json`): o selo "ⓘ" leva o texto da
+ *  nota como tooltip. `nao_comparavel` nunca mostra número (invariante da F12.5-t). */
+interface RessalvaCelula { estado: "comparavel_com_ressalva" | "nao_comparavel"; texto: string }
+
+function MarcaRessalva({ texto }: { texto: string }) {
+  return (
+    <span role="img" aria-label={`Ressalva: ${texto}`} title={texto}
+          style={{ cursor: "help", marginLeft: 3, fontSize: "0.85em", color: "var(--ink-muted-texto)" }}>
+      ⓘ
+    </span>
+  );
 }
 
 /** Célula de uma medida qualquer: número quando existe, palavra + trama quando não.
@@ -72,9 +88,13 @@ function estadoDoPonto(l: LinhaUnidadeSerie | undefined): EstadoCelula {
  *  como "não publicado" com a trama cruzada (mesma família visual de "há dado, mas não pode
  *  ser mostrado" -- aqui por insuficiência estrutural, não por sigilo, mas o efeito para quem
  *  lê é o mesmo: nenhum número, e a razão está no tooltip). */
-function Celula({ valor, estado, formatar }: {
+function Celula({ valor, estado, formatar, ressalva }: {
   valor: number | null; estado: EstadoCelula; formatar: (v: number) => string;
+  ressalva?: RessalvaCelula | null;
 }) {
+  if (estado === "numero" && ressalva?.estado === "nao_comparavel") {
+    return <td className="serie-celula-vazia" title={ressalva.texto}>{PALAVRA_ESTADO.nao_comparavel}</td>;
+  }
   if (estado === "numero" && valor == null) {
     return <td className="serie-celula-vazia trama-cruzada" title="Não foi possível calcular esta medida para esta unidade/edição.">
       não publicado
@@ -88,22 +108,35 @@ function Celula({ valor, estado, formatar }: {
       </td>
     );
   }
-  return <td>{formatar(valor)}</td>;
+  return <td>{formatar(valor)}{ressalva && <MarcaRessalva texto={ressalva.texto} />}</td>;
 }
 
-function LinhaSpark({ valores }: { valores: (number | null)[] }) {
-  const validos = valores.filter((v): v is number => v != null);
-  if (validos.length === 0) return <td className="serie-spark-cel">—</td>;
-  const min = Math.min(0, ...validos), max = Math.max(0, ...validos);
-  const span = max - min || 1;
-  const w = 70, h = 22, passo = w / (valores.length - 1 || 1);
-  const y = (v: number) => h - ((v - min) / span) * h;
+const SPARK_W = 76, SPARK_H = 24;
+
+/** Coluna "tend.": uma posição por edição marcada, sem interpolar. Segmentos só entre pontos
+ *  contíguos (uma lacuna abre a linha), um ponto em cada valor -- inclusive quando só há um --
+ *  e uma marca tracejada nas posições sem número. 1980 (proxy) é losango vazado, como no
+ *  desenho (seção 1.1); o marcador depende da EDIÇÃO, não da posição (com o subconjunto
+ *  [1991, 2022] o primeiro ponto é 1991, círculo cheio). */
+function LinhaSpark({ valores, edicoes }: { valores: (number | null)[]; edicoes: readonly EdicaoSerie[] }) {
+  const g = geometriaSpark(valores, SPARK_W, SPARK_H);
   return (
     <td className="serie-spark-cel">
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden>
-        <polyline
-          points={valores.map((v, i) => (v == null ? null : `${i * passo},${y(v)}`)).filter(Boolean).join(" ")}
-          fill="none" stroke="currentColor" strokeWidth={1.3} />
+      <svg width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`} aria-hidden>
+        {g.segmentos.map((seg, i) => (
+          <polyline key={i} points={seg.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="none" stroke="currentColor" strokeWidth={1.3} />
+        ))}
+        {g.ausentes.map((a) => (
+          <rect key={`a${a.i}`} x={a.x - 2} y={SPARK_H / 2 - 4} width={4} height={8} fill="none"
+                stroke="var(--ink-muted)" strokeWidth={1} strokeDasharray="1.5 1.5" />
+        ))}
+        {g.pontos.map((p) => edicoes[p.i] === "1980" ? (
+          <polygon key={p.i} fill="var(--plane)" stroke="currentColor" strokeWidth={1.2}
+                   points={`${p.x},${p.y - 3.4} ${p.x + 3.4},${p.y} ${p.x},${p.y + 3.4} ${p.x - 3.4},${p.y}`} />
+        ) : (
+          <circle key={p.i} cx={p.x} cy={p.y} r={2} fill="currentColor" />
+        ))}
       </svg>
     </td>
   );
@@ -117,32 +150,46 @@ interface MedidaTabela {
   formatar: (v: number) => string;
   /** Chave em `GLOSSARIO`, quando há um termo correspondente. Nunca invente uma aproximada. */
   glossario?: string;
+  /** Chave da medida em `comparabilidade.json` (`matriz[].medida`) -- nem sempre igual a `chave`
+   *  (a coluna `turnover` é a medida `rotatividade`). */
+  medidaComp: string;
 }
 
 const MEDIDAS_BLOCO1: MedidaTabela[] = [
-  { chave: "tlm", rotulo: "Taxa líquida de migração", unidade: "‰", campo: "tlm", formatar: (v) => `${sinal(v)}‰`, glossario: "taxa_liquida" },
-  { chave: "iem", rotulo: "Índice de eficácia migratória", unidade: "", campo: "iem", formatar: (v) => (v > 0 ? "+" : "") + v.toFixed(2), glossario: "eficacia_iem" },
-  { chave: "tbi", rotulo: "Taxa bruta de imigração", unidade: "‰", campo: "tbi", formatar: num1 },
-  { chave: "tbe", rotulo: "Taxa bruta de emigração", unidade: "‰", campo: "tbe", formatar: num1 },
-  { chave: "imig", rotulo: "Imigrantes", unidade: "", campo: "imig", formatar: num, glossario: "imigrantes" },
-  { chave: "emig", rotulo: "Emigrantes", unidade: "", campo: "emig", formatar: num, glossario: "emigrantes" },
-  { chave: "saldo", rotulo: "Saldo", unidade: "", campo: "saldo", formatar: sinal, glossario: "saldo" },
-  { chave: "turnover", rotulo: "Rotatividade (entr.+saíd.)", unidade: "", campo: "turnover", formatar: num, glossario: "rotatividade" },
+  { chave: "tlm", rotulo: "Taxa líquida de migração", unidade: "‰", campo: "tlm", formatar: (v) => `${sinal1(v)}‰`, glossario: "taxa_liquida", medidaComp: "tlm" },
+  { chave: "iem", rotulo: "Índice de eficácia migratória", unidade: "", campo: "iem", formatar: formatarIem, glossario: "eficacia_iem", medidaComp: "iem" },
+  { chave: "tbi", rotulo: "Taxa bruta de imigração", unidade: "‰", campo: "tbi", formatar: num1, medidaComp: "tbi" },
+  { chave: "tbe", rotulo: "Taxa bruta de emigração", unidade: "‰", campo: "tbe", formatar: num1, medidaComp: "tbe" },
+  { chave: "imig", rotulo: "Imigrantes", unidade: "", campo: "imig", formatar: num, glossario: "imigrantes", medidaComp: "imig" },
+  { chave: "emig", rotulo: "Emigrantes", unidade: "", campo: "emig", formatar: num, glossario: "emigrantes", medidaComp: "emig" },
+  { chave: "saldo", rotulo: "Saldo", unidade: "", campo: "saldo", formatar: sinal, glossario: "saldo", medidaComp: "saldo" },
+  { chave: "turnover", rotulo: "Rotatividade (entr.+saíd.)", unidade: "", campo: "turnover", formatar: num, glossario: "rotatividade", medidaComp: "rotatividade" },
   // `distancia_media`/`distancia_mediana` são gravadas em METROS (distância euclidiana em Albers
   // -- ver pipeline/medidas.py::distancia_media_ponderada); converte para km só na exibição.
-  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000), glossario: "distancia_media" },
-  { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%`, glossario: "pct_interestadual" },
+  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000), glossario: "distancia_media", medidaComp: "distancia_media" },
+  // `pct_interestadual` já chega aqui em PERCENTUAL (0-100): `normalizarLinhaUnidade` converte a
+  // fração do parquet uma única vez, na leitura.
+  { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%`, glossario: "pct_interestadual", medidaComp: "pct_interestadual" },
   // Correção: `gini_linha` mede a concentração dos DESTINOS de quem sai da unidade (agrupa por
   // origem = a própria unidade, Gini sobre os destinos) -- o rótulo antigo ("origens") estava
   // trocado com `gini_coluna`. Ver pipeline/medidas.py::gini_linha e comparabilidade_regras.py.
-  { chave: "gini_linha", rotulo: "Concentração destinos (Gini)", unidade: "", campo: "gini_linha", formatar: num2, glossario: "gini" },
+  { chave: "gini_linha", rotulo: "Concentração destinos (Gini)", unidade: "", campo: "gini_linha", formatar: num2, glossario: "gini", medidaComp: "gini_linha" },
 ];
 
-function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
+function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
   nivel: NivelSerie; codigo: string; linhas: LinhaUnidadeSerie[]; escuro: boolean;
-  edicoes: readonly EdicaoSerie[];
+  edicoes: readonly EdicaoSerie[]; comp: Comparabilidade | null;
 }) {
   const porEdicao = new Map(linhas.map((l) => [l.edicao, l]));
+  const edicoesComNumero = new Set(edicoes.filter((e) => estadoDoPonto(porEdicao.get(e)) === "numero"));
+  /** Nota de ressalva da célula (medida x edição x nível), lida da matriz de comparabilidade. */
+  const ressalvaDa = (medidaComp: string, e: EdicaoSerie): RessalvaCelula | null => {
+    if (!comp) return null;
+    const regra = estadoDaCelula(comp, medidaComp, e, nivel);
+    if (!regra || regra.estado === "comparavel") return null;
+    return { estado: regra.estado, texto: regra.nota ? (comp.notas[regra.nota] ?? regra.nota) : "Comparabilidade limitada nesta edição." };
+  };
+  const ressalvas = comp ? ressalvasDoBloco(comp, nivel, MEDIDAS_BLOCO1, edicoes, edicoesComNumero) : [];
   return (
     <section className="secao serie-bloco" id="bloco-1" aria-labelledby="bloco-1-titulo">
       <h3 id="bloco-1-titulo">Bloco 1 · A migração de {ROTULO_NIVEL[nivel]}, censo a censo</h3>
@@ -166,10 +213,10 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
               return (
                 <tr key={m.chave}>
                   <td>{m.glossario ? <Termo chave={m.glossario}>{m.rotulo}</Termo> : m.rotulo}</td>
-                  <LinhaSpark valores={valores} />
+                  <LinhaSpark valores={valores} edicoes={edicoes} />
                   {edicoes.map((e, i) => (
                     <Celula key={e} valor={valores[i]} estado={estadoDoPonto(porEdicao.get(e))}
-                            formatar={m.formatar} />
+                            formatar={m.formatar} ressalva={ressalvaDa(m.medidaComp, e)} />
                   ))}
                 </tr>
               );
@@ -204,10 +251,35 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes }: {
         </table>
       </div>
       <p className="muted-pequeno">
-        Coluna "tend." = sparkline {rotuloIntervalo(edicoes)}.
+        Coluna "tend." = sparkline {rotuloIntervalo(edicoes)}; posição tracejada = sem número naquela edição.
         {edicoes.includes("1980") && " 1980 leva o selo de proxy (ver aviso no topo da seção)."}
+        {comp && ressalvas.length > 0 && " ⓘ = ressalva de comparabilidade (passe o mouse; o texto completo está abaixo)."}
       </p>
+      {ressalvas.length > 0 && (
+        <details className="serie-ressalvas">
+          <summary>Ressalvas de comparabilidade ({ressalvas.length})</summary>
+          <ul className="muted-pequeno">
+            {ressalvas.map((r) => (
+              <li key={r.nota}>
+                <strong>{r.medidas.join(", ")} ({r.edicoes.map(rotuloEdicao).join(", ")}):</strong> {r.texto}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <MapaSerieCensos nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} />
+    </section>
+  );
+}
+
+/** Blocos 2 e 3 não existem para região metropolitana: `sistema_serie` e `pares_serie` não
+ *  publicam o nível `rm`. Em vez de uma tabela vazia (que parece erro de carregamento), o bloco
+ *  diz o que falta. A âncora `#bloco-N` continua existindo -- o índice do topo não quebra. */
+function BlocoNaoCalculado({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
+  return (
+    <section className="secao serie-bloco" id={id} aria-labelledby={`${id}-titulo`}>
+      <h3 id={`${id}-titulo`}>{titulo}</h3>
+      <p className="muted-pequeno">{children}</p>
     </section>
   );
 }
@@ -226,7 +298,7 @@ function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly
   );
   return (
     <section className="secao serie-bloco" id="bloco-2" aria-labelledby="bloco-2-titulo">
-      <h3 id="bloco-2-titulo">Bloco 2 · O sistema de {ROTULO_NIVEL[nivel]}s em que esta unidade está</h3>
+      <h3 id="bloco-2-titulo">Bloco 2 · O sistema de {ROTULO_NIVEL_PLURAL[nivel]} em que esta unidade está</h3>
       <p className="muted-pequeno">
         Estes números descrevem o conjunto de unidades do nível, não a unidade selecionada. Eles
         mudam com o número de unidades e só podem ser comparados dentro do mesmo nível.
@@ -303,12 +375,26 @@ function agruparPorParceiro(linhas: Record<string, unknown>[], ladoVariavel: "or
   return porParceiro;
 }
 
+/** Quantos parceiros a tabela mostra por padrão; o resto fica atrás de "mostrar todos" (e o texto
+ *  diz quantos são). */
+const LIMITE_PARCEIROS = 12;
+
+type Parceiros = Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>;
+
 function TabelaParceiros({ titulo, porParceiro, edicoes }: {
-  titulo: string;
-  porParceiro: Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>;
-  edicoes: readonly EdicaoSerie[];
+  titulo: string; porParceiro: Parceiros; edicoes: readonly EdicaoSerie[];
 }) {
+  const [todos, setTodos] = useState(false);
   if (porParceiro.size === 0) return <p className="muted-pequeno">{titulo}: nenhum par publicado.</p>;
+  // Ordena ANTES de cortar: pelo posto na edição mais recente marcada, desempatando pelas
+  // anteriores (design 3.3-a). A ordem de chegada da consulta é edição mais antiga primeiro, e
+  // cortar nela descartava o principal parceiro de 2022.
+  const ordenados = ordenarPorPostoRecente(
+    [...porParceiro.entries()].map(([codigo, v]) => ({ codigo, ...v })),
+    edicoes, (p, e) => (p.linhas[e]?.posto as number | null | undefined) ?? null,
+  );
+  const visiveis = todos ? ordenados : ordenados.slice(0, LIMITE_PARCEIROS);
+  const fora = ordenados.length - visiveis.length;
   return (
     <div className="tabela-scroll">
       <table className="tabela-serie">
@@ -316,7 +402,7 @@ function TabelaParceiros({ titulo, porParceiro, edicoes }: {
           <tr><th>{titulo}</th>{edicoes.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}</tr>
         </thead>
         <tbody>
-          {[...porParceiro.entries()].slice(0, 12).map(([codigoParceiro, { nome, linhas }]) => (
+          {visiveis.map(({ codigo: codigoParceiro, nome, linhas }) => (
             <tr key={codigoParceiro}>
               <td>{nome}</td>
               {edicoes.map((e) => {
@@ -336,6 +422,16 @@ function TabelaParceiros({ titulo, porParceiro, edicoes }: {
           ))}
         </tbody>
       </table>
+      {(fora > 0 || todos) && (
+        <p className="muted-pequeno">
+          {fora > 0
+            ? `Mais ${num(fora)} parceiro${fora > 1 ? "s" : ""} que já esteve${fora > 1 ? "ram" : ""} entre os 10 primeiros em alguma edição não aparece${fora > 1 ? "m" : ""} aqui. `
+            : ""}
+          <button className="link-serie" onClick={() => setTodos(!todos)}>
+            {todos ? `Mostrar só os ${LIMITE_PARCEIROS} primeiros` : "Mostrar todos"}
+          </button>
+        </p>
+      )}
     </div>
   );
 }
@@ -343,11 +439,8 @@ function TabelaParceiros({ titulo, porParceiro, edicoes }: {
 /** Mantém só os parceiros com `posto <= 10` em pelo menos uma das edições MARCADAS -- o
  *  destaque vindo do SQL considera as cinco edições fixas; aqui refiltra sobre o subconjunto
  *  exibido, para não listar parceiros que só se destacavam numa edição desmarcada. */
-function filtrarParceirosDestaque(
-  porParceiro: Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>,
-  edicoes: readonly EdicaoSerie[],
-) {
-  const saida = new Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<string, unknown> | undefined> }>();
+function filtrarParceirosDestaque(porParceiro: Parceiros, edicoes: readonly EdicaoSerie[]) {
+  const saida: Parceiros = new Map();
   for (const [codigo, v] of porParceiro) {
     const destaque = edicoes.some((e) => {
       const p = v.linhas[e];
@@ -383,14 +476,27 @@ function BlocoFluxos({ nivel, codigo, edicoes }: { nivel: NivelSerie; codigo: st
       <TabelaParceiros titulo="Principais origens" porParceiro={porOrigem} edicoes={edicoes} />
       <TabelaParceiros titulo="Principais destinos" porParceiro={porDestino} edicoes={edicoes} />
       <p className="muted-pequeno">
-        <Termo chave="posto">Posto</Termo> (grande) e volume (pequeno) por edição, ordenado pela edição mais recente com número.
+        <Termo chave="posto">Posto</Termo> e volume por edição, ordenado pelo posto em {rotuloEdicao(edicoes[edicoes.length - 1])}
+        (a edição marcada mais recente), desempatando pelas anteriores.
       </p>
     </section>
   );
 }
 
-function BlocoPerfil({ nivel, codigo, escuro, edicoes }: {
+/** Texto no lugar da barra quando a edição não tem perfil desenhável. O motivo vem do ESTADO da
+ *  unidade na edição (`unidades_serie`: existia / estado_cobertura) e do que o perfil publica --
+ *  nunca do rótulo da edição (a versão anterior escrevia "não medido" para toda barra vazia de
+ *  1980, embora o status migratório seja medido em todas as edições). */
+const MOTIVO_VAZIO_PERFIL: Partial<Record<EstadoCelula, string>> = {
+  nao_existia: "não existia nesta edição",
+  sem_cobertura: "sem cobertura nesta edição",
+  cobertura_insuficiente: "cobertura insuficiente nesta edição",
+  suprimido: "suprimido (abaixo do limiar de divulgação)",
+};
+
+function BlocoPerfil({ nivel, codigo, escuro, edicoes, linhasUnidade }: {
   nivel: NivelSerie; codigo: string; escuro: boolean; edicoes: readonly EdicaoSerie[];
+  linhasUnidade: readonly LinhaUnidadeSerie[];
 }) {
   const [linhas, setLinhas] = useState<Awaited<ReturnType<typeof seriePerfil>> | null>(null);
   useEffect(() => {
@@ -401,18 +507,22 @@ function BlocoPerfil({ nivel, codigo, escuro, edicoes }: {
   }, [nivel, codigo]);
   if (!linhas) return <p className="muted">Carregando perfil…</p>;
 
+  const unidadePorEdicao = new Map(linhasUnidade.map((l) => [l.edicao, l]));
+  const motivos = new Map<string, string>();
   const series: SeriePerfil[] = edicoes.map((edicao) => {
     const doAno = linhas.filter((l) => l.edicao === edicao && l.direcao === "imig");
     const brutos: Record<string, number | null> = {};
     for (const l of doAno) brutos[l.categoria] = l.valor;
-    // Harmoniza o vocabulário de status: 2022 distingue primeira_saida/etapas_multiplas, as
-    // demais edições (1980-2010) só têm nao_natural -- sem colapsar as duas categorias de
-    // 2022, a série compararia peras com maçãs (ver docs/METODOLOGIA.md, "Comparação entre
-    // censos (F12)", harmonização de status).
-    const harmonizado = harmonizarStatus(brutos, edicao);
-    const valores: Record<string, number> = {};
-    for (const [k, v] of Object.entries(harmonizado)) if (v != null) valores[k] = v;
-    return { rotulo: rotuloEdicao(edicao), valores };
+    // Harmoniza o vocabulário de status (2022 colapsa primeira_saida + etapas_multiplas em
+    // nao_natural -- ver docs/METODOLOGIA.md, "Comparação entre censos (F12)") e decide se a barra
+    // pode ser desenhada: com `nao_natural` suprimido (null em 2022) a barra NÃO é renormalizada
+    // sobre o que sobrou, é marcada "suprimido" (`perfilStatusDaEdicao`).
+    const { valores, motivo } = perfilStatusDaEdicao(
+      brutos, edicao, estadoDoPonto(unidadePorEdicao.get(edicao)),
+    );
+    const rotulo = rotuloEdicao(edicao);
+    if (motivo) motivos.set(rotulo, MOTIVO_VAZIO_PERFIL[motivo] ?? PALAVRA_ESTADO[motivo]);
+    return { rotulo, valores };
   });
 
   return (
@@ -423,7 +533,7 @@ function BlocoPerfil({ nivel, codigo, escuro, edicoes }: {
         categorias={DIMENSOES.status.categorias}
         series={series}
         escuro={escuro}
-        motivoVazio={(s) => (s.rotulo.startsWith("1980") ? "não medido nesta edição" : "sem dado publicável")}
+        motivoVazio={(s) => motivos.get(s.rotulo) ?? "sem dado publicável"}
       />
     </section>
   );
@@ -440,46 +550,40 @@ interface Props {
 
 export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, edicoes }: Props) {
   const [linhas, setLinhas] = useState<LinhaUnidadeSerie[] | null>(null);
-  const [filhos, setFilhos] = useState<string[]>([]);
+  // null = carregando. Só se monta a frase com as DUAS consultas terminadas: sem os filhos a
+  // frase de município-mãe sairia sem o prefixo e trocaria de texto no meio da leitura.
+  const [filhos, setFilhos] = useState<FilhoMunicipio[] | null>(nivel === "mun" ? null : []);
+  const [comp, setComp] = useState<Comparabilidade | null>(null);
 
   useEffect(() => {
     let vivo = true;
-    serieDaUnidade(nivel, codigo).then((r) => { if (vivo) setLinhas(r as unknown as LinhaUnidadeSerie[]); })
-      .catch(() => { if (vivo) setLinhas([]); });
+    // `pct_interestadual` chega como fração (0-1): converte uma vez, aqui (lib/serie.ts).
+    serieDaUnidade(nivel, codigo).then((r) => {
+      if (vivo) setLinhas((r as unknown as LinhaUnidadeSerie[]).map(normalizarLinhaUnidade));
+    }).catch(() => { if (vivo) setLinhas([]); });
     if (nivel === "mun") {
-      serieFilhosDoMunicipio(codigo).then((r) => { if (vivo) setFilhos(r.map((f) => f.codigo)); }).catch(() => {});
+      // Contrato: `nome` e `ultima_edicao_ausente` por filho; sem eles a frase cai em `codigo`
+      // e omite o "Até {ano}" (ver `filhosNoIntervalo`).
+      serieFilhosDoMunicipio(codigo).then((r) => { if (vivo) setFilhos(r as unknown as FilhoMunicipio[]); })
+        .catch(() => { if (vivo) setFilhos([]); });
     }
     return () => { vivo = false; };
   }, [nivel, codigo]);
 
-  const porEdicao = new Map((linhas ?? []).map((l) => [l.edicao, l]));
-  const linhasFiltradas = filtrarEdicoes(linhas ?? [], edicoes);
-  const pontos: PontoFrase[] = edicoes.map((edicao) => {
-    const l = porEdicao.get(edicao);
-    const estado = l ? estadoDoPonto(l) : "nao_medido";
-    return {
-      edicao, estado: estado === "numero" ? "numero" : estado as PontoFrase["estado"],
-      iem: estado === "numero" ? l!.iem : null,
-      seIem: l?.se_iem ?? null,
-      tipo: estado === "numero" ? classificarIem(l!.iem, l!.se_iem) : null,
-      imig: estado === "numero" ? l!.imig : null,
-      emig: estado === "numero" ? l!.emig : null,
-      saldo: estado === "numero" ? l!.saldo : null,
-      tlm: estado === "numero" ? l!.tlm : null,
-      coberturaPop: null,
-    };
-  });
-  const primeiraMae = linhasFiltradas.find((l) => l.cd_mun_mae);
-  const entrada: EntradaFrase = {
-    nome, nivel, pontos,
-    mae: primeiraMae ? {
-      nome: primeiraMae.nm_mun_mae ?? primeiraMae.cd_mun_mae!,
-      edicoes: linhasFiltradas.filter((l) => l.cd_mun_mae).map((l) => l.edicao),
-      agregada: primeiraMae.cd_mun_mae === "NORTEGO",
-    } : undefined,
-    filhos: filhos.length > 0 ? { nomes: filhos, ultimaEdicaoJunto: "2010" } : undefined,
-  };
-  const frase = linhas ? fraseSintese(entrada) : "";
+  useEffect(() => {
+    let vivo = true;
+    carregarComparabilidade().then((c) => { if (vivo) setComp(c); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  const pronto = linhas !== null && filhos !== null;
+  const entrada: EntradaFrase | null = pronto ? {
+    nome, nivel,
+    pontos: pontosDaSerie(linhas, edicoes),
+    mae: maeDaSerie(linhas, edicoes),
+    filhos: filhosNoIntervalo(filhos, edicoes),
+  } : null;
+  const frase = entrada ? fraseSintese(entrada) : "";
 
   return (
     <div className="serie-conteudo">
@@ -487,17 +591,40 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, e
         <a href="#bloco-1">Bloco 1</a><a href="#bloco-2">Bloco 2</a>
         <a href="#bloco-3">Bloco 3</a><a href="#bloco-4">Bloco 4</a>
       </nav>
-      {linhas === null ? (
+      {!pronto ? (
         <p className="muted">Carregando a série…</p>
       ) : linhas.length === 0 ? (
         <p className="muted">Não há série publicada para esta unidade.</p>
       ) : (
         <>
+          {edicoes.includes("1980") && (
+            <div className="aviso aviso-proxy" role="note">
+              <p className="aviso-proxy-resumo">
+                <strong>Selo proxy (1980).</strong>{" "}
+                {comp?.notas.proxy_1980_volume
+                  ?? "O Censo 1980 não tem quesito de data fixa: a migração publicada é estimada por um proxy calibrado, não medida diretamente."}
+              </p>
+            </div>
+          )}
           <p className="serie-frase serie-frase-completa">{frase}</p>
-          <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} edicoes={edicoes} />
-          <BlocoSistema nivel={nivel} edicoes={edicoes} />
-          <BlocoFluxos nivel={nivel} codigo={codigo} edicoes={edicoes} />
-          <BlocoPerfil nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} />
+          <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} edicoes={edicoes} comp={comp} />
+          {nivel === "rm" ? (
+            <BlocoNaoCalculado id="bloco-2" titulo="Bloco 2 · O sistema de regiões metropolitanas">
+              Não calculado para regiões metropolitanas: a série publicada traz o sistema (CMI, MEI, ANMR,
+              β de Fielding, Duncan D) só para municípios, regiões imediatas, regiões intermediárias e UFs.
+            </BlocoNaoCalculado>
+          ) : (
+            <BlocoSistema nivel={nivel} edicoes={edicoes} />
+          )}
+          {nivel === "rm" ? (
+            <BlocoNaoCalculado id="bloco-3" titulo="Bloco 3 · De onde vieram e para onde foram">
+              Não calculado para regiões metropolitanas: os fluxos entre pares de unidades são publicados
+              na série só para municípios, regiões imediatas, regiões intermediárias e UFs.
+            </BlocoNaoCalculado>
+          ) : (
+            <BlocoFluxos nivel={nivel} codigo={codigo} edicoes={edicoes} />
+          )}
+          <BlocoPerfil nivel={nivel} codigo={codigo} escuro={escuro} edicoes={edicoes} linhasUnidade={linhas} />
         </>
       )}
       <section className="secao">

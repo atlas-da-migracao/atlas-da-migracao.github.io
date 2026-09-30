@@ -199,7 +199,7 @@ export const GLOSSARIO: Record<string, TermoGlossario> = {
     definicao:
       "Quantas unidades do nível escolhido (municípios, regiões imediatas, regiões intermediárias ou unidades da federação) existiam naquele censo, e sobre as quais as medidas do sistema foram calculadas.",
     interpretacao:
-      "Serve de contexto obrigatório para as medidas do sistema. Municípios são criados ao longo do tempo: em 2022 há mais de 5.570, contra 5.507 em 2000, e por isso uma mesma população pode produzir mais “migração entre municípios” simplesmente porque as fronteiras internas aumentaram.",
+      "Serve de contexto obrigatório para as medidas do sistema. Municípios são criados ao longo do tempo: em 2022 são 5.570, contra 5.507 em 2000, e por isso uma mesma população pode produzir mais “migração entre municípios” simplesmente porque as fronteiras internas aumentaram.",
     limitacoes:
       "É por causa dessa variação que a intensidade migratória (CMI), a intensidade padronizada (SMI) e a migração líquida agregada (ANMR) não são diretamente comparáveis entre edições sem olhar este número ao lado — é o efeito Courgeau, exibido explicitamente na figura que acompanha o bloco do sistema.",
   },

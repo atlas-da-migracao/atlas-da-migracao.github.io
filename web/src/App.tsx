@@ -16,7 +16,8 @@ import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunic
          centroidesDeUnidades, fluxosDaUnidade, fluxosDoMunicipio, fluxosEntreUFs, fluxosIntraDaRM,
          fluxosPorCategoria, listarRMs, maioresFluxos, maioresFluxosNivel, municipiosDaRM,
          pendularDaRM, saldoPorCategoria,
-         type NivelAgregado, type ResumoRM, type UnidadeAgregada } from "./db/queries";
+         type NivelAgregado, type RecorteMunicipio, type ResumoRM, type UnidadeAgregada } from "./db/queries";
+import { consultar, ouvirProgresso } from "./db/duckdb";
 import { quebrasSimetricas } from "./lib/escalas";
 import { num } from "./lib/format";
 import { ANCORA_ESPIGA_MUNICIPIO } from "./lib/espigas";
@@ -24,7 +25,7 @@ import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, uniaoDeBboxes, type 
 import type { FluxoUF } from "./lib/acordes";
 import { cor as corPaleta, FLUXO_MAPA, hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
-import { basePath, CENSOS, edicao } from "./lib/edicoes";
+import { basePath, CENSOS, edicao, type Censo } from "./lib/edicoes";
 import { EDICOES_SERIE, type NivelSerie } from "./lib/serie";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
 import type { UnidadeSerieSel } from "./state/url";
@@ -73,31 +74,86 @@ const METRICAS: { valor: Metrica; rotulo: string }[] = [
 const CORES_TIPOLOGIA = new Map<string, [number, number, number]>(
   TIPOLOGIA_INTRA_RM.categorias.map((c) => [c.chave, hexParaRgb(c.cor.claro)]));
 
+// Constantes de identidade ESTÁVEL para "ainda sem dados". Um `?? []` escrito no corpo do
+// componente é um array novo a cada render, e quem o usa como dependência de efeito (as unidades
+// do nível agregado, os municípios da edição) dispara o efeito de novo, que faz setState, que
+// renderiza de novo: laço contínuo enquanto a carga não termina.
+const VAZIO: UnidadeAgregada[] = [];
+const SEM_MUNICIPIOS: Municipio[] = [];
+const SEM_CENTROIDES = new Map<string, { x: number; y: number }>();
+
+/** Quantos dos maiores fluxos o mapa nacional desenha (consulta e nota da legenda leem daqui). */
+const TOP_FLUXOS_MUNICIPIO = 150;
+const TOP_FLUXOS_NIVEL = 300;
+
+/** Fluxo como o mapa o consome: colunas opcionais que só algumas consultas preenchem. */
+type ArcoApp = Fluxo & { direcao?: string; cruza?: boolean; corRgb?: [number, number, number] };
+
+// Malha e indicadores municipais guardam a EDIÇÃO a que pertencem, e o que o componente lê é
+// derivado da edição ativa (ver `malha`/`municipios` abaixo): trocar de censo nunca expõe, nem
+// por um quadro, dados da edição anterior, e não há "zerar no momento certo" para errar.
+interface BaseMunicipal { censo: Censo; malha: FeatureCollection; topo: Topology }
+/** `completo`: veio do DuckDB. O arquivo enxuto municipios_mapa.json (1a pintura) não traz todos
+ *  os campos e nunca pode sobrescrever o completo, qualquer que seja a ordem de chegada. */
+interface MunicipiosDaEdicao { censo: Censo | null; lista: Municipio[]; completo: boolean }
+
 export default function App() {
-  const [malha, setMalha] = useState<FeatureCollection | null>(null);
-  const [topoMun, setTopoMun] = useState<Topology | null>(null);
+  const [baseMun, setBaseMun] = useState<BaseMunicipal | null>(null);
   // filtro cruzado mapa <-> diagrama de acordes (nível UF)
   const [ufSobMapa, setUfSobMapa] = useState<string | null>(null);
   const [ufsRealcadas, setUfsRealcadas] = useState<Set<string> | null>(null);
   const aoRealcarUFs = useCallback((cds: string[] | null) => setUfsRealcadas(cds ? new Set(cds) : null), []);
-  const [municipios, setMunicipios] = useState<Municipio[]>([]);
-  const [meta, setMeta] = useState<Meta | null>(null);
-  const [arcos, setArcos] = useState<(Fluxo & { direcao?: string; cruza?: boolean; corRgb?: [number, number, number] })[]>([]);
+  const [municipiosDe, setMunicipiosDe] = useState<MunicipiosDaEdicao>(
+    { censo: null, lista: SEM_MUNICIPIOS, completo: false });
+  // meta.json por edição: AvisoUnidadeUf, maior_fluxo, bounds_albers, rodapé e a página de
+  // metodologia leem `meta` -- uma edição só por vez, nunca a anterior durante a troca.
+  const [metaPorCenso, setMetaPorCenso] = useState<Partial<Record<Censo, Meta>>>({});
+  const [arcos, setArcos] = useState<ArcoApp[]>([]);
   const [carregandoFluxos, setCarregandoFluxos] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
+  // Erros POR ORIGEM (chave = qual consulta falhou): cada efeito limpa o seu ao recomeçar e ao
+  // dar certo, então uma mensagem nunca sobrevive à troca de edição/nível/seleção que a tornou
+  // obsoleta -- e o sucesso de uma consulta não apaga o erro de outra, que continua valendo.
+  const [erros, setErros] = useState<Record<string, string>>({});
+  // "tentar de novo": entra nas dependências de todos os efeitos de dados.
+  const [tentativa, setTentativa] = useState(0);
+  const [comparativoAberto, setComparativoAberto] = useState(false);
 
   const { censo, municipio, selecao, nivel, origem, destino, metrica, filtro, tema, rm, aba, cruzar, topN,
           mostrarFluxos, mostrarSatelite, limiarFluxo, setLimiarFluxo, setCenso, selecionarMunicipio, selecionarUnidade, selecionarFluxo,
           setNivel, setMetrica, setFiltro, setTema, entrarModoRM, sairModoRM, setAba, setCruzar, setMostrarFluxos,
           setMostrarSatelite, modo, setModo, unidadeSerie, entrarModoCensos } = useStore();
   const recursos = edicao(censo).recursos;
-  const [recorte, setRecorte] = useState<Map<string, { imig: number; emig: number; saldo: number }> | null>(null);
+  const malha = baseMun?.censo === censo ? baseMun.malha : null;
+  const topoMun = baseMun?.censo === censo ? baseMun.topo : null;
+  const municipios = municipiosDe.censo === censo ? municipiosDe.lista : SEM_MUNICIPIOS;
+  const meta = metaPorCenso[censo] ?? null;
+  const erro = Object.values(erros)[0] ?? null;
+  const registrarErro = useCallback(
+    (chave: string, mensagem: string) => setErros((e) => ({ ...e, [chave]: mensagem })), []);
+  const limparErro = useCallback((chave: string) => setErros((e) => {
+    if (!(chave in e)) return e;
+    const resto = { ...e };
+    delete resto[chave];
+    return resto;
+  }), []);
+  const tentarDeNovo = useCallback(() => { setErros({}); setTentativa((t) => t + 1); }, []);
+  // O botão "tentar de novo" do EstadoDados só reinicia a conexão DuckDB; as consultas que já
+  // falharam não se repetem sozinhas. Quando a conexão da edição volta a "pronto" depois de um
+  // erro, conta como uma nova tentativa.
+  useEffect(() => {
+    let viuErro = false;
+    return ouvirProgresso((p) => {
+      if (p.estagio === "erro") viuErro = true;
+      else if (p.estagio === "pronto" && viuErro) { viuErro = false; tentarDeNovo(); }
+    }, censo);
+  }, [censo, tentarDeNovo]);
+  const [recorte, setRecorte] = useState<Map<string, RecorteMunicipio> | null>(null);
   const escuro = usarModoEscuro();
 
   // F6: níveis de agregação. `rm` sempre implica município (modo RM não existe nos demais
   // níveis); fora do modo RM, o nível efetivo é o escolhido pelo usuário.
   const nivelEfetivo: Nivel = rm ? "mun" : nivel;
-  useEffect(() => { setUfSobMapa(null); setUfsRealcadas(null); }, [nivelEfetivo]);
+  useEffect(() => { setUfSobMapa(null); setUfsRealcadas(null); }, [nivelEfetivo, censo]);
   const [malhaNivel, setMalhaNivel] = useState<Record<string, FeatureCollection>>({});
   // F2 (mapa-representacao): topologia bruta por nível agregado, guardada além do
   // FeatureCollection já decodificado -- topojson.mesh() precisa do objeto topológico
@@ -114,8 +170,10 @@ export default function App() {
   useEffect(() => {
     if (nivelEfetivo !== "uf" || fluxosUFPorCenso[censo]) return;
     const c = censo;
-    fluxosEntreUFs().then((f) => setFluxosUFPorCenso((m) => ({ ...m, [c]: f }))).catch(() => {});
-  }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
+    let vivo = true;
+    fluxosEntreUFs().then((f) => { if (vivo) setFluxosUFPorCenso((m) => ({ ...m, [c]: f })); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [nivelEfetivo, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // F4: a malha e as unidades de um nível agregado são de UMA edição -- vêm de caminhos
   // `data/` e de uma conexão DuckDB próprios --, então a chave do cache inclui a edição.
@@ -134,6 +192,9 @@ export default function App() {
   const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   useEffect(() => {
+    // limpa antes do retorno antecipado: a falha de um nível não pode continuar na tela depois
+    // de trocar para outro nível (ou para o município), que não tem nada a ver com ela
+    limparErro("malhaNivel");
     if (nivelEfetivo === "mun" || malhaNivel[chaveCache(nivelEfetivo)]) return;
     const n = nivelEfetivo;
     const k = chaveCache(n);
@@ -146,19 +207,20 @@ export default function App() {
       const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
       setMalhaNivel((m) => ({ ...m, [k]: fc }));
       setTopoNivel((t) => ({ ...t, [k]: topo }));
-    }).catch((e) => { if (vivo) setErro(`Falha ao carregar a malha (${n}): ${(e as Error).message}`); });
+    }).catch((e) => { if (vivo) registrarErro("malhaNivel", `Falha ao carregar a malha (${n}): ${(e as Error).message}`); });
     return () => { vivo = false; };
-  }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nivelEfetivo, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    limparErro("unidades");
     if (nivelEfetivo === "mun" || unidadesNivel[chaveCache(nivelEfetivo)]) return;
     const n = nivelEfetivo;
     const k = chaveCache(n);
     let vivo = true;
     carregarUnidades(n).then((u) => { if (vivo) setUnidadesNivel((m) => ({ ...m, [k]: u })); })
-      .catch((e) => { if (vivo) setErro(`Falha ao consultar as unidades (${n}): ${(e as Error).message}`); });
+      .catch((e) => { if (vivo) registrarErro("unidades", `Falha ao consultar as unidades (${n}): ${(e as Error).message}`); });
     return () => { vivo = false; };
-  }, [nivelEfetivo, censo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nivelEfetivo, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aoMudarNivel = (n: Nivel) => {
     const limpou = setNivel(n);
@@ -173,11 +235,13 @@ export default function App() {
   // db/duckdb.ts; consultar mesmo assim daria erro "tabela não encontrada")
   const [rmsCabecalho, setRmsCabecalho] = useState<ResumoRM[]>([]);
   useEffect(() => {
-    if (!recursos.rm) { setRmsCabecalho([]); return; }
+    // zera antes de consultar: a lista da edição anterior não pode ficar no seletor durante a troca
+    setRmsCabecalho((l) => (l.length ? [] : l));
+    if (!recursos.rm) return;
     let vivo = true;
     listarRMs().then((r) => { if (vivo) setRmsCabecalho(r); }).catch(() => {});
     return () => { vivo = false; };
-  }, [censo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
   // segmentado "Regiões metropolitanas" pedido, mas RM ainda não escolhida
   const [pedindoRM, setPedindoRM] = useState(false);
 
@@ -218,26 +282,40 @@ export default function App() {
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [filtrosAbertos]);
 
-  // malha e metadados: caminho crítico da primeira pintura. Reroda ao trocar de edição
-  // (censo): cada edição tem sua própria malha/meta/indicadores, servidos de basePath(censo).
+  // meta.json, num fetch PRÓPRIO (é pequeno): antes ia no mesmo Promise.all do TopoJSON e só
+  // chegava junto com a malha (o arquivo mais pesado). O `meta` da edição ativa é derivado de
+  // `metaPorCenso` (ver acima) -- nunca o da edição anterior, e revisitar uma edição é imediato.
   useEffect(() => {
+    limparErro("meta");
+    if (metaPorCenso[censo]) return;
+    let vivo = true;
+    fetch(`${basePath(censo)}meta.json`).then((r) => r.json() as Promise<Meta>).then((m) => {
+      if (vivo) setMetaPorCenso((x) => ({ ...x, [censo]: m }));
+    }).catch((e) => { if (vivo) registrarErro("meta", `Falha ao carregar os metadados: ${(e as Error).message}`); });
+    return () => { vivo = false; };
+  }, [censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // malha e indicadores da 1a pintura: caminho crítico. Reroda ao trocar de edição (censo):
+  // cada edição tem sua própria malha/indicadores, servidos de basePath(censo).
+  useEffect(() => {
+    limparErro("malha");
     let vivo = true;
     (async () => {
       try {
         const base = basePath(censo);
-        const [topo, m, mapa] = await Promise.all([
+        const [topo, mapa] = await Promise.all([
           // F10: malha em Albers (metros) -- ver comentário acima, no efeito de malhaNivel.
           fetch(`${base}geo/municipios_albers.topojson`).then((r) => r.json() as Promise<Topology>),
-          fetch(`${base}meta.json`).then((r) => r.json() as Promise<Meta>),
           fetch(`${base}municipios_mapa.json`).then((r) => r.json() as Promise<MunicipiosMapa>),
         ]);
         if (!vivo) return;
         const chave = Object.keys(topo.objects)[0];
-        setMalha(feature(topo, topo.objects[chave]) as unknown as FeatureCollection);
-        setTopoMun(topo);
-        setMeta(m);
-        // pinta o coroplético imediatamente; o DuckDB completa os campos depois
-        setMunicipios(mapa.linhas.map(([cd, nm, uf, pop, imig, emig, saldo, tlm, iem, cv]) => ({
+        setBaseMun({ censo, malha: feature(topo, topo.objects[chave]) as unknown as FeatureCollection, topo });
+        // pinta o coroplético imediatamente; o DuckDB completa os campos depois. O stub NÃO
+        // sobrescreve o que o DuckDB já entregou desta edição (o DuckDB pode responder antes do
+        // arquivo enxuto -- edição já visitada, com a conexão aberta): a decisão é tomada sobre o
+        // estado mais recente, dentro do setState, não sobre uma cópia velha capturada aqui.
+        const stub = mapa.linhas.map(([cd, nm, uf, pop, imig, emig, saldo, tlm, iem, cv]) => ({
           // uf: prefixo do código, que vale para todo município do IBGE. Uma UNIDADE AGREGADA
           // (código sintético não numérico, ex.: 'NORTEGO' no Censo 1980) não tem prefixo de
           // UF -- aqui ela fica com o lixo do slice até o DuckDB substituir a linha inteira
@@ -251,30 +329,33 @@ export default function App() {
           tbi: null, tbe: null, tlm, iem,
           se_imig: 0, se_emig: 0, se_saldo: 0, cv_imig: cv, cv_emig: null,
           n_imig_faixa: "", n_emig_faixa: "", precisao_imig: "sem_estimativa",
-        })));
+        }));
+        setMunicipiosDe((atual) => (atual.censo === censo && atual.completo ? atual
+          : { censo, lista: stub, completo: false }));
       } catch (e) {
-        if (vivo) setErro(`Falha ao carregar a malha: ${(e as Error).message}`);
+        if (vivo) registrarErro("malha", `Falha ao carregar a malha: ${(e as Error).message}`);
       }
     })();
     return () => { vivo = false; };
-  }, [censo]);
+  }, [censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // indicadores municipais e os maiores fluxos do país (DuckDB, em paralelo)
+  // indicadores municipais completos (DuckDB)
   useEffect(() => {
+    limparErro("municipios");
     let vivo = true;
     (async () => {
       try {
         // só os indicadores: quem decide os arcos é o efeito dedicado abaixo, senão
         // esta resposta sobrescreveria os fluxos do município já selecionado
         const m = await carregarMunicipios();
-        if (vivo) setMunicipios(m);
+        if (vivo) setMunicipiosDe({ censo, lista: m, completo: true });
       } catch (e) {
         console.error(e);
-        if (vivo) setErro(`Falha ao consultar os dados: ${(e as Error).message}`);
+        if (vivo) registrarErro("municipios", `Falha ao consultar os dados: ${(e as Error).message}`);
       }
     })();
     return () => { vivo = false; };
-  }, [censo]);
+  }, [censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // F8 (SEO): a home publica um SearchAction (?q=...) no JSON-LD para a busca do Google --
   // preenche e seleciona o primeiro resultado assim que os municípios carregarem, com a
@@ -341,9 +422,9 @@ export default function App() {
     // F10: enquadramento em metros (Albers) -- x_albers/y_albers, não lon/lat.
     consulta.then((pts) => {
       if (vivo) setFluxoFoco(bboxDeCentroides(pts.map((p) => ({ lon: p.x_albers, lat: p.y_albers })), 0.25));
-    }).catch(() => setFluxoFoco(null));
+    }).catch(() => { if (vivo) setFluxoFoco(null); });
     return () => { vivo = false; };
-  }, [origem, destino, nivelEfetivo]);
+  }, [origem, destino, nivelEfetivo, censo, tentativa]);
 
   const selecaoFoco = codigoSelecionado && !rm ? bboxPorFeicao.get(codigoSelecionado) ?? null : null;
 
@@ -381,8 +462,13 @@ export default function App() {
   const [rmDestacar, setRmDestacar] = useState<Set<string> | null>(null);
   const [rmNucleo, setRmNucleo] = useState<string | null>(null);
 
+  // Destaque, núcleo e enquadramento são da RM DE UMA EDIÇÃO (os municípios e o núcleo mudam entre
+  // censos): dependem de `censo` e são zerados antes da consulta, senão o mapa exibia o destaque
+  // da edição anterior até a resposta da nova -- ou para sempre, sem `censo` nas dependências.
   useEffect(() => {
-    if (!rm) { setRmFoco(null); setRmDestacar(null); setRmNucleo(null); return; }
+    setRmFoco(null); setRmDestacar(null); setRmNucleo(null);
+    limparErro("rm");
+    if (!rm) return;
     let vivo = true;
     Promise.all([municipiosDaRM(rm), centroidesDaRM(rm)]).then(([muns, cent]) => {
       if (!vivo) return;
@@ -390,9 +476,9 @@ export default function App() {
       setRmNucleo(muns.find((m) => m.nucleo)?.cd_mun ?? null);
       // F10: enquadramento em metros (Albers).
       setRmFoco(bboxDeCentroides(cent.map((p) => ({ lon: p.x_albers, lat: p.y_albers }))));
-    }).catch((e) => setErro(`Falha ao carregar a RM: ${(e as Error).message}`));
+    }).catch((e) => { if (vivo) registrarErro("rm", `Falha ao carregar a RM: ${(e as Error).message}`); });
     return () => { vivo = false; };
-  }, [rm]);
+  }, [rm, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // perímetro da RM: municípios dissolvidos na topologia (arcos compartilhados somem)
   const rmPerimetro = useMemo<Feature<MultiPolygon> | null>(() => {
@@ -405,9 +491,9 @@ export default function App() {
   }, [topoMun, rmDestacar]);
 
   // F11 (mapa-representação): legenda do MODO METROPOLITANO. No modo Brasil a legenda explica
-  // a métrica (faixas de cor ou espigas); dentro de uma RM o mapa não pinta a malha nem desenha
-  // espigas -- os fluxos são o único dado em tela, e a cor deles muda de significado conforme a
-  // aba, o que sem legenda ficava por adivinhar. Na aba de migração a cor é a TIPOLOGIA do
+  // a métrica (faixas de cor ou espigas); dentro de uma RM o mapa recebe `modoRM` e não pinta a
+  // malha (preenchimento neutro) nem desenha espigas -- os fluxos são o único dado em tela, e a
+  // cor deles muda de significado conforme a aba, o que sem legenda ficava por adivinhar. Na aba de migração a cor é a TIPOLOGIA do
   // fluxo (as mesmas 3 categorias do painel lateral, CORES_TIPOLOGIA acima, que é por onde o
   // mapa pinta -- daí ler `cor.claro`, como ele, em vez de alternar por tema); nas abas de
   // pendular não há categoria: a cor é a monocromática do mapa (FLUXO_MAPA) e o que varia é o
@@ -457,110 +543,172 @@ export default function App() {
     () => (limiarFluxo > 0 ? arcos.filter((a) => a.total >= corteFluxo) : arcos),
     [arcos, limiarFluxo, corteFluxo]);
 
+  // Âncora da espessura dos fluxos (mapa E legenda, o mesmo número nos dois). O maior fluxo
+  // municipal de migração da edição (`meta.maior_fluxo`) só é a âncora certa no nível município e
+  // nas abas de migração da RM, que desenham justamente esses fluxos. Os níveis agregados
+  // (RGI/RGInt/UF) e o pendular têm volumes muito maiores (UF: maior par de 155.725 contra
+  // 23.425 de município em 2022), então com aquela âncora os maiores arcos saturavam em 14 px e
+  // a legenda anunciava um volume que o mapa não usava. Aí a âncora é o maior valor REAL da
+  // tabela de fluxos do nível/aba, consultado uma vez por edição e guardado.
+  const tabelaAncora: string | null = rm
+    ? (aba === "mig" || !recursos.pendular ? null : aba === "trab" ? "pendular_trab" : "pendular_estudo")
+    : nivelEfetivo !== "mun" ? `fluxos_${nivelEfetivo}` : null;
+  const [ancorasFluxo, setAncorasFluxo] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!tabelaAncora) return;
+    const k = `${censo}:${tabelaAncora}`;
+    if (ancorasFluxo[k] != null) return;
+    let vivo = true;
+    // `origem <> destino`: um laço não vira fita, então não disputa a escala
+    consultar<{ maximo: number | null }>(
+      `SELECT MAX(total) AS maximo FROM ${tabelaAncora} WHERE origem <> destino`, censo)
+      .then((r) => {
+        const v = r[0]?.maximo;
+        if (vivo && v != null && v > 0) setAncorasFluxo((m) => ({ ...m, [k]: v }));
+      }).catch(() => {});
+    return () => { vivo = false; };
+  }, [censo, tabelaAncora, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ancoraBase = tabelaAncora ? ancorasFluxo[`${censo}:${tabelaAncora}`] ?? null : meta?.maior_fluxo ?? null;
+  // nunca menor que o maior fluxo em tela (se a âncora falhar, nada satura além do teto)
+  const ancoraFluxos = ancoraBase != null ? Math.max(ancoraBase, faixaFluxos?.max ?? 0) : null;
+
   /** Corte efetivo da camada de fluxos: o volume do MENOR fluxo em tela. O mapa desenha só os
-   *  `topN` maiores pares da vista (`maioresFluxos`/`maioresFluxosNivel` em db/queries.ts), e
-   *  sem esse número o leitor lê a ausência de um fluxo no mapa como ausência de migração. Sai
-   *  dos próprios fluxos carregados, não de uma constante: muda com a edição (os volumes de
-   *  1980 não são os de 2022), com o nível agregado e com o "top N" escolhido. */
+   *  maiores pares da vista (`maioresFluxos`/`maioresFluxosNivel` em db/queries.ts), e sem esse
+   *  número o leitor lê a ausência de um fluxo no mapa como ausência de migração. Sai dos
+   *  próprios fluxos carregados, não de uma constante: muda com a edição (os volumes de 1980 não
+   *  são os de 2022), com o nível agregado e com o "top N" escolhido. Com a camada de fluxos
+   *  desligada nada é desenhado, então não há corte a descrever (a legenda omite a nota). */
   const menorFluxoExibido = useMemo(
-    () => (arcosVisiveis.length ? Math.min(...arcosVisiveis.map((a) => a.total)) : null), [arcosVisiveis]);
+    () => (mostrarFluxos && arcosVisiveis.length ? Math.min(...arcosVisiveis.map((a) => a.total)) : null),
+    [mostrarFluxos, arcosVisiveis]);
+
+  // Ao mudar o CONTEXTO dos fluxos (edição, nível, RM, aba), os que estão em tela são de outro
+  // mundo -- de outra edição, de outro nível, de outra tabela -- e não podem ficar desenhados
+  // (nem listados nos painéis) até a nova resposta. Ao mudar só a seleção/recorte/top N, a
+  // lista anterior fica até a nova chegar, para o mapa não piscar. Vem ANTES do efeito de
+  // consulta: zera, e só depois a consulta nova (assíncrona) escreve.
+  useEffect(() => { setArcos((a) => (a.length ? [] : a)); }, [censo, nivelEfetivo, rm, aba]);
 
   // fluxos exibidos no mapa: nacionais (modo Brasil) ou da RM ativa (modo metropolitano)
   const topNStore = topN;
   useEffect(() => {
+    let vivo = true;
+    limparErro("fluxos");
+    const t0 = performance.now();
+    // Uma só rotina para todos os ramos: sinaliza "carregando", aplica só se este efeito ainda é
+    // o vigente (`vivo`) e desliga o sinal SÓ se vigente -- sem isso, uma consulta cancelada
+    // desligava o "carregando" da nova (ou, se a nova era o ramo sem consulta, deixava ligado
+    // para sempre).
+    const aplicar = (consulta: Promise<ArcoApp[]>, mensagem: string, rotuloDev?: string) => {
+      setCarregandoFluxos(true);
+      consulta
+        .then((f) => { if (vivo) setArcos(f); })
+        .catch((e) => { if (vivo) registrarErro("fluxos", `${mensagem}: ${(e as Error).message}`); })
+        .finally(() => {
+          if (!vivo) return;
+          setCarregandoFluxos(false);
+          if (rotuloDev && import.meta.env.DEV) {
+            console.debug(`[fluxos] ${rotuloDev} em ${(performance.now() - t0).toFixed(0)} ms`);
+          }
+        });
+    };
     if (rm) {
-      setCarregandoFluxos(true);
-      const t0 = performance.now();
-      const consulta = aba === "mig"
-        ? fluxosIntraDaRM(rm).then((f) => f.slice(0, topNStore).map((x) => ({
-            ...x, corRgb: CORES_TIPOLOGIA.get(x.tipologia),
-          })))
-        // pendular tem direção real e inequívoca (residência -> trabalho/estudo), mesmo sem
-        // coluna própria de direção na consulta -- marcado como "saida" (mesma cor de quem sai
-        // do município de origem) para não cair no neutro genérico que F3 reservou para
-        // listas de maiores fluxos sem direção conhecida (ver MapaAtlas.tsx).
-        : pendularDaRM(rm, aba === "trab" ? "pendular_trab" : "pendular_estudo", topNStore, cruzar)
-            .then((f) => f.map((x) => ({ ...x, direcao: "saida" as const })));
-      consulta
-        .then(setArcos)
-        .catch((e) => setErro(`Falha ao consultar fluxos da RM: ${(e as Error).message}`))
-        .finally(() => {
-          setCarregandoFluxos(false);
-          if (import.meta.env.DEV) {
-            console.debug(`[F5b] troca de RM/aba em ${(performance.now() - t0).toFixed(0)} ms`);
-          }
-        });
-      return;
-    }
-    if (nivelEfetivo !== "mun") {
+      aplicar(
+        aba === "mig"
+          ? fluxosIntraDaRM(rm).then((f) => f.slice(0, topNStore).map((x) => ({
+              ...x, corRgb: CORES_TIPOLOGIA.get(x.tipologia),
+            })))
+          // pendular tem direção real e inequívoca (residência -> trabalho/estudo), mesmo sem
+          // coluna própria de direção na consulta -- marcado como "saida" (mesma cor de quem sai
+          // do município de origem) para não cair no neutro genérico que F3 reservou para
+          // listas de maiores fluxos sem direção conhecida (ver MapaAtlas.tsx).
+          : pendularDaRM(rm, aba === "trab" ? "pendular_trab" : "pendular_estudo", topNStore, cruzar)
+              .then((f) => f.map((x) => ({ ...x, direcao: "saida" as const }))),
+        "Falha ao consultar fluxos da RM", "troca de RM/aba");
+    } else if (nivelEfetivo !== "mun") {
       const n = nivelEfetivo as NivelAgregado;
-      setCarregandoFluxos(true);
-      const t0 = performance.now();
-      const consulta = selecao ? fluxosDaUnidade(n, selecao, topNStore) : maioresFluxosNivel(n, 300);
-      consulta
-        .then(setArcos)
-        .catch((e) => setErro(`Falha ao consultar fluxos (${n}): ${(e as Error).message}`))
-        .finally(() => {
-          setCarregandoFluxos(false);
-          if (import.meta.env.DEV) {
-            console.debug(`[F6] troca de nível (${n}) em ${(performance.now() - t0).toFixed(0)} ms`);
-          }
-        });
-      return;
+      aplicar(selecao ? fluxosDaUnidade(n, selecao, topNStore) : maioresFluxosNivel(n, TOP_FLUXOS_NIVEL),
+        `Falha ao consultar fluxos (${n})`, `troca de nível (${n})`);
+    } else if (!municipio) {
+      if (municipios.length) aplicar(maioresFluxos(TOP_FLUXOS_MUNICIPIO, filtro), "Falha ao consultar os maiores fluxos");
+      else setCarregandoFluxos(false);
+    } else {
+      aplicar(filtro ? fluxosPorCategoria(municipio, filtro, topNStore) : fluxosDoMunicipio(municipio, topNStore),
+        "Falha ao consultar fluxos");
     }
-    if (!municipio) {
-      if (municipios.length) maioresFluxos(150, filtro).then(setArcos).catch(() => {});
-      return;
-    }
-    setCarregandoFluxos(true);
-    const consulta = filtro
-      ? fluxosPorCategoria(municipio, filtro, topNStore)
-      : fluxosDoMunicipio(municipio, topNStore);
-    consulta
-      .then(setArcos)
-      .catch((e) => setErro(`Falha ao consultar fluxos: ${(e as Error).message}`))
-      .finally(() => setCarregandoFluxos(false));
-  }, [municipio, selecao, nivelEfetivo, topNStore, filtro, municipios.length, rm, aba, cruzar]);
+    return () => { vivo = false; };
+  }, [municipio, selecao, nivelEfetivo, topNStore, filtro, municipios.length, rm, aba, cruzar, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // sob recorte, o coroplético passa a mostrar o saldo daquele subgrupo
+  // sob recorte, o coroplético passa a mostrar o saldo daquele subgrupo. O recorte vem do
+  // DuckDB e é de UMA edição e de UM subgrupo: zera antes da consulta (o mapa volta aos totais, e
+  // o painel mostra "Aplicando o recorte…") e só aplica a resposta se ela ainda é a vigente --
+  // sem isto, trocar o recorte rápido deixava o mapa com o subgrupo anterior.
   useEffect(() => {
-    if (!filtro || !municipios.length) { setRecorte(null); return; }
+    setRecorte(null);
+    limparErro("recorte");
+    if (!filtro || !municipios.length) return;
+    let vivo = true;
     saldoPorCategoria(filtro)
-      .then((linhas) => setRecorte(new Map(
-        linhas.map((l) => [l.cd_mun, { imig: l.imig, emig: l.emig, saldo: l.saldo }]))))
-      .catch(() => setRecorte(null));
-  }, [filtro, municipios.length]);
+      .then((linhas) => { if (vivo) setRecorte(new Map(
+        linhas.map((l) => [l.cd_mun, { imig: l.imig, emig: l.emig, saldo: l.saldo }]))); })
+      .catch((e) => { if (vivo) registrarErro("recorte", `Falha ao aplicar o recorte: ${(e as Error).message}`); });
+    return () => { vivo = false; };
+  }, [filtro, municipios.length, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // sob recorte, o mapa mostra o saldo do subgrupo em vez da métrica escolhida
-  const municipiosVisiveis = useMemo(() => {
-    if (!recorte) return municipios;
-    // sob recorte, TODOS os indicadores passam a se referir ao subgrupo -- misturar
-    // saldo do subgrupo com imigração total daria um painel internamente incoerente
+  // Sob recorte, TODOS os indicadores passam a se referir ao subgrupo -- misturar saldo do
+  // subgrupo com imigração total daria um painel internamente incoerente. Cada número é `null`
+  // onde o recorte não o publica: município ausente de `recorte` (nenhum par com detalhe), ou
+  // célula suprimida (somada a `outros`) numa das pontas. Nulo é "sem dado", nunca zero: o zero
+  // antigo pintava "baixa variação" (TLM 0) e "saldo 0" no lugar de "não sei". Uma ponta só
+  // conhecida não dá saldo, TLM nem IEM (`saldo` já vem nulo da consulta); imig + emig = 0 é
+  // tratado como ausência, não como medição.
+  const valoresDoRecorte = useMemo(() => {
+    if (!recorte) return null;
+    return new Map(municipios.map((m) => {
+      const r = recorte.get(m.cd_mun);
+      const vazio = !r || (r.imig != null && r.emig != null && r.imig + r.emig === 0);
+      const imig = vazio ? null : r.imig, emig = vazio ? null : r.emig, saldo = vazio ? null : r.saldo;
+      const soma = imig != null && emig != null ? imig + emig : 0;
+      return [m.cd_mun, {
+        imig, emig, saldo,
+        tlm: saldo != null && m.pop5 > 0 ? (saldo / m.pop5) * 1000 : null,
+        tbi: imig != null && m.pop5 > 0 ? (imig / m.pop5) * 1000 : null,
+        tbe: emig != null && m.pop5 > 0 ? (emig / m.pop5) * 1000 : null,
+        iem: saldo != null && soma > 0 ? saldo / soma : null,
+      }];
+    }));
+  }, [municipios, recorte]);
+
+  // o painel do município (tipado com números) recebe 0 onde o recorte não publica o valor, com
+  // `semDado` marcando o município que não tem NENHUMA das três contagens; quem precisa
+  // distinguir campo a campo (mapa, legenda) lê `valoresDoRecorte`, que mantém os nulos
+  const municipiosVisiveis = useMemo<(Municipio & { semDado?: boolean })[]>(() => {
+    if (!valoresDoRecorte) return municipios;
     return municipios.map((m) => {
-      const r = recorte.get(m.cd_mun) ?? { imig: 0, emig: 0, saldo: 0 };
-      const soma = r.imig + r.emig;
+      const v = valoresDoRecorte.get(m.cd_mun)!;
       return {
-        ...m, imig: r.imig, emig: r.emig, saldo: r.saldo,
-        imig_ni: 0, imig_int: 0,
-        tlm: m.pop5 > 0 ? (r.saldo / m.pop5) * 1000 : 0,
-        tbi: m.pop5 > 0 ? (r.imig / m.pop5) * 1000 : 0,
-        tbe: m.pop5 > 0 ? (r.emig / m.pop5) * 1000 : 0,
-        iem: soma > 0 ? r.saldo / soma : null,
+        ...m, imig: v.imig ?? 0, emig: v.emig ?? 0, saldo: v.saldo ?? 0,
+        imig_ni: 0, imig_int: 0, tlm: v.tlm, tbi: v.tbi, tbe: v.tbe, iem: v.iem,
         // o erro-padrão publicado é do total, não do subgrupo: não seria correto reusá-lo
         se_imig: 0, se_emig: 0, se_saldo: 0, cv_imig: null, cv_emig: null,
         precisao_imig: "sem_estimativa",
+        semDado: v.imig == null && v.emig == null && v.saldo == null,
       };
     });
-  }, [municipios, recorte]);
+  }, [municipios, valoresDoRecorte]);
   const porCodigo = useMemo(
     () => new Map(municipiosVisiveis.map((m) => [m.cd_mun, m])), [municipiosVisiveis]);
 
   // F6: indicadores da malha ativa -- municipais, ou das unidades do nível agregado escolhido
-  const unidadesAtivas = nivelEfetivo === "mun" ? null : unidadesNivel[chaveCache(nivelEfetivo)] ?? [];
+  const unidadesAtivas = nivelEfetivo === "mun" ? null : unidadesNivel[chaveCache(nivelEfetivo)] ?? VAZIO;
   const porCodigoAtivo: Map<string, ValorMapa> = useMemo(() => {
-    if (nivelEfetivo === "mun") return porCodigo;
-    return new Map((unidadesAtivas ?? []).map((u) => [u.codigo, u]));
-  }, [nivelEfetivo, porCodigo, unidadesAtivas]);
+    if (nivelEfetivo !== "mun") return new Map((unidadesAtivas ?? []).map((u) => [u.codigo, u]));
+    if (!valoresDoRecorte) return porCodigo;
+    // sob recorte o mapa lê os números COM os nulos (dica "sem dados", cinza de "sem dado"), não
+    // os zeros de `municipiosVisiveis`
+    return new Map([...valoresDoRecorte].map(([cd, v]) =>
+      [cd, { ...v, cv_imig: null, precisao_imig: "sem_estimativa" }]));
+  }, [nivelEfetivo, porCodigo, valoresDoRecorte, unidadesAtivas]);
 
   // F5 (mapa-representação): centroide (metros, Albers) de cada unidade da malha ativa --
   // âncora das espigas bipolares (saldo/imigrantes/emigrantes, ver MapaAtlas.tsx). Reaproveita
@@ -569,32 +717,53 @@ export default function App() {
   // origem+destino. Refeita ao trocar de nível ou de edição; os CÓDIGOS não mudam sob recorte
   // (só os valores), por isso a dependência é `municipios`/`unidadesAtivas`, não
   // `municipiosVisiveis`/`porCodigoAtivo`.
-  const [centroidesAtivos, setCentroidesAtivos] = useState<Map<string, { x: number; y: number }>>(new Map());
+  //
+  // Os centroides guardam a edição/nível a que pertencem; o que o mapa lê é derivado da vista
+  // atual (vazio enquanto os da vista não chegam -- nunca os da edição ou do nível anterior, que
+  // ancorariam espigas e rótulos de capital em posições de outro mapa). Sem dados não há o que
+  // gravar: o ramo de "nenhum código" não faz setState, então a lista vazia de uma unidade ainda
+  // não carregada não realimenta o efeito (laço de re-render com `?? []` novo a cada render).
+  const chaveCentroides = `${censo}:${nivelEfetivo}`;
+  const [centroidesDe, setCentroidesDe] = useState<{ chave: string; mapa: Map<string, { x: number; y: number }> }>(
+    { chave: "", mapa: SEM_CENTROIDES });
+  const centroidesAtivos = centroidesDe.chave === chaveCentroides ? centroidesDe.mapa : SEM_CENTROIDES;
   useEffect(() => {
-    let vivo = true;
     const codigos = nivelEfetivo === "mun" ? municipios.map((m) => m.cd_mun) : (unidadesAtivas ?? []).map((u) => u.codigo);
-    if (codigos.length === 0) { setCentroidesAtivos(new Map()); return; }
+    if (codigos.length === 0) return;
+    let vivo = true;
+    const chave = `${censo}:${nivelEfetivo}`;
     const consulta = nivelEfetivo === "mun"
       ? centroidesDeMunicipios(codigos)
       : centroidesDeUnidades(nivelEfetivo as NivelAgregado, codigos);
     consulta
       .then((pts) => {
-        if (vivo) setCentroidesAtivos(new Map(pts.map((p) => [p.cd_mun, { x: p.x_albers, y: p.y_albers }])));
+        if (vivo) setCentroidesDe({ chave, mapa: new Map(pts.map((p) => [p.cd_mun, { x: p.x_albers, y: p.y_albers }])) });
       })
-      .catch(() => { if (vivo) setCentroidesAtivos(new Map()); });
+      .catch(() => {});
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nivelEfetivo, censo, municipios.length, unidadesAtivas]);
+  }, [nivelEfetivo, censo, municipios.length, unidadesAtivas, tentativa]);
 
   const quebras = useMemo(() => {
     const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? []);
     if (!valores.length) return [1, 2, 3];
     const vs = valores.map((m) =>
-      metrica === "saldo" ? m.saldo : metrica === "tlm" ? (m.tlm ?? 0)
-      : metrica === "imig" ? m.imig : metrica === "emig" ? -m.emig
+      metrica === "saldo" ? (m.saldo ?? 0) : metrica === "tlm" ? (m.tlm ?? 0)
+      : metrica === "imig" ? (m.imig ?? 0) : metrica === "emig" ? -(m.emig ?? 0)
       : (m.iem ?? 0) * 100);
     return quebrasSimetricas(vs);
   }, [municipiosVisiveis, unidadesAtivas, nivelEfetivo, metrica]);
+
+  // Entrada "sem dado" da legenda das métricas coropléticas (TLM/IEM): só aparece se há de fato
+  // alguma unidade sem valor na vista (pop5 = 0, nenhuma migração publicada, ou -- sob recorte --
+  // nenhum par publicado com detalhe para o subgrupo). Em contagem a malha é neutra e o zero
+  // não é desenhado, então não há cor a explicar.
+  const rotuloSemDado = useMemo(() => {
+    if (metrica !== "tlm" && metrica !== "iem") return null;
+    const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? VAZIO);
+    if (!valores.some((m) => (metrica === "tlm" ? m.tlm : m.iem) == null)) return null;
+    return recorte && nivelEfetivo === "mun" ? "sem dado publicado para o recorte" : "sem dado";
+  }, [metrica, nivelEfetivo, municipiosVisiveis, unidadesAtivas, recorte]);
 
   // F5 (mapa-representação): âncora da escala das espigas, para a legenda mostrar os MESMOS
   // números que o mapa usa (MapaAtlas.tsx calcula isto de novo a partir de `porCodigo`/
@@ -608,7 +777,7 @@ export default function App() {
     if (metrica !== "saldo" && metrica !== "imig" && metrica !== "emig") return null;
     if (nivelEfetivo === "mun") return ANCORA_ESPIGA_MUNICIPIO[metrica];
     const valores: ValorMapa[] = unidadesAtivas ?? [];
-    const abs = valores.map((m) => Math.abs(metrica === "saldo" ? m.saldo : metrica === "imig" ? m.imig : m.emig));
+    const abs = valores.map((m) => Math.abs((metrica === "saldo" ? m.saldo : metrica === "imig" ? m.imig : m.emig) ?? 0));
     return abs.length ? Math.max(1, ...abs) : null;
   }, [unidadesAtivas, nivelEfetivo, metrica]);
 
@@ -697,7 +866,11 @@ export default function App() {
           </Suspense>
     ) : (
       <Suspense fallback={fallbackPainel}>
-        <PainelRM cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro} meta={meta}
+        {/* key = edição + RM: ao trocar qualquer um dos dois o painel é remontado do zero, então
+            KPIs, Sankey e tabelas de uma edição/RM nunca ficam sob o título de outra (os efeitos de
+            dados do painel também dependem de `censo`, este `key` é a garantia de fora). */}
+        <PainelRM key={`${censo}:${rm}`} cdRm={rm} aba={aba} cruzar={cruzar} topN={topNStore} escuro={escuro} meta={meta}
+                  comparativoAberto={comparativoAberto} aoAlternarComparativo={setComparativoAberto}
                   aoMudarAba={setAba} aoMudarCruzar={setCruzar} aoSair={sairModoRM}
                   aoEscolherRM={entrarModoRM} aoSelecionarFluxo={aoSelecionarFluxo}
                   aoAbrirSerie={abrirSerie} />
@@ -864,7 +1037,12 @@ export default function App() {
       <main className="conteudo" id="conteudo-principal">
         <div className="mapa" data-tour="mapa">
           {!malhaAtiva && !erro && <div className="carregando">Carregando o mapa…</div>}
-          {erro && <div className="erro" role="alert">{erro}</div>}
+          {erro && (
+            <div className="erro" role="alert">
+              {erro}{" "}
+              <button type="button" className="link-metodologia" onClick={tentarDeNovo}>tentar de novo</button>
+            </div>
+          )}
           <MapaAtlas
             malha={malhaAtiva} contornos={contornosMalha} porCodigo={porCodigoAtivo} metrica={metrica} quebras={quebras}
             arcos={arcosVisiveis} selecionado={codigoSelecionado} escuro={escuro}
@@ -873,9 +1051,9 @@ export default function App() {
             destacar={rmDestacar ?? (nivelEfetivo === "uf" ? ufsRealcadas : null)} perimetro={rmPerimetro} nucleo={rmNucleo} campoId={campoId} rotuloDaFeicao={rotuloDaFeicao}
             descricaoAcessivel={descricaoMapa}
             aoPassarFeicao={nivelEfetivo === "uf" ? setUfSobMapa : undefined}
-            mostrarFluxos={mostrarFluxos} maiorFluxoEdicao={meta?.maior_fluxo ?? null}
+            mostrarFluxos={mostrarFluxos} ancoraFluxos={ancoraFluxos}
             boundsNacional={meta?.bounds_albers ?? null} centroides={centroidesAtivos}
-            mostrarSatelite={mostrarSatelite}
+            mostrarSatelite={mostrarSatelite} modoRM={Boolean(rm)}
           />
           <div className="mapa-controles-baixo">
             <div className="mapa-controles-linha">
@@ -914,15 +1092,19 @@ export default function App() {
               </p>
             )}
             {porCodigoAtivo.size > 0 && !rm && (
-              <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
+              <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={ancoraFluxos}
                        maiorAbsolutoMetrica={maiorAbsolutoMetrica}
                        notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined}
-                       menorFluxo={menorFluxoExibido} qtdFluxos={arcosVisiveis.length || undefined} />
+                       fluxosLigados={mostrarFluxos} semDado={rotuloSemDado}
+                       menorFluxo={menorFluxoExibido}
+                       escopoFluxos={municipio || selecao ? "selecao" : "pais"}
+                       limiteFluxos={municipio || selecao ? topNStore
+                         : nivelEfetivo === "mun" ? TOP_FLUXOS_MUNICIPIO : TOP_FLUXOS_NIVEL} />
             )}
             {rm && (
-              <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={meta?.maior_fluxo ?? null}
+              <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={ancoraFluxos}
                        titulo={legendaRM.titulo} categoriasFluxo={legendaRM.categorias}
-                       notaFluxo={legendaRM.nota} />
+                       notaFluxo={legendaRM.nota} fluxosLigados={mostrarFluxos} />
             )}
           </div>
         </div>

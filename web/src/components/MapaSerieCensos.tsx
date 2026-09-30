@@ -6,7 +6,7 @@
  *  interativa (pan/zoom, arcos, espigas, satélite, picking em WebGL) pensada para UM mapa por
  *  vez; os cinco painéis aqui são pequenos, estáticos (sem pan/zoom -- o enquadramento é fixo
  *  e igual nos cinco, por definição da seção 4.1) e precisam de UMA coisa que deck.gl não
- *  oferece nativamente: preenchimento por `<pattern>` SVG (as três tramas de ausência, seção
+ *  oferece nativamente: preenchimento por `<pattern>` SVG (as tramas de ausência, seção
  *  4.4). A projeção já está pronta nos arquivos (`*_albers.topojson`, coordenadas em metros,
  *  a mesma malha que `MapaAtlas` consome via `COORDINATE_SYSTEM.CARTESIAN`) -- então um mapa
  *  estático não precisa de WebGL: um `<path>` por feição, com uma transformação afim simples
@@ -25,16 +25,24 @@
  *  enquadramento é o bbox da PRÓPRIA unidade selecionada (na malha 2022, que compartilha a
  *  mesma projeção Albers das cinco edições -- ver comentário em MapaAtlas.tsx) expandido por
  *  um fator fixo (~4x maior lado), o mesmo bbox aplicado aos cinco painéis. No nível `uf`, o
- *  enquadramento é o Brasil, como pede a seção 4.1.
+ *  enquadramento é o Brasil, como pede a seção 4.1. O bbox usa só a MAIOR PARTE de um
+ *  MultiPolygon: uma ilha oceânica (Trindade, Fernando de Noronha) inflaria o zoom até o
+ *  mapa virar um ponto.
+ *
+ *  Cada painel tem três camadas: (1) a malha DA EDIÇÃO, pintada por valor/estado -- memoizada,
+ *  não refaz o Brasil inteiro a cada movimento do mouse; (2) a sobreposição de "não existia/sem
+ *  cobertura" sobre as unidades de 2022 sem polígono na malha da edição (um município criado
+ *  depois não tem feição em 1980: sem isso o painel ficava em branco ou com a cor da mãe); (3)
+ *  realce de hover e contorno da unidade selecionada, leves e sem estado pesado.
  */
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { feature } from "topojson-client";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Topology } from "topojson-specification";
 import { basePath, type Censo } from "../lib/edicoes";
 import {
-  ordenarEdicoes, QUEBRAS_FIXAS, rotuloEdicao, tramaDoEstado,
-  type EdicaoSerie, type NivelSerie,
+  estadoNoMapa, formatarQuebra, ordenarEdicoes, QUEBRAS_FIXAS, rotuloEdicao, tramaDoEstadoMapa,
+  type EdicaoSerie, type NivelSerie, type TramaMapa,
 } from "../lib/serie";
 import { corMedidaSerie, corDoSlotLegenda, LEGENDA_MEDIDA_SERIE, type MedidaMapaSerie } from "../lib/escalas";
 import { serieMapa, type LinhaMapaSerie } from "../db/queries";
@@ -56,11 +64,23 @@ const MEDIDAS: { chave: MedidaMapaSerie; rotulo: string }[] = [
   { chave: "tbe", rotulo: "Taxa bruta de emigração" },
 ];
 
+/** `se_iem` é o erro-padrão do IEM: com ele o mapa reconhece o estado `indefinido`
+ *  (`classificarIem`). Opcional no tipo porque `serieMapa` (db/queries.ts) precisa trazê-lo na
+ *  consulta; sem o campo a guarda estatística não atua e o painel pinta o IEM pelo valor. */
+type LinhaMapa = LinhaMapaSerie & { se_iem?: number | null };
+
+type Proj = (p: readonly [number, number]) => [number, number];
+
+/** Opacidade do "véu" da cor da superfície sob a trama das unidades que não existiam: o
+ *  território de um município criado depois cai dentro do polígono da mãe (que tem valor
+ *  próprio), e sem o véu a cor da mãe passaria por baixo da hachura como se fosse dele. */
+const VEU_SEM_NUMERO = 0.72;
+
 /** Converte a geometria de uma feição (Polygon/MultiPolygon, coordenadas em metros) num `d`
  *  de `<path>`, via a projeção afim `proj`. Winding de anéis já vem correto do GeoJSON (anel
  *  externo anti-horário, buracos horário) -- `fill-rule: nonzero` (o default de SVG) já
  *  resolve buracos sem precisar de `evenodd`. */
-function pathDaGeometria(geom: Geometry, proj: (p: readonly [number, number]) => [number, number]): string {
+function pathDaGeometria(geom: Geometry, proj: Proj): string {
   const anel = (r: number[][]) =>
     r.map((p, i) => `${i === 0 ? "M" : "L"}${proj([p[0], p[1]]).join(",")}`).join(" ") + "Z";
   if (geom.type === "Polygon") return (geom.coordinates as number[][][]).map(anel).join(" ");
@@ -70,19 +90,62 @@ function pathDaGeometria(geom: Geometry, proj: (p: readonly [number, number]) =>
   return "";
 }
 
-function bboxDaFeicao(f: Feature): Bbox | null {
+const idDaFeicao = (f: Feature, campoId: string): string =>
+  String((f.properties as Record<string, string>)[campoId]);
+
+/** Nome legível da feição (rótulo acessível): as malhas trazem `NM_MUN`, `nm_rgi`, `nm_rgint` ou
+ *  só a sigla da UF, conforme o nível. */
+function nomeDaFeicao(f: Feature, campoId: string): string {
+  const p = (f.properties ?? {}) as Record<string, string | undefined>;
+  return p.NM_MUN ?? p.nm_rgi ?? p.nm_rgint ?? p.uf_sigla ?? idDaFeicao(f, campoId);
+}
+
+/** `d` de cada feição projetada, por código -- memoizado por (malha, projeção, campo) num
+ *  `WeakMap`: os cinco painéis e a geometria de 2022 (contorno/sobreposição) compartilham o
+ *  mesmo cálculo, e carregar outra edição não refaz as que já estavam prontas. */
+const cacheCaminhos = new WeakMap<FeatureCollection, { proj: Proj; campoId: string; mapa: Map<string, string> }>();
+const SEM_CAMINHOS = new Map<string, string>();
+function caminhosDaMalha(malha: FeatureCollection, proj: Proj, campoId: string): Map<string, string> {
+  const c = cacheCaminhos.get(malha);
+  if (c && c.proj === proj && c.campoId === campoId) return c.mapa;
+  const mapa = new Map<string, string>();
+  for (const f of malha.features) mapa.set(idDaFeicao(f, campoId), pathDaGeometria(f.geometry, proj));
+  cacheCaminhos.set(malha, { proj, campoId, mapa });
+  return mapa;
+}
+
+/** Área (shoelace) do anel externo: só para escolher a maior parte de um MultiPolygon. */
+function areaDoAnel(anel: number[][]): number {
+  let a = 0;
+  for (let i = 0, n = anel.length; i < n; i++) {
+    const [x1, y1] = anel[i], [x2, y2] = anel[(i + 1) % n];
+    a += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(a / 2);
+}
+
+/** bbox da MAIOR parte (pelo anel externo) da feição -- ilhas oceânicas de um MultiPolygon
+ *  (Trindade em Vitória, Noronha em Pernambuco) ficam de fora do enquadramento. */
+function bboxDaMaiorParte(f: Feature): Bbox | null {
+  const g = f.geometry;
+  const poligonos: number[][][][] =
+    g.type === "Polygon" ? [g.coordinates as number[][][]]
+    : g.type === "MultiPolygon" ? (g.coordinates as number[][][][])
+    : [];
+  let anelMaior: number[][] | null = null;
+  let areaMaior = -1;
+  for (const poli of poligonos) {
+    const anel = poli[0];
+    if (!anel || anel.length === 0) continue;
+    const a = areaDoAnel(anel);
+    if (a > areaMaior) { areaMaior = a; anelMaior = anel; }
+  }
+  if (!anelMaior) return null;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  const varre = (coords: unknown): void => {
-    const arr = coords as unknown[];
-    if (typeof arr[0] === "number") {
-      const [x, y] = arr as [number, number];
-      if (x < minX) minX = x; if (x > maxX) maxX = x;
-      if (y < minY) minY = y; if (y > maxY) maxY = y;
-    } else {
-      for (const c of arr) varre(c);
-    }
-  };
-  if ("coordinates" in f.geometry) varre(f.geometry.coordinates as unknown);
+  for (const [x, y] of anelMaior) {
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
   if (!isFinite(minX)) return null;
   return [minX, minY, maxX, maxY];
 }
@@ -108,7 +171,10 @@ function useMalhasPorEdicao(nivel: NivelSerie, edicoes: readonly EdicaoSerie[]) 
       if (malhas[e]) continue;
       const censo = e as Censo;
       fetch(`${basePath(censo)}geo/${arquivo}_albers.topojson`)
-        .then((r) => r.json() as Promise<Topology>)
+        .then((r) => {
+          if (!r.ok) throw new Error(`malha ${e}: ${r.status}`);
+          return r.json() as Promise<Topology>;
+        })
         .then((topo) => {
           if (!vivo) return;
           const chave = Object.keys(topo.objects)[0];
@@ -125,29 +191,112 @@ function useMalhasPorEdicao(nivel: NivelSerie, edicoes: readonly EdicaoSerie[]) 
 
 const LARGURA_PAINEL = 190, ALTURA_PAINEL = 190;
 
+/** Uma feição já resolvida para desenho: só o que muda com edição/medida/tema. */
+interface ItemMapa { cd: string; nome: string; d: string; fill: string; trama: TramaMapa | null }
+interface SobreposicaoMapa { cd: string; d: string; trama: TramaMapa }
+
+const SEM_VALORES = new Map<string, LinhaMapa>();
+
+/** Camada de base: um `<path>` por feição. `memo` de propósito -- o hover (estado do pai) troca
+ *  a cada célula que o mouse cruza, e refazer milhares de caminhos (nível municipal: 5,5 mil por
+ *  painel) a cada troca travava a página. Só re-renderiza se os itens mudarem. */
+const CamadaBase = memo(function CamadaBase({ itens, sobreposicoes, idBase }: {
+  itens: ItemMapa[]; sobreposicoes: SobreposicaoMapa[]; idBase: string;
+}) {
+  return (
+    <g>
+      {itens.map((i) => (
+        <g key={i.cd}>
+          <path d={i.d} fill={i.fill} stroke="var(--hairline, #cfcdc2)" strokeWidth={0.4}
+                data-cd={i.cd} tabIndex={0} role="button" aria-label={i.nome} />
+          {i.trama && <path d={i.d} fill={`url(#${idBase}-${i.trama})`} pointerEvents="none" />}
+        </g>
+      ))}
+      {sobreposicoes.map((o) => (
+        <g key={`sem-${o.cd}`}>
+          <path d={o.d} fill="var(--plane, #f9f9f7)" fillOpacity={VEU_SEM_NUMERO}
+                stroke="var(--hairline, #cfcdc2)" strokeWidth={0.4} data-cd={o.cd} />
+          <path d={o.d} fill={`url(#${idBase}-${o.trama})`} pointerEvents="none" />
+        </g>
+      ))}
+    </g>
+  );
+});
+
 function PainelMapaEdicao({
-  edicao, malha, valores, campoId, proj, selecionado, hover, aoPassarMouse, medida, escuro,
+  edicao, malha, malha2022, valores, campoId, proj, selecionado, hover, aoPassarMouse, medida, escuro,
+  carregando,
 }: {
-  edicao: EdicaoSerie; malha: FeatureCollection | null;
-  valores: Map<string, LinhaMapaSerie>; campoId: string;
-  proj: (p: readonly [number, number]) => [number, number];
+  edicao: EdicaoSerie; malha: FeatureCollection | null; malha2022: FeatureCollection | null;
+  valores: Map<string, LinhaMapa>; campoId: string; proj: Proj;
   selecionado: string; hover: string | null;
   aoPassarMouse: (cd: string | null) => void;
   medida: MedidaMapaSerie; escuro: boolean;
+  /** Dados da série (`serieMapa`) ainda chegando: não pinta "não medido" antes da hora. */
+  carregando: boolean;
 }) {
   const idBase = `serie-mapa-${edicao}`;
-  if (!malha) {
+  const caminhos = useMemo(() => (malha ? caminhosDaMalha(malha, proj, campoId) : SEM_CAMINHOS),
+    [malha, proj, campoId]);
+  const caminhos2022 = useMemo(() => (malha2022 ? caminhosDaMalha(malha2022, proj, campoId) : SEM_CAMINHOS),
+    [malha2022, proj, campoId]);
+
+  const itens = useMemo<ItemMapa[]>(() => {
+    if (!malha || carregando) return [];
+    return malha.features.map((f) => {
+      const cd = idDaFeicao(f, campoId);
+      const linha = valores.get(cd);
+      const valor = linha ? ((linha[medida] as number | null | undefined) ?? null) : null;
+      const estado = estadoNoMapa(linha, medida, valor);
+      return {
+        cd, nome: nomeDaFeicao(f, campoId), d: caminhos.get(cd) ?? "",
+        fill: estado === "numero" ? corMedidaSerie(medida, valor, escuro) : "transparent",
+        trama: tramaDoEstadoMapa(estado),
+      };
+    });
+  }, [malha, carregando, valores, medida, escuro, campoId, caminhos]);
+
+  // Unidades de 2022 cujo estado na edição NÃO é número e que não têm feição na malha da edição
+  // (município criado depois, região sem cobertura): desenhadas com a geometria de 2022 e a
+  // trama do estado, por cima da malha da edição.
+  const sobreposicoes = useMemo<SobreposicaoMapa[]>(() => {
+    if (!malha || carregando) return [];
+    const saida: SobreposicaoMapa[] = [];
+    for (const [cd, linha] of valores) {
+      if (caminhos.has(cd)) continue;
+      const d = caminhos2022.get(cd);
+      if (!d) continue;
+      const valor = (linha[medida] as number | null | undefined) ?? null;
+      const trama = tramaDoEstadoMapa(estadoNoMapa(linha, medida, valor));
+      if (trama) saida.push({ cd, d, trama });
+    }
+    return saida;
+  }, [malha, carregando, valores, medida, caminhos, caminhos2022]);
+
+  if (!malha || carregando) {
     return (
       <div className="serie-mapa-painel serie-mapa-painel-vazio" style={{ width: LARGURA_PAINEL, height: ALTURA_PAINEL }}>
         <p className="muted-pequeno">carregando…</p>
       </div>
     );
   }
+
+  // Realce e contorno: a geometria da edição quando o código existe nela, a de 2022 quando não
+  // (o município selecionado não tem feição em 1980 -- o contorno aparece assim mesmo).
+  const dDe = (cd: string | null) => (cd ? (caminhos.get(cd) ?? caminhos2022.get(cd) ?? null) : null);
+  const dHover = hover && hover !== selecionado ? dDe(hover) : null;
+  const dSelecionado = dDe(selecionado);
+  const aoEntrar = (e: React.SyntheticEvent<SVGSVGElement>) => {
+    const cd = (e.target as SVGElement).dataset?.cd;
+    if (cd !== undefined) aoPassarMouse(cd);
+  };
+
   return (
     <figure className="serie-mapa-painel">
       <figcaption>{rotuloEdicao(edicao)}</figcaption>
       <svg width={LARGURA_PAINEL} height={ALTURA_PAINEL} viewBox={`0 0 ${LARGURA_PAINEL} ${ALTURA_PAINEL}`}
-           role="img" aria-label={`Mapa de ${medida.toUpperCase()} em ${rotuloEdicao(edicao)}`}>
+           role="img" aria-label={`Mapa de ${medida.toUpperCase()} em ${rotuloEdicao(edicao)}`}
+           onMouseOver={aoEntrar} onFocus={aoEntrar} onMouseLeave={() => aoPassarMouse(null)}>
         <defs>
           <pattern id={`${idBase}-diagonal`} width={4} height={4} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1={0} y1={0} x2={0} y2={4} stroke="var(--ink-muted, #898781)" strokeWidth={1} />
@@ -159,35 +308,15 @@ function PainelMapaEdicao({
           <pattern id={`${idBase}-pontilhada`} width={4} height={4} patternUnits="userSpaceOnUse">
             <circle cx={1} cy={1} r={0.6} fill="var(--ink-muted, #898781)" />
           </pattern>
+          <pattern id={`${idBase}-horizontal`} width={4} height={4} patternUnits="userSpaceOnUse">
+            <line x1={0} y1={1} x2={4} y2={1} stroke="var(--ink-muted, #898781)" strokeWidth={1} />
+          </pattern>
         </defs>
-        {malha.features.map((f) => {
-          const cd = String((f.properties as Record<string, string>)[campoId]);
-          const linha = valores.get(cd);
-          const estado = !linha ? "nao_medido"
-            : linha.existia === false ? "nao_existia"
-            : linha.estado_cobertura === "sem_cobertura" ? "sem_cobertura"
-            : linha.estado_cobertura === "insuficiente" ? "cobertura_insuficiente"
-            : linha.rm_unitaria ? "cobertura_insuficiente"
-            : (linha[medida] == null) ? "suprimido"
-            : "numero";
-          const trama = tramaDoEstado(estado);
-          const cor = estado === "numero" ? corMedidaSerie(medida, linha![medida], escuro) : "transparent";
-          const d = pathDaGeometria(f.geometry, proj);
-          const ehSelecionado = cd === selecionado;
-          const ehHover = cd === hover;
-          return (
-            <g key={cd}>
-              <path d={d} fill={cor} stroke="var(--hairline, #cfcdc2)" strokeWidth={0.4}
-                    onMouseEnter={() => aoPassarMouse(cd)} onMouseLeave={() => aoPassarMouse(null)}
-                    tabIndex={0} role="button" aria-label={cd}
-                    onFocus={() => aoPassarMouse(cd)} />
-              {trama && <path d={d} fill={`url(#${idBase}-${trama})`} pointerEvents="none" />}
-              {(ehSelecionado || ehHover) && (
-                <path d={d} fill="none" stroke="var(--ink)" strokeWidth={ehSelecionado ? 1.6 : 1} pointerEvents="none" />
-              )}
-            </g>
-          );
-        })}
+        <CamadaBase itens={itens} sobreposicoes={sobreposicoes} idBase={idBase} />
+        <g pointerEvents="none">
+          {dHover && <path d={dHover} fill="none" stroke="var(--ink)" strokeWidth={1} />}
+          {dSelecionado && <path d={dSelecionado} fill="none" stroke="var(--ink)" strokeWidth={1.6} />}
+        </g>
       </svg>
     </figure>
   );
@@ -206,10 +335,18 @@ function Legenda({ medida, escuro }: { medida: MedidaMapaSerie; escuro: boolean 
         ))}
       </ul>
       <hr className="serie-mapa-legenda-separador" />
-      <ul className="serie-mapa-legenda-tramas" aria-label="Diagonal: território não comparável. Cruzada: suprimido por sigilo. Pontilhada: não medido.">
+      <ul className="serie-mapa-legenda-tramas"
+          aria-label="Diagonal: território não comparável. Cruzada: suprimido por sigilo. Pontilhada: não medido. Horizontal: indefinido, amostra pequena demais para classificar.">
         <li><span className="serie-mapa-amostra serie-mapa-amostra-diagonal" /> não comparável (não existia / cobertura insuficiente)</li>
         <li><span className="serie-mapa-amostra serie-mapa-amostra-cruzada" /> suprimido (sigilo)</li>
         <li><span className="serie-mapa-amostra serie-mapa-amostra-pontilhada" /> não medido (o censo não perguntou)</li>
+        {medida === "iem" && (
+          <li>
+            <span className="serie-mapa-amostra"
+                  style={{ backgroundImage: "repeating-linear-gradient(0deg, var(--ink-muted) 0 1px, transparent 1px 4px)" }} />
+            {" "}indefinido (amostra pequena demais para classificar)
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -222,6 +359,10 @@ interface Props {
   edicoes: readonly EdicaoSerie[];
 }
 
+/** Estado da consulta `serieMapa`: `chave` = nível que a pediu (um resultado de outro nível não
+ *  vale), `linhas` null enquanto carrega. */
+interface DadosMapa { chave: string; linhas: LinhaMapa[] | null; erro: string | null }
+
 /** Mapa comparativo do Bloco 1 -- small multiples, um por edição marcada, mesma medida/
  *  quebras/enquadramento entre eles (seção 4). No nível `mun`, carrega sob pedido (botão); nos
  *  demais níveis, carrega direto (malhas pequenas). Nível `rm` não tem mapa comparativo nesta
@@ -233,51 +374,70 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
   const [pedidoMun, setPedidoMun] = useState(false);
   const carregar = nivel !== "mun" || pedidoMun;
 
-  // A malha de 2022 é SEMPRE carregada -- o enquadramento (bbox) do mapa depende dela, mesmo
-  // que 2022 não esteja marcada para exibição (ver `bbox` abaixo).
+  // A malha de 2022 é SEMPRE carregada -- o enquadramento (bbox) do mapa depende dela, e ela é a
+  // geometria de contorno/sobreposição das unidades sem feição na edição; isso vale mesmo que
+  // 2022 não esteja marcada para exibição.
   const edicoesComMalha = useMemo(() => ordenarEdicoes([...edicoes, "2022"]), [edicoes]);
 
-  const [linhasSerie, setLinhasSerie] = useState<LinhaMapaSerie[]>([]);
+  const [dadosMapa, setDadosMapa] = useState<DadosMapa | null>(null);
   useEffect(() => {
     if (nivel === "rm" || !carregar) return;
     let vivo = true;
-    serieMapa(nivel).then((linhas) => { if (vivo) setLinhasSerie(linhas); })
-      .catch(() => { if (vivo) setLinhasSerie([]); });
+    serieMapa(nivel)
+      .then((linhas) => { if (vivo) setDadosMapa({ chave: nivel, linhas: linhas as LinhaMapa[], erro: null }); })
+      .catch((e: unknown) => {
+        if (vivo) setDadosMapa({ chave: nivel, linhas: null, erro: (e as Error).message ?? "erro desconhecido" });
+      });
     return () => { vivo = false; };
   }, [nivel, carregar]);
+  const dadosDoNivel = dadosMapa?.chave === nivel ? dadosMapa : null;
+  const carregandoDados = carregar && nivel !== "rm" && dadosDoNivel === null;
 
   /** Agrupa uma única vez por edição -- cada painel lê o seu `Map`, sem refiltrar a lista
    *  inteira a cada render (importante no nível `mun`, até 5.570 x edições). */
   const valoresPorEdicaoENivel = useMemo(() => {
-    const porEdicao = new Map<EdicaoSerie, Map<string, LinhaMapaSerie>>();
+    const porEdicao = new Map<EdicaoSerie, Map<string, LinhaMapa>>();
     for (const e of edicoesComMalha) porEdicao.set(e, new Map());
-    for (const l of linhasSerie) porEdicao.get(l.edicao)?.set(l.codigo, l);
+    for (const l of dadosDoNivel?.linhas ?? []) porEdicao.get(l.edicao)?.set(l.codigo, l);
     return porEdicao;
-  }, [linhasSerie, edicoesComMalha]);
+  }, [dadosDoNivel, edicoesComMalha]);
 
-  const { malhas } = useMalhasPorEdicao(nivel === "rm" ? "uf" : nivel, carregar ? edicoesComMalha : []);
+  const { malhas, erro: erroMalha } = useMalhasPorEdicao(
+    nivel === "rm" ? "uf" : nivel, carregar && nivel !== "rm" ? edicoesComMalha : [],
+  );
   const malha2022 = malhas["2022"] ?? null;
   const campoId = CAMPO_ID[nivel];
 
   const bbox = useMemo<Bbox>(() => {
     if (nivel === "uf") return LIMITES_BRASIL;
     if (!malha2022) return LIMITES_BRASIL;
-    const f = malha2022.features.find((ft) => String((ft.properties as Record<string, string>)[campoId]) === codigo);
-    const b = f && bboxDaFeicao(f);
+    // A unidade selecionada pode não existir em 2022 (unidade agregada de uma edição antiga,
+    // ex.: `NORTEGO`): cai para a primeira malha carregada que a tenha.
+    const candidatas = [malha2022, ...edicoesComMalha.map((e) => malhas[e]).filter(
+      (m): m is FeatureCollection => m != null && m !== malha2022)];
+    let f: Feature | undefined;
+    for (const m of candidatas) {
+      f = m.features.find((ft) => idDaFeicao(ft, campoId) === codigo);
+      if (f) break;
+    }
+    const b = f && bboxDaMaiorParte(f);
     const expandido = b ? expandirBbox(b, 4) : null;
     return validarEExpandirBbox(expandido) ?? LIMITES_BRASIL;
-  }, [nivel, malha2022, codigo, campoId]);
+  }, [nivel, malha2022, malhas, edicoesComMalha, codigo, campoId]);
 
-  const proj = useMemo(() => {
-    const [minX, minY, maxX, maxY] = bbox;
+  // A projeção só muda quando o bbox muda DE VALOR: `bbox` é recalculado (nova referência) cada
+  // vez que uma malha chega, e uma projeção nova invalidaria todos os caminhos já calculados.
+  const chaveBbox = bbox.join(",");
+  const proj = useMemo<Proj>(() => {
+    const [minX, minY, maxX, maxY] = chaveBbox.split(",").map(Number);
     const dx = Math.max(maxX - minX, 1), dy = Math.max(maxY - minY, 1);
     const pad = 6;
     const escala = Math.min((LARGURA_PAINEL - 2 * pad) / dx, (ALTURA_PAINEL - 2 * pad) / dy);
-    return (p: readonly [number, number]): [number, number] => [
+    return (p) => [
       pad + (p[0] - minX) * escala,
       ALTURA_PAINEL - pad - (p[1] - minY) * escala,
     ];
-  }, [bbox]);
+  }, [chaveBbox]);
 
   if (nivel === "rm") {
     return (
@@ -286,6 +446,8 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
       </section>
     );
   }
+
+  const erro = dadosDoNivel?.erro ?? erroMalha;
 
   return (
     <section className="secao serie-mapa" aria-labelledby="serie-mapa-titulo">
@@ -302,21 +464,23 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
         <button className="link-serie" onClick={() => setPedidoMun(true)}>
           Carregar os mapas municipais das {edicoes.length} edições marcadas
         </button>
+      ) : erro ? (
+        <p className="erro" role="alert">Não foi possível carregar o mapa comparativo: {erro}</p>
       ) : (
         <>
           <div className="serie-mapa-paineis">
             {edicoes.map((e) => (
               <PainelMapaEdicao
-                key={e} edicao={e} malha={malhas[e] ?? null} campoId={campoId} proj={proj}
-                selecionado={codigo} hover={hover} aoPassarMouse={setHover}
-                medida={medida} escuro={escuro}
-                valores={valoresPorEdicaoENivel.get(e) ?? new Map()}
+                key={e} edicao={e} malha={malhas[e] ?? null} malha2022={malha2022} campoId={campoId}
+                proj={proj} selecionado={codigo} hover={hover} aoPassarMouse={setHover}
+                medida={medida} escuro={escuro} carregando={carregandoDados}
+                valores={valoresPorEdicaoENivel.get(e) ?? SEM_VALORES}
               />
             ))}
           </div>
           <Legenda medida={medida} escuro={escuro} />
           <p className="muted-pequeno">
-            Quebras fixas (mesmas em todas as edições): {QUEBRAS_FIXAS[medida].join(" · ")}
+            Quebras fixas (mesmas em todas as edições): {QUEBRAS_FIXAS[medida].map((q) => formatarQuebra(medida, q)).join(" · ")}
             {medida === "iem" ? " (índice, não %)" : " ‰"}.
           </p>
         </>

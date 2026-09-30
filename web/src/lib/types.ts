@@ -10,6 +10,9 @@ export interface Municipio {
   cv_imig: number | null; cv_emig: number | null;
   n_imig_faixa: string; n_emig_faixa: string;
   precisao_imig: string;
+  /** só sob recorte (App.tsx, `municipiosVisiveis`): true quando o recorte não publica NENHUMA
+   *  das três contagens para este município -- os zeros acima são ausência de dado, não zero. */
+  semDado?: boolean;
 }
 
 export interface Fluxo {
@@ -28,6 +31,9 @@ export type Metrica = "saldo" | "tlm" | "imig" | "emig" | "iem";
 export type Direcao = "entradas" | "saidas" | "ambos";
 
 export interface Meta {
+  /** edição do Censo a que este meta.json pertence (pipeline/build_meta.py) -- usada para
+   *  não misturar o texto de uma edição com o meta de outra durante a troca de censo. */
+  edicao?: string;
   versao_dados: string;
   fonte: string;
   salario_minimo_referencia: number;

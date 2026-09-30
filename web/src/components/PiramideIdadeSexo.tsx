@@ -1,13 +1,18 @@
 /** Pirâmide etária compacta (F6 leva 2, pendência 10b): homens à esquerda, mulheres à
  *  direita, mesma cor por sexo (slots 1 e 5 da paleta categórica de 8), com uma referência
  *  (ex.: imigrantes do destino, ou residentes do município) sobreposta como contorno
- *  tracejado. Valores em % do total do grupo. */
+ *  tracejado. Valores em % do total do grupo, INCLUINDO o residual ("outros ou suprimido":
+ *  células abaixo do limiar de divulgação e sexo ignorado): as barras não somam 100% quando
+ *  há residual, e a parcela que falta é dita numa nota abaixo do gráfico. */
 import { prepararPiramide } from "../lib/piramide";
 import { CATEGORICO_8, cor as corDeCategoria } from "../lib/paletas";
 import { num1 } from "../lib/format";
 
 const COR_HOMENS = CATEGORICO_8[0];
 const COR_MULHERES = CATEGORICO_8[4];
+
+/** "12,3%"; "menos de 0,1%" para o residual que existe mas arredondaria para 0,0. */
+const fmtPct = (p: number) => (p > 0 && p < 0.05 ? "menos de 0,1%" : `${num1(p)}%`);
 
 interface Props {
   titulo: React.ReactNode;
@@ -28,7 +33,8 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
                                     valoresReferencia, escuro, maiorPct: maiorPctFixo }: Props) {
   const grupo = prepararPiramide(valoresGrupo);
   const ref = valoresReferencia ? prepararPiramide(valoresReferencia) : null;
-  if (grupo.total <= 0) return null;
+  if (grupo.totalGeral <= 0) return null;
+  const temResiduo = grupo.outros > 0 || (ref?.outros ?? 0) > 0;
 
   // convenção usual da pirâmide etária: faixa mais velha no topo, mais nova embaixo
   // (prepararPiramide devolve as faixas em ordem crescente; invertemos só na exibição).
@@ -52,9 +58,11 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
     `${tituloTexto}. ${rotuloGrupo}:`,
     ...pontosExibidos.map((p) =>
       `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`),
+    grupo.outros > 0 ? `Outros ou suprimido: ${fmtPct(grupo.pctOutros)}.` : "",
     ref && rotuloReferencia ? `Referência (${rotuloReferencia}):` : "",
     ...(refExibidos?.map((p) =>
       `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`) ?? []),
+    ref && ref.outros > 0 ? `Referência, outros ou suprimido: ${fmtPct(ref.pctOutros)}.` : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -85,6 +93,14 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
           <li><span className="amostra pequena" style={{ border: "1.5px dashed var(--ink)", background: "transparent" }} /> {rotuloReferencia}</li>
         )}
       </ul>
+      {temResiduo && (
+        <p className="muted-pequeno explicacao">
+          Outros ou suprimido (fora das barras): {fmtPct(grupo.pctOutros)} de {rotuloGrupo}
+          {ref && rotuloReferencia && <>; {fmtPct(ref.pctOutros)} de {rotuloReferencia}</>}.
+          São as células de idade e sexo com poucas observações, que o atlas não divulga (limiar
+          de revelação), mais o sexo ignorado; por isso as barras não somam 100%.
+        </p>
+      )}
     </section>
   );
 }

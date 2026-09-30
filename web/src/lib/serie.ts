@@ -10,6 +10,11 @@
  *  docs/design_serie_censos.md, 4.5, item 1. Não corrigido aqui de propósito: é decisão da
  *  F12.6-aud (fora de escopo desta fase). `lib/serie.ts` e `PainelMunicipio.tsx` usam o
  *  índice, como a fonte única.
+ *
+ *  Unidades de `unidades_serie.parquet` que NÃO são o que o nome sugere: `pct_interestadual` é
+ *  FRAÇÃO (0-1), não percentual -- a conversão ×100 acontece uma vez, na leitura da série
+ *  (`normalizarLinhaUnidade`), e o resto do front (tabela, `tipoFluxoPredominante`) só vê
+ *  percentual. A capa nacional (`queries.ts`) já calcula em percentual por conta própria.
  */
 
 // --------------------------------------------------------------------------------------
@@ -26,6 +31,13 @@ export const NIVEIS_SERIE = ["mun", "rgi", "rgint", "uf", "rm"] as const;
 export type NivelSerie = (typeof NIVEIS_SERIE)[number];
 
 export const rotuloEdicao = (e: EdicaoSerie): string => (e === "1980" ? "1980 (proxy)" : e);
+
+/** Plural dos rótulos de nível -- "regiões imediatas", nunca "região imediatas" (concatenar "s"
+ *  ao singular quebra todo rótulo composto). O singular (`ROTULO_NIVEL`) mora em `SerieCensos.tsx`. */
+export const ROTULO_NIVEL_PLURAL: Record<NivelSerie, string> = {
+  mun: "municípios", rgi: "regiões imediatas", rgint: "regiões intermediárias", uf: "UFs",
+  rm: "regiões metropolitanas",
+};
 
 /** Número mínimo de edições marcadas na seção "Ao longo dos censos": abaixo disso não há
  *  o que comparar (F13). */
@@ -166,6 +178,17 @@ export function tipoFluxoPredominante(
   return { chave, rotulo: ROTULO_TIPO_FLUXO[chave] };
 }
 
+/** `pct_interestadual` chega de `unidades_serie.parquet` como FRAÇÃO (0-1); o front trabalha em
+ *  percentual (0-100), como a tabela e `LIMIAR_INTERESTADUAL_PCT`. Converte uma vez, na leitura. */
+export const fracaoParaPct = (v: number | null | undefined): number | null =>
+  v == null ? null : v * 100;
+
+/** Linha de `unidades_serie` já com `pct_interestadual` em percentual. Chamar UMA vez por linha
+ *  lida (nunca em cima de uma linha já normalizada: multiplicaria de novo por 100). */
+export function normalizarLinhaUnidade<T extends { pct_interestadual?: number | null }>(l: T): T {
+  return { ...l, pct_interestadual: fracaoParaPct(l.pct_interestadual) };
+}
+
 // --------------------------------------------------------------------------------------
 // Harmonização de vocabulário (porte parcial: só `status`, o único usado hoje pelo front)
 // --------------------------------------------------------------------------------------
@@ -193,6 +216,31 @@ export function harmonizarStatus(
       : parcelas.reduce((acc: number, p) => acc + (p ?? 0), 0);
   }
   return out;
+}
+
+/** O que uma barra de status migratório de UMA edição pode mostrar (Bloco 4).
+ *
+ *  `valores` vazio + `motivo` = a barra NÃO é desenhada e o motivo aparece no lugar. Regras:
+ *  - a unidade não existia / não tem cobertura / cobertura insuficiente na edição (`estadoUnidade`,
+ *    vindo de `unidades_serie`): sem barra, mesmo que existam linhas de perfil -- o número não é
+ *    comparável. O motivo vem da unidade, nunca do rótulo da edição;
+ *  - categoria DOMINANTE ausente (`nao_natural`, depois da harmonização -- em 2022 a soma
+ *    `primeira_saida + etapas_multiplas` é `null` se qualquer parcela foi suprimida): sem barra,
+ *    "suprimido". Renormalizar só com o que sobrou (retorno, exterior, outros) desenharia uma barra
+ *    de 100% que não existe. */
+export function perfilStatusDaEdicao(
+  brutos: Record<string, number | null>, edicao: EdicaoSerie, estadoUnidade: EstadoCelula,
+): { valores: Record<string, number>; motivo: EstadoCelula | null } {
+  if (estadoUnidade === "nao_existia" || estadoUnidade === "sem_cobertura"
+      || estadoUnidade === "cobertura_insuficiente") {
+    return { valores: {}, motivo: estadoUnidade };
+  }
+  const harmonizado = harmonizarStatus(brutos, edicao);
+  const valores: Record<string, number> = {};
+  for (const [k, v] of Object.entries(harmonizado)) if (v != null) valores[k] = v;
+  if (Object.keys(valores).length === 0) return { valores: {}, motivo: "suprimido" };
+  if (harmonizado[ALVO_STATUS] == null) return { valores: {}, motivo: "suprimido" };
+  return { valores, motivo: null };
 }
 
 // --------------------------------------------------------------------------------------
@@ -261,6 +309,45 @@ export function tramaDoEstado(estado: EstadoCelula): Trama {
   }
 }
 
+/** No mapa comparativo há um estado a mais que na tabela: `indefinido` -- há número de IEM, mas a
+ *  margem de erro (z·se) é maior que o valor (`classificarIem`), então pintá-lo como absorção ou
+ *  evasão seria afirmar o que a amostra não sustenta. Trama própria (horizontal), sem cor de valor:
+ *  um cinza sólido colidiria com a classe "rotatividade" (seção 4.4). */
+export type EstadoMapa = EstadoCelula | "indefinido";
+export type TramaMapa = NonNullable<Trama> | "horizontal";
+
+export function tramaDoEstadoMapa(estado: EstadoMapa): TramaMapa | null {
+  return estado === "indefinido" ? "horizontal" : tramaDoEstado(estado);
+}
+
+export interface LinhaEstadoMapa {
+  existia?: boolean | null; estado_cobertura?: string | null; rm_unitaria?: boolean | null;
+  se_iem?: number | null;
+}
+
+/** Estado de uma unidade num painel do mapa comparativo. `linha` ausente = a unidade não tem
+ *  linha na série desta edição ("não medido"). `valor` = valor da medida pintada (null =
+ *  suprimido). `se_iem` só entra quando a medida é o IEM e o campo veio na consulta. */
+export function estadoNoMapa(
+  linha: LinhaEstadoMapa | undefined, medida: string, valor: number | null,
+): EstadoMapa {
+  if (!linha) return "nao_medido";
+  if (linha.existia === false) return "nao_existia";
+  if (linha.estado_cobertura === "sem_cobertura") return "sem_cobertura";
+  if (linha.estado_cobertura === "insuficiente") return "cobertura_insuficiente";
+  if (linha.rm_unitaria) return "cobertura_insuficiente";
+  if (valor == null) return "suprimido";
+  if (medida === "iem" && classificarIem(valor, linha.se_iem ?? null) === "indefinido") return "indefinido";
+  return "numero";
+}
+
+const nf0q = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+
+/** Quebra fixa em texto pt-BR: IEM com duas casas (0,15 · 0,33 · 0,60 -- nunca 0.3333333333333333),
+ *  demais medidas (‰) inteiras. */
+export const formatarQuebra = (medida: string, v: number): string =>
+  medida === "iem" ? nf2.format(v) : nf0q.format(v);
+
 /** Palavra curta exibida na célula/ponto quando não há número (regra: nunca "0" nem "—"
  *  sozinho). */
 export const PALAVRA_ESTADO: Record<EstadoCelula, string> = {
@@ -322,6 +409,9 @@ export function carregarComparabilidade(basePath = "data/series/"): Promise<Comp
     comparabilidadeCache = fetch(`${basePath}comparabilidade.json`).then((r) => {
       if (!r.ok) throw new Error(`comparabilidade.json: ${r.status}`);
       return r.json() as Promise<Comparabilidade>;
+    }).catch((e: unknown) => {
+      comparabilidadeCache = null; // uma falha de rede não pode ficar memoizada para sempre
+      throw e;
     });
   }
   return comparabilidadeCache;
@@ -332,6 +422,96 @@ export function estadoDaCelula(
   comp: Comparabilidade, medida: string, edicao: EdicaoSerie, nivel: NivelSerie,
 ): RegraComparabilidade | null {
   return comp.matriz.find((r) => r.medida === medida && r.edicao === edicao && r.nivel === nivel) ?? null;
+}
+
+/** Ressalvas de comparabilidade de um conjunto de medidas de uma unidade: junta, por nota
+ *  (`comparabilidade.json -> notas`), as medidas e as edições em que ela vale. Só conta as
+ *  edições em que a unidade tem número (`edicoesComNumero`) -- uma ressalva sobre uma célula que
+ *  aparece como "não existia" não diz nada ao leitor. Ordem das notas = ordem das medidas. */
+export function ressalvasDoBloco(
+  comp: Comparabilidade, nivel: NivelSerie,
+  medidas: readonly { medidaComp: string; rotulo: string }[],
+  edicoes: readonly EdicaoSerie[], edicoesComNumero: ReadonlySet<EdicaoSerie>,
+): { nota: string; texto: string; medidas: string[]; edicoes: EdicaoSerie[] }[] {
+  const porNota = new Map<string, { medidas: Set<string>; edicoes: Set<EdicaoSerie> }>();
+  for (const m of medidas) {
+    for (const e of edicoes) {
+      if (!edicoesComNumero.has(e)) continue;
+      const regra = estadoDaCelula(comp, m.medidaComp, e, nivel);
+      if (!regra?.nota || regra.estado === "comparavel") continue;
+      const g = porNota.get(regra.nota) ?? { medidas: new Set<string>(), edicoes: new Set<EdicaoSerie>() };
+      g.medidas.add(m.rotulo);
+      g.edicoes.add(e);
+      porNota.set(regra.nota, g);
+    }
+  }
+  return [...porNota.entries()].map(([nota, g]) => ({
+    nota, texto: comp.notas[nota] ?? nota, medidas: [...g.medidas],
+    edicoes: EDICOES_SERIE.filter((e) => g.edicoes.has(e)),
+  }));
+}
+
+// --------------------------------------------------------------------------------------
+// Bloco 3: ordem dos parceiros
+// --------------------------------------------------------------------------------------
+
+/** Ordena parceiros pelo posto na edição mais recente MARCADA, desempatando pelas anteriores
+ *  (seção 3.3-a do desenho: "ordenadas pelo posto na edição mais recente com número"). Posto
+ *  ausente (não existia, suprimido) vale +infinito: quem não tem número na edição mais recente
+ *  vem depois de todo mundo que tem, e é ordenado entre si pela edição anterior. Último desempate:
+ *  nome. Ordenar ANTES de cortar a lista -- cortar pela ordem de chegada da consulta (edição mais
+ *  antiga primeiro) descartava o principal parceiro de 2022. */
+export function ordenarPorPostoRecente<T extends { nome: string }>(
+  itens: readonly T[], edicoes: readonly EdicaoSerie[],
+  postoEm: (item: T, edicao: EdicaoSerie) => number | null | undefined,
+): T[] {
+  const maisRecentePrimeiro = [...edicoes].reverse();
+  return [...itens].sort((a, b) => {
+    for (const e of maisRecentePrimeiro) {
+      const pa = postoEm(a, e) ?? Infinity;
+      const pb = postoEm(b, e) ?? Infinity;
+      if (pa !== pb) return pa < pb ? -1 : 1;
+    }
+    return a.nome.localeCompare(b.nome, "pt-BR");
+  });
+}
+
+// --------------------------------------------------------------------------------------
+// Sparkline: geometria compartilhada por `SerieCensos` (coluna "tend.") e `ResumoSerie` (cards)
+// --------------------------------------------------------------------------------------
+
+export interface GeometriaSpark {
+  /** Trechos CONTÍGUOS de pelo menos 2 pontos: uma lacuna (valor nulo) sempre abre a linha. */
+  segmentos: { x: number; y: number }[][];
+  /** Um ponto por valor presente -- inclusive quando só há um, que não forma segmento. */
+  pontos: { x: number; y: number; i: number }[];
+  /** Posições nulas (não interpoladas): o componente desenha a marca de ausência. */
+  ausentes: { x: number; i: number }[];
+}
+
+/** Posições fixas e equidistantes (uma por edição), zero sempre incluído na escala vertical. */
+export function geometriaSpark(
+  valores: readonly (number | null)[], largura: number, altura: number, margem = 3,
+): GeometriaSpark {
+  const validos = valores.filter((v): v is number => v != null && isFinite(v));
+  const min = Math.min(0, ...validos), max = Math.max(0, ...validos);
+  const span = max - min || 1;
+  const n = valores.length;
+  const x = (i: number) => (n <= 1 ? largura / 2 : margem + (i * (largura - 2 * margem)) / (n - 1));
+  const y = (v: number) => margem + (1 - (v - min) / span) * (altura - 2 * margem);
+  const segmentos: { x: number; y: number }[][] = [];
+  const pontos: GeometriaSpark["pontos"] = [];
+  const ausentes: GeometriaSpark["ausentes"] = [];
+  let trecho: { x: number; y: number }[] = [];
+  const fecha = () => { if (trecho.length >= 2) segmentos.push(trecho); trecho = []; };
+  valores.forEach((v, i) => {
+    if (v == null || !isFinite(v)) { ausentes.push({ x: x(i), i }); fecha(); return; }
+    const p = { x: x(i), y: y(v) };
+    pontos.push({ ...p, i });
+    trecho.push(p);
+  });
+  fecha();
+  return { segmentos, pontos, ausentes };
 }
 
 // --------------------------------------------------------------------------------------
@@ -348,6 +528,9 @@ export interface PontoFrase {
   emig: number | null;
   saldo: number | null;
   tlm: number | null;
+  /** Taxas brutas (‰): opcionais -- só o complemento por taxa (município-mãe) as usa. */
+  tbi?: number | null;
+  tbe?: number | null;
   coberturaPop: number | null;
 }
 
@@ -355,16 +538,143 @@ export interface EntradaFrase {
   nome: string;
   nivel: NivelSerie;
   pontos: PontoFrase[];
-  mae?: { nome: string; edicoes: string[]; agregada: boolean };
-  filhos?: { nomes: string[]; ultimaEdicaoJunto: string };
+  /** Município de origem quando esta unidade não existia em alguma edição marcada (ver
+   *  `maeDaSerie`). `agregada`: o código da mãe não é numérico (unidade agregada da edição,
+   *  ex.: `NORTEGO` em 1980) -- a frase diz "publicado agregado em", NÃO "foi criado depois de":
+   *  a coluna segue sem número, mas não se afirma criação posterior. `ultimaEdicaoAusente` =
+   *  edição mais recente (da série completa) em que a unidade ainda não existia. */
+  mae?: {
+    nome: string; edicoes: string[]; agregada: boolean; codigo?: string; ultimaEdicaoAusente?: string;
+  };
+  /** Municípios desmembrados DESTE (município-mãe). `ultimaEdicaoJunto` ausente = sem ano
+   *  confiável na fonte: a frase omite o "Até {ano}" em vez de inventar um. */
+  filhos?: { nomes: string[]; ultimaEdicaoJunto?: string };
   rmUnitaria?: EdicaoSerie[];
 }
 
-const fmtIem = (v: number | null): string => {
+/** Campos de `unidades_serie` que a frase lê (tipos soltos: vêm do DuckDB como `unknown`). */
+export interface LinhaSerieFrase {
+  edicao: EdicaoSerie;
+  imig: number | null; emig: number | null; saldo: number | null; tlm: number | null;
+  tbi?: number | null; tbe?: number | null;
+  iem: number | null; se_iem: number | null;
+  existia: boolean | null; estado_cobertura: string | null;
+  cobertura_pop?: number | null;
+  cd_mun_mae?: string | null; nm_mun_mae?: string | null;
+}
+
+/** Estado de uma linha da série para a FRASE (não para uma medida qualquer da tabela): sem `iem`
+ *  publicável a edição não entra como "numero" -- a frase nunca ancora em célula vazia. */
+export function estadoDaLinha(l: LinhaSerieFrase): PontoFrase["estado"] {
+  if (l.existia === false) return "nao_existia";
+  if (l.estado_cobertura === "sem_cobertura") return "sem_cobertura";
+  if (l.estado_cobertura === "insuficiente") return "cobertura_insuficiente";
+  if (l.iem == null) return "suprimido";
+  return "numero";
+}
+
+/** Pontos da frase, um por edição marcada, em ordem cronológica. Edição sem linha = "nao_medido". */
+export function pontosDaSerie(
+  linhas: readonly LinhaSerieFrase[], edicoes: readonly EdicaoSerie[],
+): PontoFrase[] {
+  const porEdicao = new Map(linhas.map((l) => [l.edicao, l]));
+  return edicoes.map((edicao): PontoFrase => {
+    const l = porEdicao.get(edicao);
+    if (!l) {
+      return { edicao, estado: "nao_medido", iem: null, seIem: null, tipo: null, imig: null,
+               emig: null, saldo: null, tlm: null, tbi: null, tbe: null, coberturaPop: null };
+    }
+    const estado = estadoDaLinha(l);
+    const num = estado === "numero";
+    return {
+      edicao, estado,
+      iem: num ? l.iem : null,
+      seIem: l.se_iem ?? null,
+      tipo: num ? classificarIem(l.iem, l.se_iem) : null,
+      imig: num ? l.imig : null, emig: num ? l.emig : null,
+      saldo: num ? l.saldo : null, tlm: num ? l.tlm : null,
+      tbi: num ? (l.tbi ?? null) : null, tbe: num ? (l.tbe ?? null) : null,
+      coberturaPop: l.cobertura_pop ?? null,
+    };
+  });
+}
+
+const ehCodigoNumerico = (c: string): boolean => /^\d+$/.test(c);
+
+/** Município de origem (mãe) da unidade, para o prefixo "foi criado depois de …".
+ *
+ *  Só existe se ALGUMA edição marcada é `existia = false` (senão a série marcada é completa e
+ *  não há o que dizer). A mãe é a da edição MAIS RECENTE da série completa em que a unidade ainda
+ *  não existia -- a que cedeu o território por último -- e não a da primeira edição com mãe: para
+ *  ~137 municípios a mãe muda entre edições (a mãe de 1980 de um município criado em 2013 pode ser
+ *  uma terceira, que já tinha perdido o território antes). `agregada`: o código da mãe não é
+ *  numérico (unidade agregada da edição, ex.: `NORTEGO`). */
+export function maeDaSerie(
+  linhas: readonly Pick<LinhaSerieFrase, "edicao" | "existia" | "cd_mun_mae" | "nm_mun_mae">[],
+  edicoesMarcadas: readonly EdicaoSerie[],
+): NonNullable<EntradaFrase["mae"]> | undefined {
+  const ausentes = linhas
+    .filter((l) => l.existia === false && l.cd_mun_mae)
+    .sort((a, b) => EDICOES_SERIE.indexOf(a.edicao) - EDICOES_SERIE.indexOf(b.edicao));
+  if (!ausentes.some((l) => edicoesMarcadas.includes(l.edicao))) return undefined;
+  const ultima = ausentes[ausentes.length - 1];
+  const codigo = ultima.cd_mun_mae!;
+  return {
+    codigo,
+    nome: ultima.nm_mun_mae ?? codigo,
+    edicoes: ausentes
+      .filter((l) => l.cd_mun_mae === codigo && edicoesMarcadas.includes(l.edicao))
+      .map((l) => l.edicao),
+    ultimaEdicaoAusente: ultima.edicao,
+    agregada: !ehCodigoNumerico(codigo),
+  };
+}
+
+export interface FilhoMunicipio {
+  codigo: string; nome?: string | null; ultima_edicao_ausente?: string | null;
+}
+
+/** Filhos (municípios desmembrados deste) que entram na frase de município-mãe: só aqueles cuja
+ *  separação cai DENTRO do intervalo das edições marcadas. O filho existe desde a edição seguinte
+ *  a `ultima_edicao_ausente`; a separação fica dentro da janela [primeira, última] marcada quando
+ *  `primeira <= ultima_edicao_ausente < última` -- antes disso aconteceu antes da janela (o
+ *  primeiro ponto já vem sem o território), depois aconteceu depois dela. Sem
+ *  `ultima_edicao_ausente` na fonte não dá para localizar: o filho entra (não some em silêncio).
+ *  `ultimaEdicaoJunto` = a MENOR `ultima_edicao_ausente` do grupo: até essa edição a mãe incluía
+ *  todos os territórios listados (valeria mais para alguns, mas nunca menos). */
+export function filhosNoIntervalo(
+  filhos: readonly FilhoMunicipio[], edicoesMarcadas: readonly EdicaoSerie[],
+): NonNullable<EntradaFrase["filhos"]> | undefined {
+  if (edicoesMarcadas.length === 0) return undefined;
+  const primeira = EDICOES_SERIE.indexOf(edicoesMarcadas[0]);
+  const ultima = EDICOES_SERIE.indexOf(edicoesMarcadas[edicoesMarcadas.length - 1]);
+  const dentro = filhos.filter((f) => {
+    if (!f.ultima_edicao_ausente) return true;
+    const i = EDICOES_SERIE.indexOf(f.ultima_edicao_ausente as EdicaoSerie);
+    return i >= primeira && i < ultima;
+  });
+  if (dentro.length === 0) return undefined;
+  const nomes = dentro.map((f) => f.nome ?? f.codigo);
+  const datadas = dentro
+    .map((f) => f.ultima_edicao_ausente)
+    .filter((e): e is string => Boolean(e))
+    .sort((a, b) => EDICOES_SERIE.indexOf(a as EdicaoSerie) - EDICOES_SERIE.indexOf(b as EdicaoSerie));
+  return { nomes, ultimaEdicaoJunto: datadas[0] };
+}
+
+const nf2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** IEM em texto (R5): sinal tipográfico explícito e duas casas em pt-BR -- `+0,24`, `−0,08`,
+ *  `0,00`. Único formatador do IEM da seção (frase, cards, tabela): nunca `toFixed` cru, que
+ *  devolve ponto decimal e hífen. */
+export const formatarIem = (v: number | null | undefined): string => {
   if (v == null) return "—";
-  const s = v > 0 ? "+" : v < 0 ? "−" : "";
-  return `${s}${Math.abs(v).toFixed(2).replace(".", ",")}`;
+  // sinal decidido sobre o valor ARREDONDADO: -0,001 vira "0,00", não "−0,00"
+  const r = Math.round(v * 100);
+  const s = r > 0 ? "+" : r < 0 ? "−" : "";
+  return `${s}${nf2.format(Math.abs(v))}`;
 };
+const fmtIem = formatarIem;
 
 const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const numFrase = (v: number | null): string => (v == null ? "—" : nf0.format(Math.abs(v)));
@@ -378,11 +688,18 @@ function direcao(ini: number | null, fim: number | null): Direcao {
   return "flat";
 }
 
-/** Tabela de complemento por direção de imig/emig (R4). */
+/** Tabela de complemento por direção de imig/emig (R4).
+ *
+ *  Com `porTaxa` (município-mãe) compara as TAXAS brutas (tbi/tbe), que sofrem menos com o degrau
+ *  de fronteira do que os volumes, e só então o complemento leva o sufixo sobre a fronteira --
+ *  o texto descreve o que foi de fato calculado. Se faltar alguma das quatro taxas nas pontas,
+ *  volta aos volumes e NÃO afirma desconto nenhum (o prefixo de município-mãe já avisa que parte
+ *  da variação de volume é fronteira). Versão anterior comparava `tlm` no lugar de `tbi` e
+ *  dizia "descontada a mudança de fronteira" sem ter calculado nada disso. */
 function complemento(ini: PontoFrase, fim: PontoFrase, porTaxa = false): string {
-  const imigIni = porTaxa ? ini.tlm : ini.imig; // aproximação: tbi não está em PontoFrase; ver nota abaixo
-  const dImig = direcao(imigIni, porTaxa ? fim.tlm : fim.imig);
-  const dEmig = direcao(ini.emig, fim.emig);
+  const temTaxas = porTaxa && ini.tbi != null && fim.tbi != null && ini.tbe != null && fim.tbe != null;
+  const dImig = temTaxas ? direcao(ini.tbi!, fim.tbi!) : direcao(ini.imig, fim.imig);
+  const dEmig = temTaxas ? direcao(ini.tbe!, fim.tbe!) : direcao(ini.emig, fim.emig);
   const chave = `${dImig}_${dEmig}`;
   const tabela: Record<string, string> = {
     up_up: "chega mais gente do que antes, e sai mais também",
@@ -396,7 +713,7 @@ function complemento(ini: PontoFrase, fim: PontoFrase, porTaxa = false): string 
     down_down: "entram e saem menos pessoas do que antes",
   };
   const texto = tabela[chave] ?? "entradas e saídas mudaram pouco";
-  return porTaxa ? `${texto} — descontada a mudança de fronteira` : texto;
+  return temTaxas ? `${texto} — pelas taxas, que descontam em parte a mudança de fronteira` : texto;
 }
 
 /** R7: ressalva de proxy, obrigatória quando `ini.edicao === "1980"`. */
@@ -436,16 +753,25 @@ function ressalvaCobertura(entrada: EntradaFrase, fim: PontoFrase): string | nul
 
 function prefixoTruncamento(entrada: EntradaFrase): string | null {
   if (!entrada.mae) return null;
-  // `entrada.pontos` está em ordem cronológica ascendente (EDICOES_SERIE: 1980..2022). O
-  // município foi criado DEPOIS da ÚLTIMA edição em que ainda não existia -- não da primeira
-  // (bug encontrado na auditoria F12.6-aud: `.find` pegava a primeira ocorrência de
-  // `nao_existia`, dizendo "criado depois de 1980" para ~1.070 municípios cuja criação real foi
-  // em 1991, 2000 ou 2010). Percorrer de trás para frente dá a última.
+  // Mãe de código não numérico = unidade agregada da edição (ex.: `NORTEGO`, 1980): o território
+  // É publicado, só que junto com outros. A coluna da edição fica sem número, mas a frase NÃO
+  // afirma "foi criado depois de" -- não se sabe (nem se diz) quando a separação aconteceu.
+  if (entrada.mae.agregada) {
+    const anos = entrada.mae.edicoes.length > 0 ? `Em ${entrada.mae.edicoes.join(", ")}` : "Em edições anteriores";
+    return `${anos}, ${entrada.nome} não tem número próprio: o território é publicado agregado em ` +
+      `${entrada.mae.nome}.`;
+  }
+  // O município foi criado DEPOIS da ÚLTIMA edição em que ainda não existia -- não da primeira
+  // (bug da auditoria F12.6-aud: `.find` pegava a primeira ocorrência de `nao_existia`, dizendo
+  // "criado depois de 1980" para ~1.070 municípios criados em 1991, 2000 ou 2010). A mãe certa é
+  // a da MESMA edição (`maeDaSerie` já a escolhe assim): a mãe de 1980 de um município criado em
+  // 2013 pode ser uma terceira, que já tinha cedido o território antes. `ultimaEdicaoAusente`
+  // vem da série completa; sem ela, cai no último ponto `nao_existia` das edições marcadas.
   const semExistir = entrada.pontos.filter((p) => p.estado === "nao_existia");
-  const ultimaSemExistir = semExistir.length > 0 ? semExistir[semExistir.length - 1].edicao : undefined;
-  const agregada = entrada.mae.agregada ? ", unidade agregada" : "";
+  const ultimaSemExistir = entrada.mae.ultimaEdicaoAusente
+    ?? (semExistir.length > 0 ? semExistir[semExistir.length - 1].edicao : undefined);
   return `${entrada.nome} foi criado depois de ${ultimaSemExistir ?? entrada.mae.edicoes[entrada.mae.edicoes.length - 1]}; ` +
-    `até então seu território fazia parte de ${entrada.mae.nome}${agregada}.`;
+    `até então seu território fazia parte de ${entrada.mae.nome}.`;
 }
 
 function prefixoMae(entrada: EntradaFrase): string | null {
@@ -453,7 +779,8 @@ function prefixoMae(entrada: EntradaFrase): string | null {
   const nomes = entrada.filhos.nomes.length > 3
     ? `${entrada.filhos.nomes.slice(0, 3).join(", ")} e outros`
     : entrada.filhos.nomes.join(" e ");
-  return `Até ${entrada.filhos.ultimaEdicaoJunto}, ${entrada.nome} incluía o território que hoje ` +
+  const ate = entrada.filhos.ultimaEdicaoJunto ? `Até ${entrada.filhos.ultimaEdicaoJunto}, ` : "Antes, ";
+  return `${ate}${entrada.nome} incluía o território que hoje ` +
     `é ${nomes}; parte da variação de volume desde então é fronteira, não migração.`;
 }
 
@@ -465,7 +792,8 @@ export function fraseSintese(entrada: EntradaFrase): string {
   if (comNumero.length === 0) {
     const motivoDominante = motivoDominanteTexto(entrada.pontos);
     const abraMae = entrada.mae
-      ? ` Abra a série de ${entrada.mae.nome}, de que o território fazia parte.`
+      ? ` Abra a série de ${entrada.mae.nome}, ${entrada.mae.agregada
+          ? "em que o território está agregado" : "de que o território fazia parte"}.`
       : "";
     return `Não há série para ${entrada.nome}: ${motivoDominante}.${abraMae}`;
   }
@@ -566,7 +894,8 @@ function motivoDasOutras(entrada: EntradaFrase, fimEdicao: EdicaoSerie): string 
   const outras = entrada.pontos.filter((p) => p.edicao !== fimEdicao);
   if (outras.length === 0) return null;
   const motivos = new Set(outras.map((p) => p.estado));
-  const texto = motivos.has("nao_existia") ? "não existia"
+  const texto = motivos.has("nao_existia")
+    ? (entrada.mae?.agregada ? `o território é publicado agregado em ${entrada.mae.nome}` : "não existia")
     : motivos.has("cobertura_insuficiente") || motivos.has("sem_cobertura") ? "a cobertura é insuficiente"
     : motivos.has("suprimido") ? "o dado foi suprimido"
     : "o dado não foi medido";

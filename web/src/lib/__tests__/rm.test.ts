@@ -54,17 +54,73 @@ describe("bboxDeGeometria (F6: zoom na seleção de um município)", () => {
     expect(bbox[3]).toBeGreaterThan(-22);
   });
 
-  it("calcula a bbox de um MultiPolygon (percorre todos os anéis)", () => {
+  it("calcula a bbox de um MultiPolygon (percorre os anéis de todas as partes relevantes)", () => {
     const geom = {
       type: "MultiPolygon",
       coordinates: [
         [[[-50, -25], [-49, -25], [-49, -24], [-50, -24], [-50, -25]]],
-        [[[-40, -10], [-39, -10], [-39, -9], [-40, -9], [-40, -10]]],
+        // parte do mesmo tamanho, vizinha: as duas entram no enquadramento
+        [[[-48.5, -25], [-47.5, -25], [-47.5, -24], [-48.5, -24], [-48.5, -25]]],
       ],
     };
     const bbox = bboxDeGeometria(geom)!;
     expect(bbox[0]).toBeLessThan(-50);
-    expect(bbox[2]).toBeGreaterThan(-39);
+    expect(bbox[2]).toBeGreaterThan(-47.5);
+  });
+
+  // Vitória, o ES e Recife não podem enquadrar Trindade/Fernando de Noronha: a câmera ia parar a
+  // mais de 1.000 km da cidade. Unidade arbitrária (metros no mapa): a regra é relativa.
+  describe("ilhas oceânicas não entram no enquadramento de um MultiPolygon", () => {
+    const quadrado = (x: number, y: number, l: number) =>
+      [[[x, y], [x + l, y], [x + l, y + l], [x, y + l], [x, y]]];
+
+    it("ignora uma ilha minúscula e distante (UF/RGI: ~0,02% da área)", () => {
+      const geom = {
+        type: "MultiPolygon",
+        coordinates: [quadrado(0, 0, 10_000), quadrado(1_100_000, 0, 400)],
+      };
+      const bbox = bboxDeGeometria(geom, 0)!;
+      expect(bbox).toEqual([0, 0, 10_000, 10_000]);
+    });
+
+    it("ignora uma ilha distante mesmo com área acima de 5% da maior parte (caso Vitória/Trindade, ~11%)", () => {
+      const geom = {
+        type: "MultiPolygon",
+        coordinates: [quadrado(0, 0, 10_000), quadrado(1_100_000, 0, 3_300)],
+      };
+      const [, , maxX] = bboxDeGeometria(geom, 0)!;
+      expect(maxX).toBe(10_000);
+    });
+
+    it("a ordem das partes não importa (a maior é a que vale, não a primeira)", () => {
+      const geom = {
+        type: "MultiPolygon",
+        coordinates: [quadrado(1_100_000, 0, 400), quadrado(0, 0, 10_000)],
+      };
+      expect(bboxDeGeometria(geom, 0)).toEqual([0, 0, 10_000, 10_000]);
+    });
+
+    it("mantém uma ilha costeira próxima e relevante (mesma feição, poucas dezenas de km)", () => {
+      const geom = {
+        type: "MultiPolygon",
+        coordinates: [quadrado(0, 0, 10_000), quadrado(14_000, 0, 4_000)],
+      };
+      const [, , maxX] = bboxDeGeometria(geom, 0)!;
+      expect(maxX).toBe(18_000);
+    });
+
+    it("descarta uma parte vizinha mas irrelevante (abaixo de 5% da maior)", () => {
+      const geom = {
+        type: "MultiPolygon",
+        coordinates: [quadrado(0, 0, 10_000), quadrado(10_500, 0, 1_000)],
+      };
+      expect(bboxDeGeometria(geom, 0)).toEqual([0, 0, 10_000, 10_000]);
+    });
+
+    it("um Polygon simples não é afetado", () => {
+      const geom = { type: "Polygon", coordinates: quadrado(0, 0, 10_000) };
+      expect(bboxDeGeometria(geom, 0)).toEqual([0, 0, 10_000, 10_000]);
+    });
   });
 
   it("geometria vazia/sem coordenadas devolve null", () => {

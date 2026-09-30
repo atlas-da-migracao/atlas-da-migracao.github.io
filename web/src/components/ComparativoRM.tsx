@@ -33,13 +33,17 @@ export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
     (c.chave !== "pct_pendular" || recursos.pendular) &&
     (c.chave !== "tempo_mediano" || recursos.tempoMinutos) &&
     (c.chave !== "pct_coletivo" || recursos.modo));
-  const [ordem, setOrdem] = useState<{ col: Coluna; dir: 1 | -1 }>({ col: "pop", dir: -1 });
+  const [ordemEscolhida, setOrdem] = useState<{ col: Coluna; dir: 1 | -1 }>({ col: "pop", dir: -1 });
+  // Colunas variam por edição (2010 não tem tempo mediano, 1991 não tem pendular): se a edição
+  // mudou e a coluna ordenadora sumiu, ordena por população em vez de por uma coluna invisível
+  // (que, sem dado, ordenava por zero e deixava a tabela numa ordem arbitrária sem indicação).
+  const ordem = COLUNAS.some((c) => c.chave === ordemEscolhida.col) ? ordemEscolhida : { col: "pop" as Coluna, dir: -1 as const };
 
   const top20 = useMemo(() => [...rms].sort((a, b) => b.pop - a.pop).slice(0, 20), [rms]);
   const ordenadas = useMemo(() => {
     const v = (r: ResumoRM) => (r[ordem.col] ?? 0) as number;
     return [...top20].sort((a, b) => (v(a) - v(b)) * ordem.dir);
-  }, [top20, ordem]);
+  }, [top20, ordem.col, ordem.dir]);
 
   const maxAbsSaldo = Math.max(1, ...top20.map((r) => Math.abs(r.saldo_externo)));
   const maxPendular = Math.max(1, ...top20.map((r) => r.pct_pendular ?? 0));

@@ -241,3 +241,125 @@ def test_web_index_html_tem_conteudo_estatico_e_jsonld():
         tipos.add(obj["@type"])
     assert "WebSite" in tipos
     assert "Dataset" in tipos
+
+
+# ============================== rótulo da tipologia nas páginas de RM ==============================
+def test_tipologia_intra_rm_usa_rotulo_nao_chave_crua(paginas):
+    """Regressão: a tabela "10 maiores fluxos intra-RM" mostrava a chave crua ("nucleo_periferia")."""
+    rotulos = set(bp.TIPOLOGIA_ROTULO.values())
+    assert rotulos == {"Núcleo → periferia", "Periferia → núcleo", "Periferia → periferia"}
+    achados = set()
+    for caminho, html in paginas.items():
+        if not caminho.startswith("/regiao-metropolitana/"):
+            continue
+        assert not re.search(r"<td>(nucleo|periferia)_\w+</td>", html), f"{caminho}: chave crua da tipologia"
+        achados.update(re.findall(r"<td>((?:Núcleo|Periferia) → (?:periferia|núcleo))</td>", html))
+    assert achados & rotulos, "nenhuma página de RM mostra a tipologia com rótulo"
+    assert achados <= rotulos
+
+
+def test_todas_as_chaves_de_tipologia_publicadas_tem_rotulo():
+    import duckdb
+    con = duckdb.connect()
+    chaves = {r[0] for r in con.execute(
+        f"SELECT DISTINCT tipologia FROM read_parquet('{bp.PROCESSED / 'rm_fluxos_intra.parquet'}')").fetchall()}
+    assert chaves <= set(bp.TIPOLOGIA_ROTULO), f"tipologia sem rótulo: {chaves - set(bp.TIPOLOGIA_ROTULO)}"
+
+
+# ============================== IC 95% ==============================
+def test_ic95_contagem_trunca_limite_inferior_em_zero():
+    # 10 ± 1,96*20 = -29,2 a 49,2: uma contagem não é negativa
+    assert bp.ic95(10, 20) == "0 a 49"
+    assert bp.ic95(1000, 100) == "804 a 1.196"
+    assert bp.ic95(None, 5) is None and bp.ic95(5, None) is None
+
+
+def test_ic95_saldo_mantem_negativo_com_menos_tipografico():
+    # saldo pode ser negativo: não se trunca, mas o sinal é o "−" (U+2212), como em fmt_sinal
+    assert bp.ic95(5, 10, piso_zero=False) == "−15 a 25"
+    assert bp.ic95(-100, 30, piso_zero=False) == "−159 a −41"
+    assert "-" not in bp.ic95(-100, 30, piso_zero=False)
+
+
+def test_ic_de_imigrantes_e_emigrantes_nunca_negativo_nas_paginas(paginas):
+    re_linha = re.compile(
+        r'<th scope="row">(?:Imigrantes|Emigrantes)</th><td class="num tabular">[^<]*</td>'
+        r'<td class="num tabular">([^<]*)</td>')
+    vistos = 0
+    for caminho, html in paginas.items():
+        if not caminho.startswith("/municipio/"):
+            continue
+        for ic in re_linha.findall(html):
+            vistos += 1
+            assert not ic.startswith(("-", "−")), f"{caminho}: IC de contagem com limite negativo: {ic}"
+    assert vistos > 0
+
+
+# ============================== tabelas com rolagem própria (celular) ==============================
+def test_css_estatico_tem_rolagem_e_quebra_de_palavra():
+    css = bp.STATIC_CSS.replace(" ", "")
+    assert ".rolagem{overflow-x:auto" in css
+    assert "overflow-wrap:anywhere" in css
+
+
+def test_static_css_publicado_tem_rolagem(dist):
+    css = (dist / "static.css").read_text(encoding="utf-8")
+    assert ".rolagem" in css and "overflow-x:auto" in css
+
+
+def test_toda_tabela_esta_dentro_de_rolagem(paginas):
+    for caminho, html in _amostra_paginas(paginas):
+        n_tabelas = len(re.findall(r"<table\b", html))
+        n_rolagem = len(re.findall(r'<div class="rolagem" tabindex="0"><table\b', html))
+        assert n_tabelas == n_rolagem, f"{caminho}: {n_tabelas} tabelas, {n_rolagem} dentro de .rolagem"
+
+
+def test_envolver_tabelas_unitario():
+    assert bp.envolver_tabelas("<p>x</p>") == "<p>x</p>"
+    out = bp.envolver_tabelas("<table class=\"a\"><tr><td>1</td></tr></table><p>y</p><table></table>")
+    assert out.count('<div class="rolagem" tabindex="0">') == 2
+    assert out.count("</table></div>") == 2
+
+
+def test_celula_de_precisao_do_saldo_e_curta(paginas):
+    """A célula longa ("sem classificação própria (ver imigrantes/emigrantes)") alargava a tabela."""
+    alguma = next(h for c, h in paginas.items() if c.startswith("/municipio/"))
+    assert "ver imigrantes/emigrantes" not in alguma
+
+
+# ============================== imagem OG: fonte versionada ==============================
+def test_fontes_da_og_estao_versionadas_no_repositorio():
+    for f in (bp.FONTE_OG_TITULO, bp.FONTE_OG_SUBTITULO):
+        assert f.parent == ROOT / "pipeline/assets", f
+        assert f.exists() and f.stat().st_size > 100_000, f"fonte ausente ou truncada: {f}"
+    assert (ROOT / "pipeline/assets/README.md").exists()
+    assert (ROOT / "pipeline/assets/LICENSE-DejaVu.txt").exists()
+
+
+def test_fonte_og_e_truetype_e_o_fallback_mantem_o_tamanho(tmp_path):
+    ImageFont = pytest.importorskip("PIL.ImageFont")
+    assert isinstance(bp.fonte_og(bp.FONTE_OG_TITULO, 56), ImageFont.FreeTypeFont)
+    # arquivo inexistente: fonte embutida do Pillow no MESMO tamanho, não o bitmap de ~10 px
+    fallback = bp.fonte_og(tmp_path / "nao-existe.ttf", 56)
+    caixa = fallback.getbbox("Atlas da migração")
+    assert caixa[3] - caixa[1] >= 30, f"fallback pequeno demais: {caixa}"
+
+
+def test_gerar_og_image_escreve_png_com_a_fonte_versionada(tmp_path, monkeypatch):
+    pytest.importorskip("PIL.Image")
+    monkeypatch.setattr(bp, "DIST", tmp_path)
+    assert bp.gerar_og_image() is True
+    from PIL import Image
+    img = Image.open(tmp_path / "og.png")
+    assert img.size == (1200, 630)
+    # há texto claro sobre o fundo escuro na faixa do título (pixels próximos do branco)
+    faixa = img.crop((80, 160, 1120, 300)).convert("L")
+    assert faixa.getextrema()[1] > 240
+
+
+# ============================== index.html: rodapé estático removido após montar ==============================
+def test_main_tsx_remove_o_rodape_estatico_apos_montar():
+    main = (ROOT / "web/src/main.tsx").read_text(encoding="utf-8")
+    assert 'getElementById("rodape-estatico")?.remove()' in main
+    # e o index.html continua com o rodapé, para quem não executa JS
+    assert '<footer id="rodape-estatico">' in (ROOT / "web/index.html").read_text(encoding="utf-8")

@@ -172,13 +172,21 @@
 .tour-primario { background: var(--acento-ativo) !important; color: #fff !important; border-color: var(--acento-ativo) !important; }
 
 .conteudo { flex: 1; display: flex; min-height: 0; }
+/* O que flutua sobre o canvas (pilha de controles) é contido por `max-height` em
+   `.mapa-controles-baixo`. `overflow: hidden` só entra no layout de coluna (<= 900 px, sem dica de
+   hover): em desktop a `.dica` do MapaAtlas não é limitada ao mapa (left = x + 12) e seria cortada
+   na borda direita, justamente sobre o Nordeste. */
 .mapa { position: relative; flex: 1; min-width: 0; }
-.carregando, .erro {
+/* Caixa flutuante no centro do MAPA -- só para os filhos diretos de `.mapa`. A regra era global
+   (`.carregando, .erro`) e o banner de erro do DuckDB (`.estado-dados.erro`, EstadoDados) e o
+   `<p class="erro">` do ModoCensos herdavam o position: absolute, virando caixas no meio da tela. */
+.mapa > .carregando, .mapa > .erro {
   position: absolute; z-index: 5; top: 50%; left: 50%; transform: translate(-50%, -50%);
   padding: 10px 16px; background: var(--surface-raised); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--ink-secondary);
 }
-.erro { border-color: var(--precisao-baixa); color: var(--precisao-baixa); }
+.mapa > .erro { border-color: var(--precisao-baixa); color: var(--precisao-baixa); }
+.erro { color: var(--precisao-baixa); }
 
 .dica {
   position: absolute; z-index: 10; pointer-events: none; max-width: 280px;
@@ -189,12 +197,19 @@
 /* F3 (mapa-representação): agrupa o botão "Fluxos" e a legenda no canto inferior esquerdo do
    mapa -- antes, a legenda se autoposicionava com left/bottom fixos; agora o wrapper faz isso
    para os dois controles em coluna, sem risco de sobrepor (a legenda pode variar de altura
-   entre chip/painel aberto). */
+   entre chip/painel aberto).
+   Sem teto de altura a pilha (botões + filtro de tamanho + legenda aberta) crescia para cima do
+   mapa: em 1366x768 passava por cima do cabeçalho e no celular cobria a metade sul do Brasil.
+   Agora ela nunca passa da altura do mapa (menos as margens) e rola por dentro; os filhos não
+   encolhem (`flex: none`), para que o excesso vire rolagem e não botões espremidos. */
 .mapa-controles-baixo {
   position: absolute; z-index: 5; left: 12px; bottom: 12px;
   display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
   max-width: min(300px, calc(100vw - 24px));
+  max-height: calc(100% - 24px); overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
+.mapa-controles-baixo > * { flex: none; }
 .mapa-controles-linha { display: flex; flex-direction: row; gap: 8px; flex-wrap: wrap; }
 .botao-fluxos {
   padding: 6px 12px; font-size: 12.5px; background: var(--surface-raised);
@@ -294,6 +309,7 @@
 
 @media (max-width: 900px) {
   .conteudo { flex-direction: column; }
+  .mapa { overflow: hidden; }
   .painel { width: auto; max-height: 46%; border-left: 0; border-top: 1px solid var(--hairline); }
   .kpis { grid-template-columns: 1fr 1fr; }
 }
@@ -361,7 +377,7 @@
 }
 .filtro-marca { display: flex; align-items: center; gap: 5px; }
 .filtro-marca button { background: none; border: 0; padding: 0; cursor: pointer; font-size: 11.5px;
-                       color: var(--ink-muted); text-decoration: underline; }
+                       color: var(--ink-muted-texto); text-decoration: underline; }
 
 .secao-titulo { margin: 22px 0 4px; font-size: 13px; text-transform: uppercase;
                 letter-spacing: .03em; color: var(--ink-secondary); }
@@ -405,7 +421,9 @@
 }
 
 .abas-rm { margin: 12px 0 6px; width: 100%; }
-.abas-rm button { flex: 1; }
+/* 3 abas com rótulos longos ("Migração intra-RM", "Pendular trabalho", "Pendular estudo") não cabem
+   nos 348 px úteis do painel com `white-space: nowrap`; quebram a linha em vez de ser cortadas. */
+.abas-rm button { flex: 1 1 0; min-width: 0; white-space: normal; line-height: 1.25; padding: 5px 6px; }
 
 .checkbox-cruzar { display: flex; align-items: center; gap: 6px; font-size: 12px;
                     color: var(--ink-secondary); margin-bottom: 10px; }
@@ -434,7 +452,22 @@
 .comparativo-toggle { margin-top: 22px; padding-top: 12px; border-top: 1px solid var(--hairline); }
 .comparativo-toggle summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink-secondary);
                                text-transform: uppercase; letter-spacing: .03em; }
-.tabela-scroll { overflow-x: auto; margin-top: 10px; }
+/* Sombras de rolagem (Lea Verou): a tabela larga é cortada pelo contêiner sem nenhuma pista
+   (barras de rolagem de sobreposição somem no macOS). Dois gradientes `local` (da cor do fundo)
+   cobrem as sombras nas pontas quando o conteúdo está encostado; dois `scroll` (sombras) ficam
+   fixos nas bordas e só aparecem onde ainda há conteúdo escondido. `--fundo-rolagem` precisa ser
+   a cor que está atrás da tabela: --surface no painel, --plane no corpo da aba "Ao longo dos
+   censos" (sem fundo próprio, cai no do body). */
+.tabela-scroll {
+  --fundo-rolagem: var(--surface);
+  overflow-x: auto; margin-top: 10px; scrollbar-width: thin;
+  background:
+    linear-gradient(to right, var(--fundo-rolagem) 30%, transparent) left center / 28px 100% no-repeat local,
+    linear-gradient(to left, var(--fundo-rolagem) 30%, transparent) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--sombra-rolagem), transparent) left center / 14px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--sombra-rolagem), transparent) right center / 14px 100% no-repeat scroll;
+}
+.modo-censos-corpo .tabela-scroll { --fundo-rolagem: var(--plane); }
 .tabela-comparativo { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 560px; }
 .tabela-comparativo th, .tabela-comparativo td { padding: 5px 8px; border-bottom: 1px solid var(--hairline); font-variant-numeric: tabular-nums; }
 .tabela-comparativo th { text-align: left; color: var(--ink-muted-texto); font-weight: 500; }
@@ -542,13 +575,31 @@
   .grupo-filtros.aberto .segmentado { width: 100%; }
   .grupo-filtros.aberto .busca { width: 100%; }
   .grupo-filtros.aberto .segmentado { justify-content: space-between; }
-  .grupo-filtros.aberto .segmentado button { flex: 1; }
+  /* 5 botões (Saldo, Taxa líquida, Imigrantes, Emigrantes, Eficácia) não cabem em 343 px com o
+     padding de desktop e `white-space: nowrap`: o `overflow: hidden` do .segmentado cortava o
+     último. `min-width: 0` + quebra de linha + padding menor deixam todos visíveis. */
+  .grupo-filtros.aberto .segmentado button {
+    flex: 1 1 auto; min-width: 0; white-space: normal; padding: 6px 4px; line-height: 1.2;
+  }
   .filtros-fechar {
     display: flex; align-self: flex-end; padding: 6px 12px; font-size: 13px; cursor: pointer;
     background: transparent; border: 1px solid var(--border); border-radius: var(--radius); color: var(--ink);
   }
 
-  .mapa { min-height: 42vh; }
+  /* 42vh deixava o mapa com ~340 px em 375x812, e a pilha de controles cobria o sul do Brasil.
+     Mais que ~50vh, porém, espreme o painel a 0: o rodapé do app (citação, ~150 px) e o cabeçalho
+     (~160 px) já comem 40% da tela. Por isso o rodapé vira uma faixa rolável de altura fixa e o
+     mapa ganha o espaço -- painel e mapa ficam ambos visíveis em 375x667 e 375x812. */
+  .mapa { min-height: 50vh; }
+  .rodape { max-height: 56px; overflow-y: auto; padding: 6px 10px; font-size: 10.5px; line-height: 1.35; }
+  /* Pilha de controles em linhas que quebram, em vez de uma coluna de 3-4 itens: os botões e o chip
+     "Legenda" dividem a primeira linha (padding menor para caberem em 351 px) e o filtro de
+     tamanho dos fluxos vai para a segunda (`order`). ~110 px de altura em vez de ~150: o sul do
+     Brasil fica à mostra. Com a legenda aberta ela ocupa a linha inteira, entre os dois. */
+  .mapa-controles-baixo { flex-direction: row; flex-wrap: wrap; align-items: flex-end; max-width: calc(100vw - 24px); }
+  .mapa-controles-baixo > .legenda-chip, .mapa-controles-baixo > .legenda { order: 1; }
+  .mapa-controles-baixo > .filtro-fluxo { order: 2; flex: 1 1 100%; max-width: none; padding: 5px 8px; gap: 2px; }
+  .mapa-controles-baixo .botao-fluxos, .mapa-controles-baixo .legenda-chip { padding: 6px 8px; }
   .conteudo { flex-direction: column; }
   .painel { width: auto; flex: 1; min-height: 0; border-left: 0; border-top: 1px solid var(--hairline); }
 }
@@ -557,6 +608,35 @@
   .filtros-backdrop { display: none !important; }
   .grupo-filtros { position: static !important; display: flex !important; }
   .filtros-fechar { display: none !important; }
+}
+
+/* ---- impressão ----
+   A Metodologia é um painel `position: fixed` com rolagem interna, e a cadeia html/body/#root/.app
+   tem altura de 100%: impressa, saía só a primeira "tela". Aqui tudo volta ao fluxo normal da
+   página, o que está por baixo da Metodologia some, e as cores voltam ao tema claro (no escuro o
+   texto é branco e o navegador não imprime o fundo -- sairia branco sobre branco). */
+@media print {
+  :root:root:root {
+    color-scheme: light;
+    --plane: #ffffff; --surface: #ffffff; --surface-raised: #ffffff;
+    --ink: #0b0b0b; --ink-secondary: #383835; --ink-muted: #6f6e68; --ink-muted-texto: #52514e;
+    --hairline: #c3c2b7; --border: rgba(11, 11, 11, 0.25);
+  }
+  html, body, #root, .app { height: auto; }
+  .app { display: block; }
+  .cabecalho, .estado-dados, .aviso-nivel, .pular-conteudo, .mapa, .rodape,
+  .tour-camada, .filtros-backdrop, .reenquadrar, .mapa-controles-baixo { display: none; }
+  /* com a Metodologia aberta, só ela é impressa */
+  .app:has(.pagina-cheia) > :not(.pagina-cheia) { display: none; }
+  .pagina-cheia { position: static; display: block; background: transparent; }
+  .pagina-cheia-topo .fechar { display: none; }
+  .pagina-cheia-topo { padding: 0 0 8px; }
+  .pagina-cheia-corpo { overflow: visible; padding: 0; }
+  .metodologia-conteudo { max-width: none; }
+  .metodologia-conteudo section { break-inside: avoid-page; }
+  .metodologia-conteudo h3 { break-after: avoid; }
+  .conteudo { display: block; }
+  .painel { overflow: visible; width: auto; max-height: none; border: 0; }
 }
 
 /* ---- F6 leva 2: movimento reduzido ---- */

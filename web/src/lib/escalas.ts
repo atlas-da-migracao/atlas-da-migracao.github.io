@@ -3,8 +3,11 @@
  *  Saldo migratório usa escala DIVERGENTE (vermelho = perda, cinza = perto de zero,
  *  azul = ganho), centrada em zero, conforme a skill dataviz. Cada braço foi validado
  *  como rampa de matiz único: claridade monotônica, salto entre passos >= 0,06 e
- *  dispersão de matiz <= 3°. O extremo claro fica perto da superfície de propósito --
- *  é a regra do coroplético, em que o passo mais claro significa "perto de zero".
+ *  dispersão de matiz <= 3°. A rampa afasta-se da superfície a cada passo: no tema claro
+ *  o passo mais fraco é o mais claro (perto do fundo) e o extremo é o mais escuro; no
+ *  tema escuro é o inverso -- o passo fraco é o mais escuro (perto do fundo) e o extremo
+ *  o mais claro. Em ambos, a classe mais forte é a mais saliente, que é a regra do
+ *  coroplético ("perto de zero" se confunde com o fundo, de propósito).
  *
  *  Regra de alívio (contraste abaixo de 3:1 nos passos claros): a legenda mostra as
  *  faixas de valor e o painel lateral traz os números exatos do município selecionado.
@@ -22,12 +25,24 @@ export const DIVERGENTE = {
     zero: hex("#f0efec"),
     pos: ["#9ec5f4", "#5598e7", "#184f95"].map(hex) as RGB[],
   },
+  // Mesmos seis tons de antes, em ordem inversa: antes o passo fraco era o mais claro (#fbd5d1,
+  // #cde2fb) e o extremo o mais escuro, o que no fundo escuro fazia a classe FRACA saltar aos
+  // olhos e a forte sumir. Agora cada braço sobe de claridade a partir do zero (#383835).
   escuro: {
-    neg: ["#fbd5d1", "#d65854", "#b43b3a"].map(hex) as RGB[],
+    neg: ["#b43b3a", "#d65854", "#fbd5d1"].map(hex) as RGB[],
     zero: hex("#383835"),
-    pos: ["#cde2fb", "#3987e5", "#256abf"].map(hex) as RGB[],
+    pos: ["#256abf", "#3987e5", "#cde2fb"].map(hex) as RGB[],
   },
 };
+
+/** Cor de "sem dado" (valor nulo): cinza neutro PRÓPRIO, diferente do `zero` ("baixa
+ *  variação") -- um município sem nenhum par publicado no recorte não tem variação baixa, não
+ *  tem variação nenhuma conhecida. Mais escuro que o zero no tema claro e mais claro no escuro,
+ *  para nunca ser lido como um passo a mais da rampa (que é colorida e de matiz único). */
+export const SEM_DADO = { claro: hex("#c9c8c3"), escuro: hex("#5b5a56") };
+
+export const corSemDado = (escuro: boolean): string =>
+  `rgb(${(escuro ? SEM_DADO.escuro : SEM_DADO.claro).join(",")})`;
 
 /** Quebras simétricas em torno de zero, a partir dos quantis do valor absoluto.
  *  Simetria é obrigatória numa escala divergente: um ganho e uma perda de mesma
@@ -41,10 +56,11 @@ export function quebrasSimetricas(valores: number[]): number[] {
   return [q(0.6), q(0.85), q(0.96)];
 }
 
-/** Cor de um valor na escala divergente, dadas as quebras (crescentes, positivas). */
+/** Cor de um valor na escala divergente, dadas as quebras (crescentes, positivas). Valor nulo
+ *  ou não finito devolve `SEM_DADO`, não o cinza de "baixa variação". */
 export function corDivergente(v: number | null, quebras: number[], escuro: boolean): RGB {
   const p = escuro ? DIVERGENTE.escuro : DIVERGENTE.claro;
-  if (v == null || !isFinite(v)) return p.zero;
+  if (v == null || !isFinite(v)) return escuro ? SEM_DADO.escuro : SEM_DADO.claro;
   const a = Math.abs(v);
   if (a < quebras[0]) return p.zero;
   const nivel = a < quebras[1] ? 0 : a < quebras[2] ? 1 : 2;

@@ -1,6 +1,7 @@
 /** Consultas do atlas. Toda agregação roda no navegador, via DuckDB-WASM. */
 import { consultar, consultarSerie, lit } from "./duckdb";
 import type { Fluxo, Municipio } from "../lib/types";
+import { separarRecorte } from "../lib/paletas";
 import type { EdicaoSerie, NivelSerie } from "../lib/serie";
 
 export const carregarMunicipios = () =>
@@ -56,10 +57,16 @@ export const maioresFluxos = (limite = 400, coluna: string | null = null) =>
     JOIN cent cd_ ON cd_.cd_mun = t.destino
     ORDER BY t.volume DESC`);
 
-/** Perfil de um município por dimensão (imigrantes, emigrantes e residentes). */
+/** Perfil de um município por dimensão (imigrantes, emigrantes e residentes).
+ *
+ *  `lower(categoria)`: a dimensão `idade_sexo` é publicada em `municipios_dim` com o sexo em
+ *  MAIÚSCULAS ("05_14_M", "05_14_F", "05_14_I"), enquanto as colunas largas de `fluxos`
+ *  ("idade_sexo__05_14_m") e `lib/piramide.ts` usam minúsculas. Normalizar aqui, na origem,
+ *  evita que a pirâmide do painel do município nunca encontre as chaves (achado da auditoria).
+ *  As demais dimensões já são minúsculas -- para elas `lower` é a identidade. */
 export const perfilDoMunicipio = (cd: string, dimensao: string) =>
   consultar<{ direcao: string; categoria: string; valor: number; n_faixa: string }>(`
-    SELECT direcao, categoria, valor, n_faixa FROM municipios_dim
+    SELECT direcao, lower(categoria) AS categoria, valor, n_faixa FROM municipios_dim
     WHERE cd_mun = ${lit(cd)} AND dimensao = ${lit(dimensao)}
     ORDER BY direcao, valor DESC`);
 
@@ -90,17 +97,24 @@ export async function detalheDoFluxo(o: string, d: string) {
   };
 }
 
-/** Perfis de referência: imigrantes e residentes do destino, emigrantes da origem. */
+/** Perfis de referência: imigrantes e residentes do destino, emigrantes da origem.
+ *  `lower(categoria)`: ver `perfilDoMunicipio` (idade_sexo vem com o sexo em maiúsculas). */
 export const referenciasDoPerfil = (origem: string, destino: string) =>
   consultar<{ cd_mun: string; direcao: string; dimensao: string; categoria: string; valor: number }>(`
-    SELECT cd_mun, direcao, dimensao, categoria, valor FROM municipios_dim
+    SELECT cd_mun, direcao, dimensao, lower(categoria) AS categoria, valor FROM municipios_dim
     WHERE (cd_mun = ${lit(destino)} AND direcao IN ('imig', 'residente'))
        OR (cd_mun = ${lit(origem)} AND direcao = 'emig')`);
 
 /** Fluxos filtrados por uma categoria de característica, para mapa e tabelas.
  *  A coluna larga correspondente vira o volume: assim o mapa responde ao filtro
  *  sem precisar de outra tabela. se/cv/precisão publicados são do fluxo total, não do
- *  subgrupo, por isso saem nulos. */
+ *  subgrupo, por isso saem nulos.
+ *
+ *  ATENÇÃO -- as colunas largas só existem nos pares com detalhe (`tem_detalhe`, n >= 20); nos
+ *  demais (~91% dos pares em 2022: 48.218 de 53.097) a coluna é NULL. Os arcos e a lista de
+ *  fluxos do subgrupo portanto cobrem só os pares com detalhe: servem para VER os maiores
+ *  fluxos do subgrupo, nunca para SOMAR o subgrupo de um município (para isso, use
+ *  `saldoPorCategoria`, que lê `municipios_dim`). */
 export const fluxosPorCategoria = (cd: string, coluna: string, topN: number) =>
   consultar<Fluxo & { direcao: "entrada" | "saida" }>(`
     WITH cent AS (SELECT cd_mun, lon, lat, x_albers, y_albers FROM read_parquet('geo/centroides.parquet')),
@@ -124,15 +138,45 @@ export const fluxosPorCategoria = (cd: string, coluna: string, topN: number) =>
     JOIN cent cd_ ON cd_.cd_mun = u.destino
     ORDER BY u.total DESC`);
 
-/** Saldo por município restrito a uma categoria (repinta o coroplético sob filtro). */
-export const saldoPorCategoria = (coluna: string) =>
-  consultar<{ cd_mun: string; imig: number; emig: number; saldo: number }>(`
-    WITH e AS (SELECT destino AS cd_mun, SUM("${coluna}") v FROM fluxos GROUP BY 1),
-         s AS (SELECT origem  AS cd_mun, SUM("${coluna}") v FROM fluxos GROUP BY 1)
-    SELECT COALESCE(e.cd_mun, s.cd_mun) AS cd_mun,
-           COALESCE(e.v, 0) AS imig, COALESCE(s.v, 0) AS emig,
-           COALESCE(e.v, 0) - COALESCE(s.v, 0) AS saldo
-    FROM e FULL OUTER JOIN s ON e.cd_mun = s.cd_mun`);
+/** Imigrantes, emigrantes e saldo de UM município dentro de um recorte (subgrupo). Cada campo
+ *  é `null` quando `municipios_dim` não publica aquela célula (categoria abaixo do limiar R1,
+ *  somada a `outros`): "sem dado", NUNCA zero. `saldo` só existe quando as duas pontas existem. */
+export interface RecorteMunicipio { imig: number | null; emig: number | null; saldo: number | null }
+
+/** Imigrantes, emigrantes e saldo por município restrito a uma categoria (repinta o coroplético
+ *  e os KPIs sob recorte). `coluna` = "dimensao__categoria" (ex.: "edu__superior_completo").
+ *
+ *  MUDANÇA DE SEMÂNTICA (auditoria, Parte B2): a versão anterior somava a coluna larga de
+ *  `fluxos` (`SUM("edu__superior_completo")`) por destino/origem. Como essa coluna é NULL em
+ *  todo par sem detalhe (n < 20, ~91% dos pares), o subgrupo saía subcontado (São Paulo,
+ *  "Superior completo", imigrantes: 90.895 contra 114.800 em `municipios_dim`) e, em
+ *  municípios pequenos, virava um zero falso. Agora o total do subgrupo vem de `municipios_dim`
+ *  (direcao imig/emig, mesma dimensão e categoria), que tem a contagem completa de cada
+ *  município e já aplica R1 por célula.
+ *
+ *  Só saem linhas de municípios com ao menos uma célula publicada para a categoria; quem não
+ *  tem linha nenhuma fica AUSENTE do resultado (o chamador trata `recorte.get(cd) === undefined`
+ *  como "sem dado", não como zero). Numa linha, cada ponta pode ser `null` individualmente
+ *  (célula suprimida -- somada a `outros` --, ou sem observações), e `saldo` é `null` se
+ *  qualquer uma das duas o for: um saldo com uma ponta desconhecida não é um saldo.
+ *  Os valores já vêm arredondados a múltiplos de 5 (R4), então `saldo` = imig − emig dos
+ *  valores publicados. */
+export const saldoPorCategoria = (coluna: string) => {
+  const { dim, cat } = separarRecorte(coluna);
+  return consultar<{ cd_mun: string } & RecorteMunicipio>(`
+    WITH d AS (
+      SELECT cd_mun, direcao, valor FROM municipios_dim
+      WHERE dimensao = ${lit(dim)} AND categoria = ${lit(cat)} AND direcao IN ('imig', 'emig')
+    ), p AS (
+      SELECT cd_mun,
+             MAX(valor) FILTER (WHERE direcao = 'imig') AS imig,
+             MAX(valor) FILTER (WHERE direcao = 'emig') AS emig
+      FROM d GROUP BY cd_mun
+    )
+    SELECT cd_mun, imig, emig,
+           CASE WHEN imig IS NOT NULL AND emig IS NOT NULL THEN imig - emig END AS saldo
+    FROM p`);
+};
 
 // ================= F6: níveis de agregação (RGI, RGInt, UF) =================
 // Os fluxos por nível já vêm publicados (fluxos_rgi/rgint/uf, mesmo esquema de `fluxos`).
@@ -542,10 +586,22 @@ export const serieDaUnidade = (nivel: NivelSerie, codigo: string) =>
  *  parceiros que são DESTINO dos fluxos que saem dela ("para onde foram"). `tipoFluxo`
  *  é a dimensão independente de `pares_serie.tipo` (migração/pendular-trabalho/pendular-
  *  estudo) -- as duas NÃO podem compartilhar um parâmetro, senão o filtro
- *  `WHERE tipo = <direção>` nunca casa com nenhuma linha (bug corrigido nesta revisão: a
- *  versão anterior usava `direcao` também como valor de `tipo`, e com a polaridade
+ *  `WHERE tipo = <direção>` nunca casa com nenhuma linha (bug corrigido numa revisão anterior: a
+ *  versão original usava `direcao` também como valor de `tipo`, e com a polaridade
  *  invertida). Devolve `nome`/`uf_sigla` do parceiro via `unidades_nomes` (registrada em
- *  `db/duckdb.ts::iniciarSerie`, fonte `municipios_ref` de 2022). */
+ *  `db/duckdb.ts::iniciarSerie`, fontes `municipios_ref` das cinco edições, 2022 com prioridade).
+ *
+ *  POSTO recalculado aqui (auditoria, Parte B2): o `posto` publicado em `pares_serie` é o posto do
+ *  par entre os destinos de uma MESMA ORIGEM (`build_series.py`: `groupby(... origem)`), que é
+ *  o posto certo para "para onde foram" (lado fixo = origem), mas não para "de onde vieram":
+ *  com a unidade como destino, o publicado diz, para cada origem, "este destino é o 1º dela" --
+ *  São Paulo saía com 83 origens "1º". Por isso o posto sai de
+ *  `rank() OVER (PARTITION BY nivel, tipo, edicao, <lado fixo> ORDER BY total DESC)` -- o posto
+ *  do parceiro entre os parceiros DA UNIDADE --, e é esse valor, e não o publicado, que alimenta o
+ *  filtro de destaque (top-10) e a coluna `posto` devolvida (mesmo nome de campo: o contrato
+ *  com `SerieCensos.tsx` não muda). `pares_serie` só tem o universo top-20 de cada edição
+ *  (por origem e por destino), então o posto recalculado é exato até o 20º -- acima dos 10
+ *  que a tabela mostra. Par sem `total` (ausente/suprimido) fica sem posto (`NULL`). */
 export const serieDosPares = (
   nivel: NivelSerie, codigo: string, direcao: "origem" | "destino",
   tipoFluxo: "mig" | "trab" | "estudo" = "mig",
@@ -554,7 +610,11 @@ export const serieDosPares = (
   const variavel = direcao === "destino" ? "origem" : "destino";
   return consultarSerie<Record<string, unknown>>(`
     WITH base AS (
-      SELECT * FROM pares_serie
+      SELECT * EXCLUDE (posto),
+             CASE WHEN total IS NOT NULL
+                  THEN rank() OVER (PARTITION BY nivel, tipo, edicao, ${fixo} ORDER BY total DESC NULLS LAST)
+             END AS posto
+      FROM pares_serie
       WHERE nivel = ${lit(nivel)} AND tipo = ${lit(tipoFluxo)} AND ${fixo} = ${lit(codigo)}
     ), destaque AS (
       SELECT DISTINCT ${variavel} AS parceiro
@@ -599,18 +659,44 @@ export const serieLogLinear = (nivel: NivelSerie, codigo: string) =>
     ORDER BY CASE edicao WHEN '1980' THEN 0 WHEN '1991' THEN 1 WHEN '2000' THEN 2
                          WHEN '2010' THEN 3 WHEN '2022' THEN 4 END`);
 
+/** Um município desmembrado de outro, para a frase de município-mãe (`lib/serie.ts::FilhoMunicipio`). */
+export interface FilhoDoMunicipio {
+  codigo: string;
+  /** nome do filho (`unidades_nomes`); o próprio código só se não houver nome */
+  nome: string;
+  /** última edição (cronológica) em que o filho NÃO existia (`existia = false`): ele passa a
+   *  existir na edição seguinte. `null` se existe em todas as edições com linha. */
+  ultima_edicao_ausente: EdicaoSerie | null;
+}
+
 /** Municípios cujo `cd_mun_mae` aponta para `codigo` -- ou seja, unidades que se
- *  desmembraram DESTE município em alguma edição (seção 1.4, aviso `municipio_mae`). */
+ *  desmembraram DESTE município em alguma edição (seção 1.4, aviso `municipio_mae`). Devolve,
+ *  por filho, o `nome` (junção com `unidades_nomes`, para a frase nunca mostrar código cru) e
+ *  `ultima_edicao_ausente` = `max(edicao)` com `existia = false` (edições são "1980".."2022",
+ *  então o máximo lexicográfico é o cronológico): o ano que a frase usa em "Até {ano}", em vez
+ *  de um ano fixo. Os filhos são achados por `cd_mun_mae`, mas o `max` olha TODAS as linhas de
+ *  cada filho -- a coluna `cd_mun_mae` pode vir nula nas edições em que ele já existia. */
 export const serieFilhosDoMunicipio = (codigo: string) =>
-  consultarSerie<{ codigo: string; nm_mun_mae: string }>(`
-    SELECT DISTINCT codigo FROM unidades_serie
-    WHERE nivel = 'mun' AND cd_mun_mae = ${lit(codigo)}`);
+  consultarSerie<FilhoDoMunicipio>(`
+    WITH filhos AS (
+      SELECT DISTINCT codigo FROM unidades_serie
+      WHERE nivel = 'mun' AND cd_mun_mae = ${lit(codigo)}
+    )
+    SELECT f.codigo, COALESCE(n.nome, f.codigo) AS nome,
+           (SELECT max(u.edicao) FROM unidades_serie u
+            WHERE u.nivel = 'mun' AND u.codigo = f.codigo AND u.existia = false) AS ultima_edicao_ausente
+    FROM filhos f
+    LEFT JOIN unidades_nomes n ON n.nivel = 'mun' AND n.codigo = f.codigo
+    ORDER BY f.codigo`);
 
 // ============ F12.5-cartografia/gráficos: mapa comparativo e Bloco 2 (GraficosSistema) ============
 
 export interface LinhaMapaSerie {
   codigo: string; edicao: EdicaoSerie;
   iem: number | null; tlm: number | null; tbi: number | null; tbe: number | null;
+  /** erro-padrão do IEM (NULL em 1980 e nos níveis sem estimativa): com ele o mapa comparativo
+   *  reconhece o estado `indefinido` (|IEM| < 2·se), como a frase e o painel já fazem. */
+  se_iem: number | null;
   existia: boolean | null; estado_cobertura: string | null; rm_unitaria: boolean | null;
 }
 
@@ -619,7 +705,7 @@ export interface LinhaMapaSerie {
  *  Usada por `MapaSerieCensos.tsx`: uma consulta cobre os cinco painéis. */
 export const serieMapa = (nivel: NivelSerie) =>
   consultarSerie<LinhaMapaSerie>(`
-    SELECT codigo, edicao, iem, tlm, tbi, tbe, existia, estado_cobertura, rm_unitaria
+    SELECT codigo, edicao, iem, tlm, tbi, tbe, se_iem, existia, estado_cobertura, rm_unitaria
     FROM unidades_serie WHERE nivel = ${lit(nivel)}`);
 
 /** CMI de TODOS os níveis de uma mesma edição (figura de Courgeau, seção 3.2-c): a figura
@@ -640,7 +726,9 @@ export interface UnidadeBusca {
 let cacheUnidadesBusca: Promise<UnidadeBusca[]> | null = null;
 
 /** Todas as unidades dos cinco níveis (base territorial 2022) para a busca unificada do modo
- *  "Ao longo dos censos". `peso` = imig+emig de 2022 (`unidades_serie` não publica população;
+ *  "Ao longo dos censos". `unidades_nomes` também traz códigos que só existem em edições
+ *  antigas (para o Bloco 3 nomear parceiros); `WHERE n.em_2022` os deixa de fora da busca, que
+ *  continua sendo só da base 2022. `peso` = imig+emig de 2022 (`unidades_serie` não publica população;
  *  o movimento total de 2022 é um proxy suficiente para ordenar resultados de busca). ~6,3 mil
  *  linhas, carregada uma única vez e memoizada; em erro o cache é zerado (mesmo padrão de
  *  `conectarSerie`). */
@@ -651,6 +739,7 @@ export function serieUnidadesParaBusca(): Promise<UnidadeBusca[]> {
              COALESCE(u.imig, 0) + COALESCE(u.emig, 0) AS peso
       FROM unidades_nomes n
       LEFT JOIN unidades_serie u ON u.nivel = n.nivel AND u.codigo = n.codigo AND u.edicao = '2022'
+      WHERE n.em_2022
     `).catch((e: unknown) => {
       cacheUnidadesBusca = null;
       throw e;
