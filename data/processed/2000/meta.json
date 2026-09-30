@@ -1,7 +1,7 @@
 {
   "edicao": "2000",
-  "versao_dados": "2026-09-17",
-  "gerado_em": "2026-09-17T17:28:32",
+  "versao_dados": "2026-09-30",
+  "gerado_em": "2026-09-30T19:25:02",
   "fonte": "IBGE, Censo Demográfico 2000, microdados da amostra (dados públicos)",
   "periodo_referencia": {
     "de": "1995-07-31",
@@ -10,10 +10,10 @@
   "salario_minimo_referencia": 151.0,
   "maior_fluxo": 59110,
   "bounds_albers": {
-    "x_min": -2177007.2886318206,
-    "x_max": 2384571.077662025,
-    "y_min": -2385004.19484978,
-    "y_max": 1902840.5546544716
+    "x_min": -2178136.501477789,
+    "x_max": 2561932.5157527365,
+    "y_min": -2385114.973290824,
+    "y_max": 1902840.554654471
   },
   "revelacao": {
     "min_pessoas": 5,

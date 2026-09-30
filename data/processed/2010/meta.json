@@ -1,7 +1,7 @@
 {
   "edicao": "2010",
-  "versao_dados": "2026-09-17",
-  "gerado_em": "2026-09-17T17:28:32",
+  "versao_dados": "2026-09-30",
+  "gerado_em": "2026-09-30T19:25:02",
   "fonte": "IBGE, Censo Demográfico 2010, microdados da amostra (dados públicos)",
   "periodo_referencia": {
     "de": "2005-07-31",
@@ -11,9 +11,9 @@
   "maior_fluxo": 34585,
   "bounds_albers": {
     "x_min": -2178085.8616119055,
-    "x_max": 2383873.0574356094,
-    "y_min": -2385055.941386825,
-    "y_max": 1902805.481868762
+    "x_max": 2561484.11456667,
+    "y_min": -2385835.3766452107,
+    "y_max": 1902805.481868763
   },
   "revelacao": {
     "min_pessoas": 5,

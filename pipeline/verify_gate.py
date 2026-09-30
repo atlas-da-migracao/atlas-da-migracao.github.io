@@ -90,6 +90,11 @@ ARQUIVOS_COLUNAS_NAO_ARREDONDADAS = {
 }
 
 
+
+# Lixo de sistema operacional ignorado na listagem (espelha disclosure_check._LIXO_SO):
+# nunca publicável, nunca commitado, nunca deve reprovar nem aprovar um gate.
+LIXO_SO = {".DS_Store", "Thumbs.db", "desktop.ini"}
+
 def sha256_arquivo(caminho: pathlib.Path) -> str:
     h = hashlib.sha256()
     with caminho.open("rb") as fh:
@@ -144,6 +149,11 @@ class Verificador:
     def arquivos_atuais(self) -> dict[str, pathlib.Path]:
         atuais = {}
         for f in sorted(self.processed.rglob("*")):
+            if f.name in LIXO_SO:
+                # o mesmo conjunto que disclosure_check.py exclui do carimbo: um .DS_Store do
+                # Finder numa máquina local não é "arquivo fora do carimbo", é lixo de SO
+                # (nunca commitado, .gitignore o bloqueia)
+                continue
             if f.is_file() and f != self.gate_ok and not self._pertence_a_subgate(f):
                 atuais[f.relative_to(self.processed).as_posix()] = f
         return atuais

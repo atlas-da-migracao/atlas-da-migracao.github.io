@@ -14,6 +14,8 @@
 # verificados por pipeline/tests/test_f3_geo.py, e a validade de cada polígono (OGC +
 # triangulação earcut) por pipeline/validate_geo.py (rode depois deste script).
 #
+# Simplificação por INTERVALO em metros (ver SIMP_MUN/SIMP_AGREG abaixo), não por porcentagem.
+#
 # F9.10 (correção): -simplify seguido de -clean NA MESMA invocação do mapshaper desfaz a
 # simplificação (a simplificação é "lazy", só se materializa quando o resultado é escrito) --
 # por isso cada produto abaixo roda em DUAS invocações: (1) filtra/junta/dissolve/simplifica e
@@ -61,6 +63,22 @@ FILTRO='CD_MUN != "8888888" && CD_MUN != "9999999" && CD_MUN != "4300001" && CD_
 # Cônica equivalente de Albers, parâmetros fixados em docs/METODOLOGIA.md (F10) -- os mesmos
 # para as 5 edições e os 4 produtos, inclusive NORTEGO (1980).
 PROJ4="+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
+# Tolerância de simplificação em METROS, a mesma nas 5 edições (auditoria de 30/09/2026).
+# Antes era uma porcentagem fixa ("-simplify 1%"), que significa coisas muito diferentes
+# conforme a resolução da fonte: a malha de 2022 tem ~3.000 vértices por município, a de 2010
+# ~1.300, a de 2000 ~320 e as de 1991/1980 ~85-90. Com 1% sobravam ~6-10 pontos por município
+# nas três edições antigas, o `-clean` redistribuía área entre vizinhos e centenas de pontos
+# `ST_PointOnSurface` da malha bruta caíam fora do próprio polígono publicado. Com um intervalo
+# em metros, o erro máximo é o mesmo em todo o país e em toda edição; quem tem menos vértices
+# na fonte perde menos. Calibração (municípios, Albers, quantização 1e5): 1000 m dá 2022 com
+# ~120 mil vértices (o mesmo que o 1% dava, 1,93 MB) e 1980/1991/2000 com 100-115 mil
+# (contra 28-45 mil antes), todos abaixo do orçamento de 2 MB de test_f3_geo.py. Os produtos
+# dissolvidos (UF/RGI/RGInt) têm poucos arcos e ficam com 700 m, que reproduz o tamanho que
+# 5%/1,5% davam em 2022 (~50-60 mil vértices). O mapshaper interpreta `interval=` em metros
+# tanto nos dados projetados (Albers) quanto nos não projetados (graus), então o mesmo valor
+# serve aos dois arquivos de cada produto.
+SIMP_MUN="interval=1000"
+SIMP_AGREG="interval=700"
 OUT="$PROCESSED/geo"
 mkdir -p "$OUT"
 TMP=$(mktemp -d)
@@ -162,7 +180,7 @@ echo "== municípios (simplificado, mantendo topologia) =="
 STAGE1="$TMP/municipios.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
-    -simplify 1% keep-shapes \
+    -simplify $SIMP_MUN keep-shapes \
     -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/municipios.topojson" 1e5 CD_MUN
@@ -172,7 +190,7 @@ STAGE1_ALBERS="$TMP/municipios_albers.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -proj "$PROJ4" \
-    -simplify 1% keep-shapes \
+    -simplify $SIMP_MUN keep-shapes \
     -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
     -o format=geojson "$STAGE1_ALBERS"
 limpa_e_publica "$OUT/municipios_albers.topojson" 1e5 CD_MUN "$STAGE1_ALBERS"
@@ -184,7 +202,7 @@ npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
     -dissolve cd_uf copy-fields=uf_sigla \
-    -simplify 5% keep-shapes \
+    -simplify $SIMP_AGREG keep-shapes \
     -filter-fields cd_uf,uf_sigla \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/uf.topojson" 1e5 cd_uf
@@ -196,7 +214,7 @@ npx --yes mapshaper "$RAW" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
     -dissolve cd_uf copy-fields=uf_sigla \
     -proj "$PROJ4" \
-    -simplify 5% keep-shapes \
+    -simplify $SIMP_AGREG keep-shapes \
     -filter-fields cd_uf,uf_sigla \
     -o format=geojson "$STAGE1_ALBERS"
 limpa_e_publica "$OUT/uf_albers.topojson" 1e5 cd_uf "$STAGE1_ALBERS"
@@ -215,7 +233,7 @@ npx --yes mapshaper "$RAW" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
     -filter "cd_rgi != null" \
     -dissolve cd_rgi copy-fields=nm_rgi,cd_uf,uf_sigla \
-    -simplify 1.5% keep-shapes \
+    -simplify $SIMP_AGREG keep-shapes \
     -filter-fields cd_rgi,nm_rgi,cd_uf,uf_sigla \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/rgi.topojson" 1e5 cd_rgi
@@ -228,7 +246,7 @@ npx --yes mapshaper "$RAW" \
     -filter "cd_rgi != null" \
     -dissolve cd_rgi copy-fields=nm_rgi,cd_uf,uf_sigla \
     -proj "$PROJ4" \
-    -simplify 1.5% keep-shapes \
+    -simplify $SIMP_AGREG keep-shapes \
     -filter-fields cd_rgi,nm_rgi,cd_uf,uf_sigla \
     -o format=geojson "$STAGE1_ALBERS"
 limpa_e_publica "$OUT/rgi_albers.topojson" 1e5 cd_rgi "$STAGE1_ALBERS"
@@ -240,7 +258,7 @@ npx --yes mapshaper "$RAW" \
     -join "$OUT/recortes.json" keys=CD_MUN,cd_mun \
     -filter "cd_rgint != null" \
     -dissolve cd_rgint copy-fields=nm_rgint,cd_uf,uf_sigla \
-    -simplify 1.5% keep-shapes \
+    -simplify $SIMP_AGREG keep-shapes \
     -filter-fields cd_rgint,nm_rgint,cd_uf,uf_sigla \
     -o format=geojson "$STAGE1"
 limpa_e_publica "$OUT/rgint.topojson" 1e5 cd_rgint
@@ -253,7 +271,7 @@ npx --yes mapshaper "$RAW" \
     -filter "cd_rgint != null" \
     -dissolve cd_rgint copy-fields=nm_rgint,cd_uf,uf_sigla \
     -proj "$PROJ4" \
-    -simplify 1.5% keep-shapes \
+    -simplify $SIMP_AGREG keep-shapes \
     -filter-fields cd_rgint,nm_rgint,cd_uf,uf_sigla \
     -o format=geojson "$STAGE1_ALBERS"
 limpa_e_publica "$OUT/rgint_albers.topojson" 1e5 cd_rgint "$STAGE1_ALBERS"

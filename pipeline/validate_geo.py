@@ -12,6 +12,20 @@ feição:
      polígono, ou se a soma das áreas dos triângulos difere da área do polígono em mais de
      0,1%. Um anel OGC-válido ainda pode triangular mal (ver docstring de
      pipeline/gridsplit_geom.py) -- é essa checagem que captura o defeito visto no app.
+  3. Deformação da simplificação (só municípios, versão Albers): o ponto-na-superfície de
+     cada município, calculado por build_centroids.py sobre a malha BRUTA, tem de cair
+     dentro do polígono PUBLICADO. Com `-simplify 1%` em todas as edições (até 30/09/2026),
+     as malhas históricas, de fonte muito menos densa, ficavam com 6-10 vértices por
+     município e 4,4% (1980), 4,3% (1991) e 1,7% (2000) dos pontos caíam fora -- área
+     redistribuída entre vizinhos pelo -clean. Com a tolerância em metros (geo/build.sh,
+     SIMP_MUN) o resíduo fica em ~0,05%; o limiar de reprovação é LIMIAR_FORA (0,5%).
+     Pulada, com aviso, se centroides.parquet ainda não existir (ele é gerado depois do
+     publish, ver build_centroids.py).
+  4. Extensão dos níveis agregados (UF/RGI/RGInt, versão Albers): a caixa envolvente de cada
+     produto dissolvido tem de coincidir com a da malha municipal da mesma edição, com
+     tolerância LIMIAR_BBOX_M. Pega uma parte insular descartada na dissolução/simplificação:
+     com `-simplify 5%`/`1.5%`, Fernando de Noronha sumia das malhas de UF/RGI/RGInt de 2000,
+     1991 e 1980 (a UF 26 virava um Polygon único) -- ~350 km de diferença no x máximo.
 
 Uso:
     python pipeline/validate_geo.py [--edicao 2022|--todas]
@@ -94,6 +108,41 @@ def valida_arquivo(con: duckdb.DuckDBPyConnection, topojson_path: pathlib.Path, 
     return problemas
 
 
+# Fração máxima de municípios cujo ponto-na-superfície (malha bruta) cai fora do polígono
+# publicado -- ver item 3 da docstring. Medido depois da mudança para tolerância em metros:
+# 2/3.940 em 1980.
+LIMIAR_FORA = 0.005
+
+# Item 4: diferença máxima, em metros, entre a caixa envolvente de um produto dissolvido
+# (UF/RGI/RGInt, Albers) e a da malha municipal da mesma edição. As tolerâncias de
+# simplificação (700 m / 1000 m) e a quantização (~50 m) explicam diferenças de até ~1 km;
+# uma ilha perdida dá centenas de quilômetros.
+LIMIAR_BBOX_M = 5_000
+PRODUTOS_DISSOLVIDOS = ["uf", "rgi", "rgint"]
+
+
+def _bbox(con: duckdb.DuckDBPyConnection, geojson_path: pathlib.Path) -> tuple[float, float, float, float]:
+    con.execute("INSTALL spatial; LOAD spatial;")
+    return con.execute(f"""
+        SELECT MIN(ST_XMin(geom)), MIN(ST_YMin(geom)), MAX(ST_XMax(geom)), MAX(ST_YMax(geom))
+        FROM ST_Read('{geojson_path.as_posix()}')
+    """).fetchone()
+
+
+def _checa_centroides_dentro(con: duckdb.DuckDBPyConnection, geojson_path: pathlib.Path,
+                             centroides: pathlib.Path) -> tuple[int, int, list[str]]:
+    """(n, fora, ids) -- municípios cujo ponto x_albers/y_albers não está contido no polígono."""
+    con.execute("INSTALL spatial; LOAD spatial;")
+    linhas = con.execute(f"""
+        WITH g AS (SELECT CD_MUN AS cd, geom FROM ST_Read('{geojson_path.as_posix()}')),
+             c AS (SELECT cd_mun AS cd, ST_Point(x_albers, y_albers) AS p
+                   FROM read_parquet('{centroides.as_posix()}'))
+        SELECT cd, ST_Contains(g.geom, c.p) AS dentro FROM g JOIN c USING (cd)
+    """).fetchall()
+    fora = [cd for cd, dentro in linhas if not dentro]
+    return len(linhas), len(fora), fora
+
+
 def valida_edicao(con: duckdb.DuckDBPyConnection, nome_edicao: str) -> list[str]:
     ed = get_edicao(nome_edicao)
     geo_dir = ROOT / ed.processed / "geo"
@@ -105,6 +154,47 @@ def valida_edicao(con: duckdb.DuckDBPyConnection, nome_edicao: str) -> list[str]
                 print(f"  [aviso] {caminho} não existe, pulando")
                 continue
             problemas.extend(valida_arquivo(con, caminho, produto))
+
+    # item 3: deformação da simplificação (ponto-na-superfície da malha bruta dentro do
+    # polígono publicado). Só municípios, só Albers (é a malha que o app desenha).
+    malha = geo_dir / "municipios_albers.topojson"
+    centroides = geo_dir / "centroides.parquet"
+    if not malha.exists():
+        return problemas
+    with tempfile.TemporaryDirectory() as tmp:
+        geojson_path = pathlib.Path(tmp) / "municipios_albers.geojson"
+        _decodifica(malha, geojson_path)
+        if centroides.exists():
+            n, fora, ids = _checa_centroides_dentro(con, geojson_path, centroides)
+            print(f"  ponto-na-superfície fora do polígono publicado: {fora} de {n}")
+            if n and fora / n > LIMIAR_FORA:
+                problemas.append(
+                    f"{malha}: {fora} de {n} municípios ({100 * fora / n:.1f}%) com o ponto-na-superfície "
+                    f"fora do polígono publicado (limiar {100 * LIMIAR_FORA:.1f}%) -- simplificação "
+                    f"deformou a malha; ex.: {', '.join(ids[:8])}"
+                )
+        else:
+            print(f"  [aviso] {centroides} não existe, checagem de deformação pulada (rode build_centroids.py)")
+
+        # item 4: a extensão de cada nível dissolvido tem de ser a da malha municipal (ilhas
+        # incluídas -- ver docstring, caso Fernando de Noronha).
+        bbox_mun = _bbox(con, geojson_path)
+        for produto in PRODUTOS_DISSOLVIDOS:
+            arq = geo_dir / f"{produto}_albers.topojson"
+            if not arq.exists():
+                continue
+            gj = pathlib.Path(tmp) / f"{produto}_albers.geojson"
+            _decodifica(arq, gj)
+            bbox = _bbox(con, gj)
+            desvio = max(abs(a - b) for a, b in zip(bbox, bbox_mun))
+            print(f"  extensão de {produto} x municípios: desvio máximo {desvio / 1000:.1f} km")
+            if desvio > LIMIAR_BBOX_M:
+                problemas.append(
+                    f"{arq}: caixa envolvente difere da malha municipal em {desvio / 1000:.0f} km "
+                    f"(limiar {LIMIAR_BBOX_M / 1000:.0f} km) -- alguma parte (ilha?) foi perdida na "
+                    f"dissolução/simplificação; bbox {tuple(round(v) for v in bbox)} x municípios "
+                    f"{tuple(round(v) for v in bbox_mun)}"
+                )
     return problemas
 
 
@@ -137,7 +227,7 @@ def main() -> None:
     if todos_problemas:
         print(f"\n{len(todos_problemas)} problema(s) encontrado(s).")
         sys.exit(1)
-    print("\nok -- toda a malha verificada passou em ST_IsValid e na triangulação earcut.")
+    print("\nok -- toda a malha verificada passou em ST_IsValid, na triangulação earcut, na checagem de deformação e na de extensão.")
 
 
 if __name__ == "__main__":
