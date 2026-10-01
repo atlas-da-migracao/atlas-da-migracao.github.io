@@ -66,3 +66,13 @@ Documentacao_Tecnica_*.pdf
 # repositório é publicado como site (atlas-da-migracao.github.io), nada aqui pode ser
 # versionado -- e a pasta não estava ignorada, ou seja, um `git add -A` a commitaria.
 legal/
+
+# Material que NÃO é do atlas publicado (decisão de 30/09/2026): postagens (LinkedIn,
+# Substack), vídeos, apresentações e análises feitas à parte a partir dos dados -- inclusive
+# o patch de ocupação dos militares de 1980. Fica local, ao lado do repositório, nunca no site.
+postagens/
+
+# Duplicatas criadas pelo Finder/iCloud ("arquivo 2.py", "pasta 2"): nunca são versões
+# intencionais e já confundiram uma revisão (30/09/2026).
+* 2.*
+* 2
