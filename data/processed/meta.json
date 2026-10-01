@@ -1,7 +1,7 @@
 {
   "edicao": "2022",
-  "versao_dados": "2026-09-30",
-  "gerado_em": "2026-09-30T19:25:02",
+  "versao_dados": "2026-10-01",
+  "gerado_em": "2026-10-01T00:56:11",
   "fonte": "IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado)",
   "periodo_referencia": {
     "de": "2017-07-31",
@@ -113,12 +113,13 @@
     "autor": "Daniel Pessini Sobreira",
     "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
     "doi_conceito": "10.5281/zenodo.22469791",
-    "doi_versao": "10.5281/zenodo.22819760",
+    "doi_versao": "10.5281/zenodo.23074215",
     "licenca": "CC BY 4.0",
     "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
     "texto": "Daniel Pessini Sobreira. Atlas da migração interna no Brasil. Dados do Censo Demográfico 2022 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."
   },
   "aviso": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 2022 (IBGE, acesso controlado), sujeitas a controle estatístico de revelação e a erro amostral; podem divergir das tabulações oficiais do IBGE (SIDRA).",
   "aviso_proxy": null,
+  "aviso_pendular_estudo": null,
   "aviso_proxy_resumo": null
 }

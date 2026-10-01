@@ -1,7 +1,7 @@
 # Relatório de controle de revelação
 
 - Versão dos dados: **1.0.4-1991**
-- Gerado em: 2026-09-30 19:27 (fuso local)
+- Gerado em: 2026-10-01 00:56 (fuso local)
 - Fonte: IBGE, Censo Demográfico 1991, microdados da amostra (dados públicos).
 
 ## Regras aplicadas

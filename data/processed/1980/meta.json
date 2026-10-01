@@ -1,7 +1,7 @@
 {
   "edicao": "1980",
   "versao_dados": "2026-10-01",
-  "gerado_em": "2026-10-01T00:23:17",
+  "gerado_em": "2026-10-01T00:56:17",
   "fonte": "IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos), via censobr/IPEA v1.0.0 (Parquet público derivado dos mesmos microdados; ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)",
   "periodo_referencia": {
     "de": "1975-09-01",
@@ -101,7 +101,7 @@
     "autor": "Daniel Pessini Sobreira",
     "autor_orcid": "https://orcid.org/0000-0002-6632-3991",
     "doi_conceito": "10.5281/zenodo.22469791",
-    "doi_versao": "10.5281/zenodo.22819760",
+    "doi_versao": "10.5281/zenodo.23074215",
     "licenca": "CC BY 4.0",
     "licenca_url": "https://creativecommons.org/licenses/by/4.0/deed.pt-br",
     "texto": "Daniel Pessini Sobreira. Atlas da migração interna no Brasil. Dados do Censo Demográfico 1980 (IBGE). DOI: https://doi.org/10.5281/zenodo.22469791."

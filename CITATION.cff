@@ -22,6 +22,9 @@ identifiers:
   - type: doi
     value: "10.5281/zenodo.22819760"
     description: "DOI da versão v2.0.0 (2026-09-17, cinco edições e a seção 'Ao longo dos censos')."
+  - type: doi
+    value: "10.5281/zenodo.23074215"
+    description: "DOI da versão v2.1.0 (2026-10-01, Censo 1980 com os 52 municípios do atual Tocantins, fonte censobr/IPEA, e correções de renderização)."
 keywords:
   - migração interna
   - censo demográfico

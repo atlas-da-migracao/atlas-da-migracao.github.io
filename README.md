@@ -195,7 +195,7 @@ Ver [`LICENSE-DADOS.md`](LICENSE-DADOS.md) para os detalhes de atribuição.
 Pessini Sobreira, Daniel (https://orcid.org/0000-0002-6632-3991). Atlas da migração interna no Brasil. Dados
 dos Censos Demográficos 1980-2022 (IBGE). Versão dos dados: <ver data/processed/meta.json>.
 DOI: https://doi.org/10.5281/zenodo.22469791 (todas as versões) /
-https://doi.org/10.5281/zenodo.22819760 (v2.0.0). Disponível em: https://atlas-da-migracao.github.io.
+https://doi.org/10.5281/zenodo.23074215 (v2.1.0). Disponível em: https://atlas-da-migracao.github.io.
 ```
 
 Metadados estruturados para gerenciadores de referência em [`CITATION.cff`](CITATION.cff).

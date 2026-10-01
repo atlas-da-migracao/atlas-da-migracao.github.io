@@ -177,10 +177,20 @@ metodológica, nova versão do IBGE etc.):
    alterado (código, README, metodologia). O hook `pre-commit` roda
    `pipeline/verify_gate.py` automaticamente e bloqueia o commit se o gate não estiver
    íntegro.
-6. `git commit` e `git push` para `main` -- o workflow `publicar.yml` reconstrói e publica
-   o site automaticamente.
-7. Atualizar `version` em `CITATION.cff` e, se o Zenodo estiver conectado, considerar uma
-   nova release/DOI para a nova versão dos dados.
+6. `git commit` e `git push` para `main`. O push **não** publica sozinho: o workflow
+   `publicar.yml` está em modo manual (`workflow_dispatch`). Disparar com
+   `gh workflow run publicar.yml --ref main` (da pasta do repositório) e acompanhar com
+   `gh run watch`; os três jobs (verificar, construir, publicar) têm de terminar em sucesso.
+7. Atualizar `version` em `CITATION.cff` e criar a release (`gh release create vX.Y.Z --target
+   main --notes-file ...`). A integração GitHub -> Zenodo arquiva a release e gera o DOI da
+   versão em alguns minutos -- o webhook pode responder erro 500 mesmo tendo criado o
+   registro; conferir em https://doi.org/10.5281/zenodo.22469791 (DOI conceitual, leva à
+   versão mais recente) ou na busca da API do Zenodo, que reindexa antes da lista de versões.
+8. Com o DOI da versão: atualizar `DOI_VERSAO` em `pipeline/build_meta.py` e
+   `pipeline/build_paginas.py`, `VERSAO_ATLAS` em `web/src/conteudo/metodologia.tsx` (e o
+   teste dela), README e `CITATION.cff`; regenerar os cinco `meta.json` (`build_meta.py
+   [--edicao <ano>]`), recarimbar os cinco gates com as versões vigentes, `verify_gate`,
+   commit, push e disparar o workflow de novo (passo 6).
 
 ---
 

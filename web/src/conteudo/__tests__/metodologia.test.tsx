@@ -147,7 +147,7 @@ describe("página de metodologia por edição", () => {
 
   it("o DOI de versão é rotulado com a versão vigente do atlas (não mais \"v1.0.0\")", async () => {
     const html = await renderizar("2022");
-    expect(html).toContain("10.5281/zenodo.22469792</a> (v2.0.0)");
+    expect(html).toContain("10.5281/zenodo.22469792</a> (v2.1.0)");
     expect(html).not.toContain("v1.0.0");
   });
 

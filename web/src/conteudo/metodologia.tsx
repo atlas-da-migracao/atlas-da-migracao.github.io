@@ -23,11 +23,11 @@ import type { Meta } from "../lib/types";
 import { useStore } from "../state/store";
 
 /** Versão do atlas a que o DOI de versão de "Como citar" se refere. Mesma versão que
- *  pipeline/build_paginas.py usa ao lado de `DOI_VERSAO` ("v2.0.0"). Fica aqui, e não em
+ *  pipeline/build_paginas.py usa ao lado de `DOI_VERSAO` ("v2.1.0"). Fica aqui, e não em
  *  `meta.citacao`, porque pipeline/build_meta.py ainda não publica `citacao.versao` -- só
  *  `doi_versao`; quando publicar, troque esta constante pelo campo do meta e o rótulo nunca mais
  *  diverge do DOI (era "(v1.0.0)" fixo ao lado do DOI da v2.0.0). */
-const VERSAO_ATLAS = "v2.0.0";
+const VERSAO_ATLAS = "v2.1.0";
 
 /** Moeda em que o salário mínimo de referência de cada edição está expresso. `meta.json` traz só o
  *  número (`salario_minimo_referencia`), sem a moeda: 1991 e 1980 são em cruzeiros (Cr$), as
