@@ -6,6 +6,7 @@ import { detalheFluxoUnidade, type DetalheFluxoUnidade, type NivelAgregado } fro
 import { usarDuckDBPronto } from "../db/duckdb";
 import { num, rotuloPrecisao, sinal } from "../lib/format";
 import { AvisoProxy } from "./AvisoProxy";
+import { AvisoUnidadeUf } from "./AvisoUnidade";
 import type { Meta } from "../lib/types";
 import { Termo } from "./Termo";
 
@@ -76,6 +77,12 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
       </header>
 
       <AvisoProxy meta={meta} />
+      {/* UF que não existia na época do censo (hoje só o Tocantins em 1980): a nota do meta diz
+          que as trocas com o restante de Goiás aparecem como interestaduais -- exatamente o número
+          deste painel, que sem o aviso ficaria sem contexto. O componente devolve null para UFs
+          reais na época; uma só vez quando as duas pontas são a mesma UF fora da época. */}
+      {nivel === "uf" && <AvisoUnidadeUf meta={meta} codigoUf={origem} />}
+      {nivel === "uf" && destino !== origem && <AvisoUnidadeUf meta={meta} codigoUf={destino} />}
 
       <div className="kpis">
         <div className="kpi">

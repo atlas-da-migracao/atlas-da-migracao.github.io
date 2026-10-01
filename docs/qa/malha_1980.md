@@ -4,6 +4,13 @@ Gerado por `geo/fetch_1980.sh`. Fonte: `05_malha_municipal_1980.zip` (IBGE geoft
 nacional único, dado público). Saída: `data/geo/raw/1980/BR_Municipios_1980.shp` (gitignored,
 dado geográfico — não é microdado controlado, mas segue o padrão de não versionar `data/geo/raw`).
 
+> **Estado atual (`1.1.0-1980`).** A malha publicada tem as **3.991 feições** originais do IBGE,
+> com `CD_MUN` recodificado em 53 delas (52 do norte de Goiás `52xxxxx → 17xxxxx` e Fernando de
+> Noronha `2000107 → 2605459`, pela tabela de `pipeline/norte_goias_1980.py`) e **sem nenhum
+> dissolve** — ver o adendo `1.1.0-1980` no fim. **Histórico:** até `1.0.7-1980` a malha tinha a
+> feição dissolvida `NORTEGO` (as 52 feições do norte de Goiás fundidas numa, adendos F9.9 e
+> F9.10), e antes disso, em `1.0.0`/`1.0.1-1980`, não tinha o território.
+
 ## Campos e CRS encontrados
 
 - Shapefile bruto: campos `codigo` (numérico, 7 dígitos) e `nome` (string). Sem `SIGLA_UF`.
@@ -92,6 +99,8 @@ cruzados por `CD_MUN` (código de 7 dígitos):
 
 ## Adendo F9.9 — as 52 feições do norte de Goiás passaram de removidas a dissolvidas
 
+> **Histórico** — superado em `1.1.0-1980` (adendo no fim): a feição dissolvida deixou de existir.
+
 Quando este QA foi escrito, `geo/fetch_1980.sh` **removia** (`-filter`) as 52 feições do norte de
 Goiás, porque a edição não publicava o território: a saída tinha 3.939 feições e o Tocantins era um
 buraco. Desde a versão `1.0.2-1980` dos dados o território é publicado como **uma unidade agregada**
@@ -130,6 +139,9 @@ código com a forma do território. O mesmo filtro existe do lado do dado, em
 
 ## Adendo F9.10 — o recorte em grade de NORTEGO (`gridsplit_geom.py`) foi removido
 
+> **Histórico** — a feição `NORTEGO` deixou de existir em `1.1.0-1980`; a correção de
+> `geo/build.sh` descrita aqui continua valendo para toda a malha.
+
 A versão `1.0.3-1980` tinha contornado o triângulo espúrio do earcut recortando o polígono
 dissolvido de NORTEGO numa grade 8x16 (`pipeline/gridsplit_geom.py`, chamado por
 `geo/fetch_1980.sh`) antes de publicar a malha. Investigando o mesmo defeito nas outras 4
@@ -149,3 +161,27 @@ depois disso, ver `pipeline/validate_geo.py`), `geo/fetch_1980.sh` voltou ao dis
 `1.0.3-1980` (a malha interna de triangulação já não vem de 97 peças de grade, e sim do
 contorno único simplificado) mas a área e o contorno externo permanecem os mesmos dentro da
 tolerância de 0,1% verificada em `geo/build.sh`.
+
+## Adendo `1.1.0-1980` — as 52 feições voltam como municípios
+
+Com a fonte da edição trocada para o censobr/IPEA (`pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md`),
+os 52 municípios do norte de Goiás passaram a ser publicados como municípios comuns, com o código de
+2022, e a malha acompanha: `geo/fetch_1980.sh` só **recodifica** `CD_MUN` das feições afetadas, com
+a tabela lida de `pipeline/norte_goias_1980.CODIGO_PUBLICADO` (sem segunda lista no shell), e
+`SIGLA_UF` passa a reconhecer `'17'` (TO). Não há mais camada separada, `-dissolve` nem
+`-merge-layers`: as 3.991 feições saem como vieram do IBGE, e o risco topológico que o adendo F9.9
+confinava às 52 deixou de existir.
+
+Conferido no TopoJSON publicado (`data/processed/1980/geo/`): **3.991** feições municipais, **500**
+RGIs, **133** RGInts e **27** UFs, nas versões em graus e em Albers; `municipios.topojson` com
+1,51 MB (orçamento: 2 MB). O filtro `cd_rgi != null` de `geo/build.sh` (adendo F9.9) continua no
+lugar e não filtra nada, porque todo município de 1980 tem RGI e RGInt. A área das 52 feições
+brutas (278.642 km², adendo F9.9) continua sendo a do território. A validação de posição dos
+centroides contra 2022 (seção acima), refeita para os 52 códigos `17xxxxx` com os centroides
+publicados (`data/processed/1980/geo/centroides.parquet` × `data/processed/geo/centroides.parquet`,
+Albers): distância mínima 0,1 km, mediana 12,3 km, 11 casos acima de 30 km e um só acima de
+100 km — **Cristalândia** (1706100, 105,8 km), o mesmo padrão dos 17 casos da tabela acima
+(município de 1980 muito maior, depois desmembrado — Lagoa da Confusão, Pium e outros —, com o
+código ficando na sede deslocada); Araguaína (1702109) vem em seguida com 51,0 km. Nenhum caso
+indica código trocado.
+

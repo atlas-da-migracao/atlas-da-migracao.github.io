@@ -11,12 +11,24 @@
 -- nome, mesma ordem, mesmo tipo) das edições 2022, 2010, 2000 e 1991, para que
 -- 03_indicators.sql e 04_flows.sql sejam reaproveitados sem override.
 --
--- Fonte: BASE DOS DADOS (BigQuery), tabela
--- basedosdados.br_ibge_censo_demografico.microdados_pessoa_1980, extraída por
--- scripts/extract_1980_bd.py para data/raw1980/pessoa_<uf>.parquet (27 partições,
--- 29.378.753 linhas, Sigma v604 = 119.011.062). NÃO é a cópia pública do IBGE: as cópias
--- locais (DBF e SAV) OMITEM a variável V518 (município de residência anterior), sem a qual
--- não existe matriz origem->destino. Dicionário de variáveis: "Documentação - 12.doc" do
+-- Fonte (desde 1.1.0-1980): o Parquet do censobr/IPEA v1.0.0, convertido por
+-- scripts/prep_1980_censobr.py para data/raw1980/pessoa_<uf>.parquet (27 partições,
+-- 29.378.753 linhas, Sigma v604 = 119.011.052) no mesmo esquema de 39 colunas da fonte
+-- anterior, a BASE DOS DADOS (BigQuery, basedosdados.br_ibge_censo_demografico.
+-- microdados_pessoa_1980, extraída por scripts/extract_1980_bd.py; Sigma v604 = 119.011.062),
+-- e idêntico a ela célula a célula nas colunas usadas (docs/qa/censobr_1980.md). NÃO é a cópia
+-- pública do IBGE: as cópias locais (DBF e SAV) OMITEM a variável V518 (município de residência
+-- anterior), sem a qual não existe matriz origem->destino.
+--
+-- NOTA DE 1.1.0-1980: os pontos abaixo foram escritos sobre a Base dos Dados. Quatro deles
+-- descrevem artefatos DA BD que não existem no censobr: a codificação de 6 dígitos do Ceará
+-- (ponto 2 -- a regra org6/trab6 fica como tolerância), a renda só no Ceará (ponto 7 -- no
+-- censobr ela está nas 27 UFs e continua não publicada), os 52 municípios do norte de Goiás sem
+-- id_municipio (ponto 4, reescrito) e Fernando de Noronha sem id_municipio (ponto 5 -- agora
+-- chega como 2000107 e é recodificado pelo código). E o censobr aplica os universos do
+-- questionário: escolaridade zerada abaixo de 5 anos, trabalho e v527 NULL abaixo de 10 -- o
+-- pendular de estudo (ponto 9) passa a cobrir só 10 anos ou mais. Ver
+-- pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md. Dicionário de variáveis: "Documentação - 12.doc" do
 -- IBGE; tabelas auxiliares em "Variaveis Auxiliares/" (V512, V530/V542, V532/V544, V606,
 -- V680-V681-V682). Todas as afirmações quantitativas abaixo vêm de consultas AGREGADAS
 -- (contagens, somas de peso, cruzamentos com n >= 5, correlações) sobre data/raw1980/ e,
@@ -68,6 +80,11 @@
 --      Ceará cujo destino é um dos 52 códigos do norte de Goiás, que corretamente caem em
 --      "origem não informada" em vez de resolver para um município fantasma. Ver MAPEAMENTO
 --      §2.3 (validação da regra, antes da exclusão de Goiás) vs. §3.3 (efeito da exclusão).
+--      (SUPERADA em 1.1.0-1980: 01_extract.sql resolve org6/trab6 contra
+--      data/interim/1980/mun6_lookup.parquet -- os 3.991 prefixos de 1980, com os 52 do norte
+--      de Goiás já recodificados para 17xxxxx --, e a anomalia de 6 dígitos não existe no
+--      censobr. As 150 origens do Ceará no norte de Goiás passam a resolver para o município;
+--      contagem no extrato, esperada de volta em 179.772, «a confirmar».)
 --
 --   3. O PROXY FOI CALIBRADO CONTRA A DATA FIXA VERDADEIRA DE 1991, e os números são o selo
 --      de precisão desta edição. Construindo o MESMO proxy em 1991 (MIANMOMU < 5 +
@@ -91,36 +108,27 @@
 --      do CONCEITO, não o desta edição; se o retorno e as etapas múltiplas foram mais intensos
 --      em 1975-1980, os desvios acima são um PISO.
 --
---   4. *** A EDIÇÃO 1980 NÃO COBRE O TERRITÓRIO DO ATUAL TOCANTINS. *** 178.338 registros de
---      sigla_uf = 'GO' chegam com id_municipio NULL: são os 52 municípios do norte de Goiás
---      que em 1988 formaram o Tocantins. A Base dos Dados NÃO publica o código de 6 dígitos
---      original (id_municipio é a única coluna geográfica da tabela), então não há join
---      possível -- reextrair não resolve (a sondagem das quatro camadas da BD -- produção, dev
---      e as duas variantes de staging -- devolveu exatamente os mesmos 178.338 nulos em todas,
---      o que fecha a hipótese de `safe_cast`), e casar linha a linha com a cópia DBF do IBGE
---      está descartado (a extração veio do BigQuery sem ORDER BY nem chave de linha).
---
---      HISTÓRICO DA DECISÃO, em três etapas -- vale registrar porque a 1ª e a 2ª estão citadas
---      em documentação anterior:
---        F9.2 (1.0.0-1980): EXCLUIR os 178.338. O território sai da edição; a UF 52 fica
---          publicada nos seus limites atuais (3.121.125 habitantes), o que é bom, mas o
---          Tocantins vira um buraco branco na malha e 739.049 pessoas somem.
---        F9.8 (1.0.1-1980): os 15.350 que SAÍRAM de lá (v518 traz um dos 52 códigos, e o
---          destino é um município publicado) deixam de ser tratados como origem desconhecida e
---          ganham uma tabela própria, fluxos_origem_agregada.parquet, sob a origem sintética
---          'NORTEGO'. Meia solução: a origem existia, mas sem população, malha nem painel.
---        F9.9 (1.0.2-1980, ATUAL): 'NORTEGO' vira uma UNIDADE PUBLICADA. Os 178.338 residentes
---          entram na edição sob ela (cd_mun = 'NORTEGO'), a unidade ganha população (739.049),
---          imigração, emigração, saldo, deslocamento pendular, UF ('17', Tocantins), painel e
---          um polígono na malha (as 52 feições dissolvidas em uma, geo/fetch_1980.sh). A
---          tabela separada de F9.8 deixou de existir: a origem agregada virou uma origem
---          normal em fluxos.parquet, com um destino clicável do outro lado. A edição passou a
---          cobrir 100% dos recenseados de 1980 (Sigma peso 119.011.062).
---      O que a unidade NÃO resolve, e fica declarado: ela não distingue os 52 municípios, e
---      mudar entre dois deles não aparece como migração (11.586 registros, 47.598 ponderados
---      -- tratados como não migração em 01_extract.sql, ver a nota de df_local lá). É a perda
---      de granularidade de qualquer agregação, e é o preço de não ter um autoloop nem uma
---      "origem não informada" que a fonte, na verdade, informa.
+--   4. O TERRITÓRIO DO ATUAL TOCANTINS: 52 MUNICÍPIOS RECODIFICADOS (desde 1.1.0-1980). A fonte
+--      censobr traz id_municipio = código de 1980 para os 178.338 registros dos 52 municípios
+--      do norte de Goiás (52xxxxx), recodificados em 01_extract.sql para o código de 2022
+--      (17xxxxx, UF '17' pelo precedente de Fernando de Noronha; pipeline/norte_goias_1980.py).
+--      Nada neste script trata o território à parte: os 52 são municípios como os outros 3.939,
+--      e mudar entre dois deles é migração intermunicipal (11.586 registros, 47.598 ponderados).
+--      HISTÓRICO -- até 1.0.7-1980 a fonte era a Base dos Dados, onde esses registros chegavam
+--      com id_municipio NULL: o do-file que constrói a tabela (basedosdados/mais, build.do) faz
+--      um merge do código de 1980 contra o diretório ATUAL de municípios e descarta o original.
+--      A sondagem das quatro camadas da BD (produção, dev e as duas variantes de staging)
+--      confirmou o nulo -- certo para a BD. Estavam errados o veredito "irrecuperável" (valia
+--      só para a BD) e a rejeição de casar com a cópia DBF do IBGE (só o join posicional foi
+--      avaliado; a vinculação por atributos funciona e ficou como plano B). As três decisões
+--      tomadas sobre a BD:
+--        F9.2 (1.0.0-1980): EXCLUIR os 178.338 (Goiás nos limites de hoje, 3.121.125 hab.;
+--          739.049 pessoas fora e o Tocantins como buraco no mapa).
+--        F9.8 (1.0.1-1980): publicar só a emigração (15.350 registros) sob a origem sintética
+--          'NORTEGO', numa tabela própria (fluxos_origem_agregada.parquet).
+--        F9.9 (1.0.2 a 1.0.7-1980): 'NORTEGO' como UNIDADE PUBLICADA (população 739.049, UF
+--          '17', polígono dissolvido), com a migração entre os 52 tratada como não migração.
+--      Ver pipeline/sql/1980/MAPEAMENTO_norte_goias.md e MAPEAMENTO_fonte_censobr.md.
 --
 --   5. FERNANDO DE NORONHA É ATRIBUÍDO POR sigla_uf, NÃO POR id_municipio. As 298 linhas com
 --      sigla_uf = 'FN' têm id_municipio NULL -- a BD não lhes dá geocódigo nenhum (isso
@@ -251,7 +259,8 @@
 --      Origem não informada: desde F9.9 ela tem DUAS parcelas, não três -- a sentinela
 --      UF||'0000' (UF de origem declarada, município não) e as sentinelas 54/99 (Brasil sem
 --      especificação, ignorado). A terceira parcela de antes, os 15.350 do norte de Goiás,
---      saiu daqui: a origem deles é conhecida E agora tem unidade ('NORTEGO'), então eles são
+--      saiu daqui: a origem deles é conhecida E tem unidade publicada ('NORTEGO' de 1.0.2 a
+--      1.0.7-1980; desde 1.1.0-1980, o próprio município 17xxxxx), então eles são
 --      origem_valida como qualquer outro migrante. Ver MAPEAMENTO §2.4 e §3. Zero autoloops
 --      (origem = destino) no extrato. NOTA DE IMPLEMENTAÇÃO (F9.3, CORRIGIDA em F9.3(a) --
 --      achado do auditor): como em 1991, o universo é 5 anos ou mais (idade >= 5). Mas
@@ -489,9 +498,10 @@ COPY (
                 WHEN df_local = '2' AND nasc_local = '3'             THEN 'nascido_exterior'
                 -- F9.9: a condição `origem_agregada IS NULL`, que F9.8 tinha acrescentado
                 -- aqui, foi REMOVIDA junto com a coluna. Ela existia porque a origem no norte
-                -- de Goiás ficava com df_mun NULL sem ser desconhecida; agora essa origem
-                -- resolve para a unidade 'NORTEGO' (df_mun NOT NULL) e a linha abaixo volta a
-                -- dizer exatamente o que diz: origem que o QUESTIONÁRIO não informa.
+                -- de Goiás ficava com df_mun NULL sem ser desconhecida; desde então essa origem
+                -- resolve para uma unidade publicada (df_mun NOT NULL: 'NORTEGO' até 1.0.7-1980,
+                -- o município 17xxxxx desde 1.1.0-1980) e a linha abaixo volta a dizer
+                -- exatamente o que diz: origem que o QUESTIONÁRIO não informa.
                 WHEN df_local = '2' AND df_mun IS NULL               THEN 'origem_nao_informada'
                 WHEN df_local = '2' AND nasc_local = '2'             THEN 'nao_natural'
                 WHEN df_local = '2'                                  THEN 'outro'

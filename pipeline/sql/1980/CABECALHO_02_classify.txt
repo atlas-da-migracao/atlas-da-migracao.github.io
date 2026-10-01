@@ -11,6 +11,14 @@
 -- em `origem_agregada` e publicados em fluxos_origem_agregada.parquet, sem que nada do que já
 -- estava publicado mudasse. Ver MAPEAMENTO_02_classify.md §3.4-§3.5 e MAPEAMENTO_norte_goias.md.
 -- Em caso de divergência entre este arquivo e o SQL, o SQL vale.
+-- E, desde a versão 1.1.0-1980, o PONTO 4 abaixo está SUPERADO por inteiro (e os pontos 2, 5 e 7
+-- descrevem artefatos da Base dos Dados que a fonte atual não tem): a edição passou a vir do
+-- Parquet do censobr/IPEA v1.0.0, que traz o código de município dos 178.338 registros do norte
+-- de Goiás, e os 52 municípios são publicados como municípios comuns, com o código de 2022. A
+-- "inviabilidade" registrada no ponto 4 valia só para a BD (um merge contra o diretório atual de
+-- municípios no do-file de construção descarta o código de 1980), e o casamento com a cópia DBF
+-- só foi avaliado na forma posicional. Ver MAPEAMENTO_fonte_censobr.md e
+-- MAPEAMENTO_norte_goias.md §1.1 e §2.4.
 -- ============================================================================================
 
 -- F2 (edição Censo 1980): classificação de status migratório, escolaridade, pendular e
@@ -91,7 +99,8 @@
 --      do CONCEITO, não o desta edição; se o retorno e as etapas múltiplas foram mais intensos
 --      em 1975-1980, os desvios acima são um PISO.
 --
---   4. *** A EDIÇÃO 1980 NÃO COBRE O TERRITÓRIO DO ATUAL TOCANTINS. *** 178.338 registros de
+--   4. [SUPERADO em 1.1.0-1980 -- ver a nota no topo; mantido como o registro de F9.2.]
+--      *** A EDIÇÃO 1980 NÃO COBRE O TERRITÓRIO DO ATUAL TOCANTINS. *** 178.338 registros de
 --      sigla_uf = 'GO' chegam com id_municipio NULL: são os 52 municípios do norte de Goiás
 --      que em 1988 formaram o Tocantins. A Base dos Dados NÃO publica o código de 6 dígitos
 --      original (id_municipio é a única coluna geográfica da tabela), então não há join

@@ -1,14 +1,14 @@
 {
   "arquivos": {
-    "comparabilidade.json": "fdc1b42a31c6301f32c60ba16b1698635981231185d6d7c83302b41ae3110259",
-    "loglinear_serie.parquet": "4c01be004b16567b1811f1f25a3e113368625ca9f63c81cc15a59778ea41a735",
-    "pares_serie.parquet": "d76c03abb297442c0519eb9676abbde5b910daac179fdf38968778f8c26e8762",
-    "perfil_serie.parquet": "987a48c78a63f1b4aa18abb0590f2bcf235649d3373a4827dda4d98da1fafc90",
-    "sistema_serie.parquet": "7116763b4042a111cbcb310ddb68e26861d9b0ea51c70c2d52c1f9cbb3fc5792",
-    "unidades_serie.parquet": "ddf81e416b059e1949b58b3960a79c88650cd2f6e7093e045c989dce0b37d60b"
+    "comparabilidade.json": "847ffc07a826aef8f8e30f286fdf941e56926268672eccb8dd594354c28d741c",
+    "loglinear_serie.parquet": "37583bd96e697da1d77c4b3c55b96ccc68ab879d43c45c5cb5c6848750691399",
+    "pares_serie.parquet": "6540bd740501a4d62c41f1b105a6d7ccdef35902d37e28178688088caae8d5bf",
+    "perfil_serie.parquet": "63c2fcde01d2d34502ec076f5168612e359206fa4d78a580588d83db8a74a473",
+    "sistema_serie.parquet": "654baab6033dc6b7657161ec21b8076a9d9d22bd2bbc7b7fe9e598ab2f6b10fa",
+    "unidades_serie.parquet": "cf7f4086c0ff7d52547886c309d0b2f654ac336fd52e659ed116cc601de319af"
   },
   "formato_versao": 1,
   "nota_verificacao": "Esta pasta não tem microdado: as checagens R1-R6 de disclosure_check.py não se aplicam (nada aqui vem de data/interim/pessoas_classificado.parquet). O carimbo segue o MESMO formato de data/processed/.gate_ok para que verify_gate.py continue funcionando sem alteração; ver build_series.py, decisão de escopo 9, para a ressalva sobre colunas estruturais (n_mun_edicao/n_mun_2022) em verify_gate.py --dir data/processed/series isolado.",
-  "timestamp": "2026-09-17T15:47:23.870231",
-  "versao_dados": "2026-09-16c+1.0.3-2010+1.0.3-2000+1.0.3-1991+1.0.6-1980"
+  "timestamp": "2026-10-01T00:21:08.324659",
+  "versao_dados": "2026-09-30+1.0.4-2010+1.0.4-2000+1.0.4-1991+1.1.0-1980"
 }

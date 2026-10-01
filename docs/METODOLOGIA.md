@@ -147,8 +147,8 @@ Três observações sobre a escolha:
    brasileiro consegue reproduzir e comparar com o MapBiomas ou com um mapa temático do IBGE.
    Prevalece a interoperabilidade.
 3. **Os mesmos parâmetros valem para as cinco edições** (2022, 2010, 2000, 1991, 1980) e para os
-   quatro produtos (municípios, UF, RGI, RGInt), inclusive para o polígono da unidade agregada
-   `NORTEGO` de 1980. Isso é condição para que a comparação visual entre edições continue
+   quatro produtos (municípios, UF, RGI, RGInt), inclusive para os 52 municípios do norte de Goiás
+   em 1980 (até `1.0.7-1980`, o polígono dissolvido da unidade agregada `NORTEGO`). Isso é condição para que a comparação visual entre edições continue
    significando o que promete: qualquer diferença de área na tela entre dois censos é diferença
    de recorte territorial, nunca de projeção.
 
@@ -953,32 +953,65 @@ arredondamento das regras de revelação.
 
 A edição 1980 é a quinta do atlas e a primeira em que **a migração publicada não é medida, é
 estimada por um proxy**. Ela também é a primeira alimentada por uma **fonte secundária**, e a
-primeira em que uma dimensão inteira do atlas — a renda — simplesmente não existe. Esta seção
+primeira em que uma dimensão inteira do atlas — a renda — não é publicada. Esta seção
 explica as três coisas, na ordem em que elas condicionam a leitura dos números. As decisões coluna
 a coluna estão em `pipeline/sql/1980/MAPEAMENTO_02_classify.md` e no cabeçalho de
-`pipeline/sql/1980/02_classify.sql`.
+`pipeline/sql/1980/02_classify.sql`; a fonte, em `pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md`.
 
-### 1. A fonte: por que a Base dos Dados, e não a cópia pública do IBGE
+**Nota de versão (`1.1.0-1980`, 30/09/2026).** A fonte da edição passou da Base dos Dados ao
+Parquet do censobr/IPEA v1.0.0, idêntico a ela célula a célula nas colunas que a edição usa, exceto
+no que a Base dos Dados tinha de faltante ou de errado: o município de residência dos 52 municípios
+do norte de Goiás e de Fernando de Noronha, o universo de escolaridade, trabalho e município de
+trabalho ou estudo, e o peso de um registro de Mato Grosso do Sul (item 1). Com isso o território
+do atual Tocantins, publicado de `1.0.2` a `1.0.7-1980` como uma unidade agregada (`NORTEGO`),
+passa a ser publicado como **52 municípios**, com o código de 2022 e a UF de hoje (item 4); a
+edição passa a 3.991 municípios, 500 regiões imediatas, 133 intermediárias e 80 regiões
+metropolitanas (item 9); a migração entre os 52 municípios (47.598 pessoas) passa a contar como
+migração; e o deslocamento pendular de estudo passa a cobrir só quem tem 10 anos ou mais, uma
+correção (item 6). Nos outros 3.939 municípios a migração só pode mudar pelos três registros de
+exceção dos gates de identidade (item 4.3).
 
-Os microdados da amostra do Censo 1980 são públicos, mas **as cópias em circulação não trazem a
-variável de origem da migração**. Tanto o conjunto em DBF quanto o arquivo `.sav` distribuídos
-publicamente têm 61 e 62 campos respectivamente, e em nenhum deles aparece a **V518** — "Unidade da
-Federação do município que morava anteriormente", posição 72, largura 7, do layout original do TXT
-de 204 bytes. O quesito foi feito, está no questionário e está no dicionário oficial do IBGE; o
-campo foi omitido das cópias. Sem ele, 1980 só permitiria contar imigrantes por destino, sem
-matriz origem→destino — o que deixaria a edição fora do atlas.
+### 1. A fonte: por que uma fonte secundária, e por que o censobr/IPEA
 
-A **Base dos Dados** (`basedosdados.br_ibge_censo_demografico.microdados_pessoa_1980`, BigQuery)
-publica a tabela com a V518 presente. A extração (`scripts/extract_1980_bd.py`, uma consulta por
-`sigla_uf`, com dry run e teto de bytes por consulta) trouxe **29.378.753 registros** com
-**Σ peso = 119.011.062**, contra os 119.002.706 habitantes recenseados — +0,007%, a mesma ordem de
-aderência das outras edições. As contagens por UF batem uma a uma com as da cópia DBF do IBGE (a
-única diferença é Fernando de Noronha, ausente das 26 partições do DBF), o que valida a fonte
-secundária contra a primária no que as duas têm em comum.
+Os microdados da amostra do Censo 1980 são públicos, mas **as cópias distribuídas pelo IBGE não
+trazem a variável de origem da migração**. Tanto o conjunto em DBF quanto o arquivo `.sav`
+distribuídos publicamente têm 61 e 62 campos respectivamente, e em nenhum deles aparece a **V518** —
+"Unidade da Federação do município que morava anteriormente", posição 72, largura 7, do layout
+original do TXT de 204 bytes. O quesito foi feito, está no questionário e está no dicionário
+oficial do IBGE; o campo foi omitido das cópias. Sem ele, 1980 só permitiria contar imigrantes por
+destino, sem matriz origem→destino — o que deixaria a edição fora do atlas. (O tempo de residência
+no município, V517, **está** no DBF, no campo `MITEMPMU`; a documentação da edição afirmou o
+contrário até `1.0.7-1980`, conferindo só o dicionário.)
 
-O preço de usar uma fonte secundária aparece em três lugares, e todos foram encontrados só depois
-da extração: o Ceará chega com uma codificação própria (item 3), 52 municípios de Goiás chegam sem
-código (item 4), e a renda chega vazia em 26 das 27 partições (item 7).
+**Até `1.0.7-1980`: a Base dos Dados.** A tabela
+`basedosdados.br_ibge_censo_demografico.microdados_pessoa_1980` (BigQuery) publica a V518. A
+extração (`scripts/extract_1980_bd.py`, uma consulta por `sigla_uf`, com dry run e teto de bytes
+por consulta) trouxe **29.378.753 registros** com **Σ peso = 119.011.062**, e as contagens por UF
+batem uma a uma com as da cópia DBF do IBGE (a única diferença é Fernando de Noronha, ausente das
+26 partições do DBF). O preço de usar essa fonte apareceu em três lugares, todos encontrados só
+depois da extração e todos, como se soube depois, artefatos da construção da tabela: o Ceará com
+uma codificação própria (item 3), 52 municípios de Goiás e Fernando de Noronha sem código (itens 4
+e 5), e a renda vazia em 26 das 27 partições (item 7).
+
+**Desde `1.1.0-1980`: o censobr/IPEA.** A edição passou a vir do Parquet do censobr/IPEA v1.0.0
+(`1980_population_v1.0.0.parquet`, release `v1.0.0` do repositório `ipea/censobr_prep_data`,
+16/09/2026), que deriva dos mesmos arquivos intermediários que a Base dos Dados (Data Zoom) e traz,
+no mesmo registro, o município de residência na malha de 1980 e a V518.
+`scripts/prep_1980_censobr.py` converte o arquivo para o esquema de 39 colunas que a Base dos Dados
+fornecia e só o aceita se ele for idêntico a ela, célula a célula, no que as duas têm em comum, nas
+27 UFs (item 4.3). Os três artefatos da Base dos Dados desaparecem: não há codificação especial no
+Ceará, todo registro tem município, e a renda está preenchida em todas as UFs (a edição continua
+sem publicá-la, item 7). O censobr traz duas diferenças próprias, e nas duas ele coincide com a
+cópia DBF do IBGE, não com a Base dos Dados: aplica os universos do questionário (escolaridade
+zerada abaixo de 5 anos; trabalho e município de trabalho ou estudo nulos abaixo de 10 — com efeito
+no pendular de estudo, item 6), e traz o peso correto de um registro de Mato Grosso do Sul (4, onde
+a Base dos Dados trazia 14). **Σ peso = 119.011.052**, contra os 119.002.706 habitantes recenseados
+— +0,007%, a mesma ordem de aderência das outras edições. Fonte, colunas, gates e diferenças, com
+o efeito de cada uma: `pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md` e `docs/qa/censobr_1980.md`.
+
+A regra que vale para as duas fontes é a mesma: fonte secundária só com validação cruzada contra
+a primária no que as duas têm em comum, documentada antes de classificar (`docs/EDICOES.md`,
+aviso 7).
 
 ### 2. O proxy de data fixa 1975–1980, e o que ele custa
 
@@ -1076,152 +1109,180 @@ O Ceará diverge em mais pontos, todos tratados e documentados: `v518` de não m
 vez de zero; `v528`/`v529` usam o código `0` como "não se aplica" para menores de 10 anos (item 6);
 `v524` tem 15,2% de valores nulos; e a renda existe **só** ali (item 7).
 
-### 4. O território do atual Tocantins: uma unidade agregada, não um buraco no mapa
+**Desde `1.1.0-1980` a anomalia não existe na fonte.** O censobr traz `v518`/`v527` com seis
+dígitos em todas as UFs, e o script de preparação acrescenta o dígito verificador do IBGE em todas,
+de modo que o Ceará chega igual às outras 26 (e o não migrante vem com a sentinela `0000000`, não
+nulo). O que este item descreve é a Base dos Dados, fonte até `1.0.7-1980`. A regra do zero à
+esquerda continua em `01_extract.sql` só como tolerância, e o gate de identidade confirma que as
+origens do Ceará são as mesmas nas duas fontes, com a Base dos Dados comparada depois de
+normalizada por esta regra.
 
-Esta é a decisão de cobertura mais consequente da edição, e ela mudou duas vezes antes de chegar à
-forma atual. Vale contar as três, porque cada uma foi respondendo a uma objeção da anterior.
+### 4. O território do atual Tocantins: 52 municípios a partir do censobr/IPEA
 
-#### 4.1 O que a fonte não tem, e por que não adianta procurar
+Desde a versão `1.1.0-1980`, os 52 municípios do norte de Goiás que em 1988 formaram o Tocantins
+são publicados como **municípios comuns** — cada um com população, imigração, emigração, saldo,
+deslocamento pendular, região imediata, região intermediária e, onde houver, região metropolitana
+—, sob o código de 2022 e a UF de hoje. Chegar aqui levou quatro versões, e a história importa
+porque as três primeiras resolveram corretamente um problema que existia só na fonte escolhida. O
+registro completo, com as medições de cada etapa, está em
+`pipeline/sql/1980/MAPEAMENTO_norte_goias.md`; a fonte nova, em
+`pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md`.
 
-**178.338 registros de Goiás chegam sem código de município.** São os 52 municípios do norte do
-estado que em 1988 passaram a formar o Tocantins — o crosswalk usado pela Base dos Dados não cobre
-códigos pré-1988 de Goiás que migraram para a nova unidade. A tabela de origem **não publica o
-código de seis dígitos original**: `id_municipio` é a única coluna geográfica, e nesses registros
-ela é nula.
+#### 4.1 O que a Base dos Dados não tinha, e por quê
 
-Isso foi verificado até o fim, porque de início parecia um artefato de conversão. A sondagem
-comparou **as quatro camadas da Base dos Dados** — produção, dev e as duas variantes de staging,
-esta última anterior ao `safe_cast` que já tinha explicado a codificação de seis dígitos do Ceará
-(item 3) — e todas as quatro devolvem exatamente **178.338 nulos e 171 municípios distintos** em
-`sigla_uf = 'GO'`. Não há diferença entre elas: o campo é nulo **na origem**, não por efeito de
-conversão. Reextrair não resolve. Casar linha a linha com a cópia DBF do IBGE (que tem os códigos)
-foi descartado por outro motivo: a extração veio do BigQuery sem ordenação garantida e sem chave de
-registro, e um join posicional entre 29 milhões de linhas de duas fontes seria uma reconstrução
-individual não verificável — o oposto das regras de sigilo do projeto. E a cópia DBF, de todo modo,
-**não traz as variáveis de migração municipal** (V517 e V518 simplesmente não existem no layout
-dela; ver `pipeline/sql/1980/MAPEAMENTO_norte_goias.md`, §5).
+Na tabela da Base dos Dados, **178.338 registros de Goiás chegam sem código de município** — os 52
+municípios do norte do estado — e, pelo mesmo motivo, os 298 de Fernando de Noronha (item 5). Todo
+o resto desses registros está presente, inclusive a origem da migração (`v518`) e o destino
+pendular (`v527`): o que falta é só **em qual dos 52 municípios** cada residente estava.
 
-Então o que falta é isto, e só isto: **em qual dos 52 municípios cada residente estava**. Tudo o
-mais desses 178.338 registros está lá — peso, sexo, idade, escolaridade, naturalidade, ocupação,
-`v517`/`v518` (migração) e `v527` (pendular).
+A causa está no código de construção da tabela: o do-file Stata da Base dos Dados
+(`basedosdados/mais`, `bases/br_ibge_censo_demografico/code/build.do`) faz um `merge m:1` do código
+de município de 1980 contra o **diretório atual** de municípios. Os códigos `52xxxx` do norte de
+Goiás (hoje `17xxxx`) e `20xxxx` de Fernando de Noronha não casam, o campo fica vazio e o código
+original é descartado antes da camada publicada. Por isso a sondagem de 16/09/2026, que comparou as
+quatro camadas da Base dos Dados — produção, dev e as duas variantes de staging —, encontrou os
+mesmos 178.338 nulos em todas: ela estava certa sobre a Base dos Dados, e foi lida como se provasse
+que a residência era irrecuperável **nos microdados**. A cópia DBF do IBGE tem o município de
+residência desses registros e o tempo de residência, mas não a V518 (item 1): cada fonte tinha a
+metade que faltava à outra.
 
-#### 4.2 As duas tentativas anteriores, e a objeção de cada uma
+#### 4.2 As três decisões anteriores, em resumo
 
-**Versão `1.0.0-1980`: excluir.** Os 178.338 registros ficaram fora da edição. O ganho era real e
-vale registrar: excluídos, Goiás soma **3.121.125** habitantes em 1980 — que é, com precisão, a
-população de 1980 do território que **ainda hoje** é Goiás. A UF 52 ficava publicada nos seus
-limites atuais, mais comparável com as outras edições, não menos. O custo: 739.049 pessoas somem, a
-imigração que chegava ao território some, e o Tocantins vira um **buraco branco** na malha de 1980.
+| versão | decisão | o que custava |
+|---|---|---|
+| `1.0.0-1980` | excluir os 178.338 registros | 739.049 pessoas e a imigração do território fora da edição, e o Tocantins como buraco branco no mapa. Havia um ganho real, que a decisão atual preserva: Goiás publicado nos limites de hoje (3.121.125 habitantes) |
+| `1.0.1-1980` | publicar só a emigração (15.350 registros, Σ peso 64.639) sob uma origem coletiva, numa tabela à parte | a origem sem polígono nem painel, e os residentes ainda fora |
+| `1.0.2-1980` a `1.0.7-1980` | uma **unidade agregada**, `NORTEGO` ("Norte de Goiás (atual Tocantins)"): população, fluxos, pendular, UF `'17'` e as 52 feições dissolvidas num polígono; RGI, RGInt e RM nulos | sem detalhe interno; mudança entre os 52 municípios (47.598 pessoas) tratada como não migração; 11 RGIs, 3 RGInts e 2 RMs de 2022 sem nenhum município em 1980 |
 
-**Versão `1.0.1-1980`: publicar só a emigração.** Do lado da *origem* a situação sempre foi outra.
-Quem **saiu** do norte de Goiás entre 1975 e 1980 declarou o município de residência anterior em
-`v518` — e ele está lá, com um dos 52 códigos — e hoje mora num município que a edição publica
-normalmente. Origem e destino são ambos conhecidos: 15.350 registros, Σ peso 64.639, espalhados por
-468 municípios de destino. Eles passaram a ser publicados numa tabela própria,
-`fluxos_origem_agregada.parquet`, sob uma origem coletiva declarada. A objeção que sobrou: a origem
-não tinha polígono, nome no mapa nem painel — era **invisível**. Integrá-la a `fluxos.parquet`
-naquele desenho teria feito municípios inteiros ganharem um maior fluxo de entrada que o mapa não
-saberia desenhar (o caso extremo é Conceição do Araguaia/PA, cujo fluxo vindo do norte de Goiás é
-de 13.795 pessoas, onze vezes o maior fluxo de entrada que o atlas então mostrava para o município).
+A unidade agregada era uma boa resposta à pergunta que se fazia — "como publicar um território
+cuja composição interna a fonte não informa?" —, e a comparação entre as opções continua valendo
+para uma lacuna verdadeira (`docs/EDICOES.md`, aviso 8). O que a auditoria de 30/09/2026 mostrou é
+que a pergunta estava errada: a composição interna estava informada, em outra distribuição dos
+mesmos microdados.
 
-#### 4.3 A decisão atual (`1.0.2-1980`): uma unidade agregada
+#### 4.3 A fonte nova e os gates de identidade
 
-A objeção de 4.2 era contra uma origem **sem forma**, e a objeção de 4.1 — "não dá para saber em
-qual dos 52" — era contra publicar **52 unidades**. Nenhuma das duas vale contra **uma unidade só,
-com forma própria**, e é isso que a edição publica.
+Desde `1.1.0-1980` a edição inteira — não só o território do Tocantins — vem do Parquet do
+censobr/IPEA (item 1), que traz no mesmo registro o município de residência na malha de 1980 (os 52
+como `52xxxxx`, Fernando de Noronha como `2000107`) e a origem `v518`. `scripts/prep_1980_censobr.py`
+só grava a saída se, em cada uma das 27 UFs, ela for idêntica à Base dos Dados no que as duas têm
+em comum: número de registros e soma de pesos; o multiconjunto das variáveis centrais (situação,
+sexo, idade, nacionalidade, naturalidade, tempo de residência, peso, entre outras); a escolaridade
+no universo de 5 anos ou mais; o trabalho e o município de trabalho ou estudo no de 10 anos ou
+mais; a origem `v518`; e o código de município onde a Base dos Dados o tem. Resultado: **idênticas
+célula a célula nas 27 UFs**, com três registros de exceção dentro da tolerância declarada de um por
+UF — o registro de Mato Grosso do Sul com peso errado na Base dos Dados (item 1) e um registro no
+Piauí e um em Mato Grosso que diferem numa coluna central ainda não identificada. Os códigos de
+município que só o censobr tem são exatamente os 52 do norte de Goiás (178.338 registros) e o de
+Fernando de Noronha (298). Resultados UF a UF em `docs/qa/censobr_1980.md`.
 
-`'NORTEGO'`, "Norte de Goiás (atual Tocantins)", é uma **unidade agregada**: entra em
-`municipios.parquet` com população, imigração, emigração e saldo; entra nos dois lados de
-`fluxos.parquet`; tem UF, módulo pendular, painel clicável e **um polígono na malha** — as 52
-feições originais do IBGE dissolvidas em uma só (`geo/fetch_1980.sh`; a fronteira externa é a união
-exata das 52, conferida contra a malha bruta com diferença de área da ordem de 10⁻⁸ grau²). Ela
-**não é um município**, e a interface diz isso antes dos números, num aviso próprio no painel
-(`web/src/components/AvisoUnidade.tsx`, com o texto vindo de `meta.json`, nunca escrito no código).
+Uma ressalva de método: o censobr e a Base dos Dados derivam dos mesmos arquivos intermediários,
+então a identidade entre eles prova que a troca não perdeu nada do que a Base dos Dados tinha, mas
+não é uma validação independente contra o IBGE. As âncoras independentes são as da cópia DBF do
+IBGE — contagens por UF, o peso do registro de Mato Grosso do Sul, a convenção de universos —, e
+nas três o censobr coincide com ela.
 
-| | `1.0.1-1980` | `1.0.2-1980` |
+Antes de o censobr ser considerado, a auditoria validou um plano B: vincular a Base dos Dados ao
+DBF do IBGE por uma chave de 25 atributos idênticos nas duas fontes, que acertou o município em 100%
+do gabarito dos 171 municípios de Goiás que têm código nas duas e dava o par (origem, município)
+exato para 95,9% da massa migrante dos 52. Ele fica documentado e não foi usado: com o município no
+próprio registro, nenhuma parte da edição depende de vinculação.
+
+#### 4.4 A recodificação para o código de 2022, e a UF
+
+Os 52 municípios mantêm o serial de quatro dígitos entre 1980 e 2022; mudam a UF e o dígito
+verificador (`5202106` Araguaína → `1702109`). A edição publica todo município pelo código atual —
+é o que liga cada um às outras edições, aos recortes de 2022 e à genealogia —, e aplica aos 52 a
+mesma regra: `pipeline/norte_goias_1980.py` fixa literalmente os 52 pares, conferidos um a um contra
+o cadastro de 2022 (todos existem em 1991, 2000, 2010 e 2022; 12 foram renomeados depois de 1980, e
+a edição publica o nome da época, como faz com os outros municípios renomeados). Origem da migração
+e destino pendular são resolvidos pelo mesmo dicionário, chaveado pelo prefixo de 1980, de modo que
+quem saiu de Araguaína (`520210` na fonte) aparece vindo de `1702109`.
+
+**A UF é `'17'` (Tocantins), por decisão declarada** — a mesma da unidade agregada, e pelo mesmo
+precedente: Fernando de Noronha, Território Federal em 1980, já era publicado sob Pernambuco (item
+5). O norte de Goiás é o único outro caso do país em que a UF de 1980 e a de hoje divergem. Publicar
+sob `'52'` inflaria a emigração interestadual de Goiás em 27,4% com um degrau puramente territorial
+e faria Goiás aparecer em 1980 com limites que nenhuma outra edição do atlas usa. Com `'17'`, Goiás
+continua com os 3.121.125 habitantes dos seus limites de hoje, a edição tem 27 UFs e as séries de
+UF das cinco edições ficam sobre o mesmo território. O custo a declarar é que as trocas entre o
+norte e o restante de Goiás aparecem como migração **interestadual** numa data em que eram
+intraestaduais; a interface diz isso no painel da UF 17 (texto em `meta.json`, chave
+`ufs_fora_da_epoca`).
+
+#### 4.5 O que muda nos números
+
+| | `1.0.2`–`1.0.7-1980` (`NORTEGO`) | `1.1.0-1980` |
 |---|---:|---:|
-| unidades no nível municipal | 3.939 | **3.940** (3.939 municípios + 1 unidade agregada) |
-| UFs | 26 | **27** |
-| Σ peso (cobertura) | 118.272.013 (99,39%) | **119.011.062 (100%)** |
-| Σ imigrantes = Σ emigrantes | 13.679.916 | **13.803.767** |
-| imigração de origem não informada | 1.095.432 (7,4%) | **1.040.706 (7,0%)** |
-| `fluxos.parquet` | 29.437 pares | **29.647** (+144 de entrada, +66 de saída) |
-| `fluxos_origem_agregada.parquet` | 168 linhas | **deixou de existir** (absorvida por `fluxos.parquet`) |
+| unidades no nível municipal | 3.940 (3.939 municípios + 1 unidade agregada) | **3.991** municípios (3.939 + 52) |
+| RGIs / RGInts / RMs com ao menos um município | 489 / 130 / 78 | **500 / 133 / 80** |
+| Σ peso (cobertura) | 119.011.062 | **119.011.052** (o peso de um registro de MS corrigido) |
+| Σ imigrantes = Σ emigrantes (bruto) | 13.803.767 | **13.851.365** |
+| imigração de origem não informada (bruto) | 1.040.706 (7,0%) | 1.040.706 (7,0%) |
+| `fluxos.parquet` | 29.647 pares | **29.840** pares (70,5% do volume migratório estimado) |
+| `fluxos_uf.parquet` | 587 pares | 587 pares, **inalterado** |
 
-Os números da unidade: população **739.049**, população de 5 anos ou mais 608.641, imigração de
-origem conhecida **59.212**, emigração **64.639**, saldo **−5.427** (TBI 97,3‰, TBE 106,2‰, TLM
-−8,9‰, IEM −0,04). O artefato que a exclusão de `1.0.0` temia — taxa de emigração infinita sobre
-população zero — não acontece quando a unidade tem população: o saldo é levemente negativo e não
-domina escala de cor nenhuma. As principais origens de quem chegou lá são a história esperada da
-fronteira dos anos 1970: Goiânia (3.285), Imperatriz/MA (2.435), Carolina/MA (1.805), Porangatu/GO
-(1.125), Conceição do Araguaia/PA (1.080).
+- **A migração entre os 52 municípios passa a existir.** 11.586 registros (Σ peso 47.598), em 782
+  pares, que a unidade agregada tratava como não migração são migração intermunicipal,
+  intraestadual sob a UF 17. É esse o acréscimo de Σ imigrantes = Σ emigrantes. No território, a
+  imigração passa de 59.212 para 106.810 e a emigração de 64.639 para 112.237, e o saldo não muda
+  (−5.427): a migração interna se cancela. População (739.049; publicada 739.055, arredondada) e
+  população de 5 anos ou mais (608.641) são as mesmas da unidade.
+- **`fluxos_uf` não muda** (17→52: 21.564; 52→17: 26.512, brutos). É o teste de
+  regressão da recodificação: o território era UF 17 e continua sendo; só a partição interna mudou.
+- **Os recortes do Tocantins passam a ter municípios**: as 11 RGIs e as 3 RGInts de 2022 que o
+  território cobre, e as regiões metropolitanas de Palmas e de Gurupi, que antes não tinham nenhum
+  município em 1980 (item 9). Palmas foi fundada depois de 1980 e não existe na edição: o núcleo da
+  RM de Palmas é resolvido pelo fallback de `08_metro.sql` (o membro mais populoso presente, Porto
+  Nacional), e a decomposição núcleo × periferia dessa RM em 1980 não é a mesma medida das outras
+  edições (nota `nucleo_divergente` na série; "Comparação entre censos", item 3).
+- **R1 morde como em qualquer município pequeno.** Dos pares que saem do território para o resto
+  do país, 145 passam no limiar de `n ≥ 20` e cobrem 64,0% da massa, contra 66 pares e 87,5% da
+  origem agregada. Os pares suprimidos continuam nos totais municipais, como em toda a edição.
+- **A origem não informada não muda** (1.040.706, 7,0% dos migrantes internos) e continua sendo
+  toda do próprio questionário: a sentinela `UF‖'0000'` (a pessoa declarou a UF de origem, mas não o
+  município) e as sentinelas "Brasil sem especificação" e "ignorado". Até `1.0.1-1980` havia uma
+  terceira parcela, os 15.350 que saíram do norte de Goiás (7,4%); desde `1.0.2-1980` eles são
+  origem válida. Decomposição em `pipeline/sql/1980/MAPEAMENTO_02_classify.md` §2.4.
+- **Nenhuma regra de sigilo nova.** Os totais da unidade agregada publicados até `1.0.7-1980` e os
+  pares municipais publicados agora se sobrepõem, e a diferença entre eles estima a soma das células
+  suprimidas. Isso não pede regra de diferenciação porque os microdados de 1980 são **públicos**:
+  qualquer célula suprimida pode ser calculada diretamente da fonte, e a nova versão só muda o
+  código de município de registros que já eram públicos. R1 e R2 continuam valendo célula a célula
+  (análise em `pipeline/sql/1980/MAPEAMENTO_norte_goias.md` §2.4). Numa edição de acesso controlado,
+  a mesma transição exigiria análise de diferenciação própria.
 
-**Por que uma unidade coletiva e não as 52.** Além de a fonte não permitir (4.1), a granularidade
-municipal **não sobreviveria à revelação** nem do lado em que os 52 códigos existem: publicando as
-52 origens separadamente, 145 pares passariam no piso de R1 e cobririam **64,0%** da massa
-emigratória, contra 66 pares cobrindo **87,5%** com uma origem única. Com uma unidade publica-se um
-quarto a mais do que se sabe, e com uma unidade só para explicar. A composição municipal fica
-documentada em `pipeline/unidades_agregadas_1980.py` (os 52 códigos e nomes), de onde pode ser
-recuperada se um dia houver como publicá-la.
+#### 4.6 O que permanece aproximado
 
-**A UF é `'17'` (Tocantins), por decisão declarada.** A edição publica a UF de 1980 para todo
-município, com uma exceção já declarada: Fernando de Noronha, Território Federal em 1980, sai sob
-`'26'` (item 5), porque é isso que o torna comparável com as outras edições. O norte de Goiás é o
-**único outro caso** do país em que a UF de 1980 e a de 2022 divergem, e a mesma regra resolve.
-Publicar sob `'52'` faria o oposto: inflaria a emigração interestadual de Goiás em 27% com um
-degrau puramente territorial e faria Goiás aparecer em 1980 com limites que nenhuma outra edição do
-atlas usa. Com `'17'`, a edição 1980 passa a ter **27 UFs**, Goiás continua com os 3.121.125
-habitantes dos seus limites de hoje, e as séries de UF das cinco edições ficam sobre o mesmo
-território. (O código da unidade, `'NORTEGO'`, é de sete caracteres mas **não numérico** de
-propósito: é impossível confundi-lo com um código do IBGE, e qualquer rotina que tentasse derivar a
-UF do prefixo falha visivelmente em vez de imputar `'52'` ou `'17'` em silêncio.)
-
-**RGI, RGInt e RM ficam `NULL`.** A unidade cobre 11 RGIs e 3 RGInts de 2022 e não é de nenhuma.
-Uma unidade não pode estar em onze regiões, e quebrá-la em onze reintroduziria o problema que a
-agregação resolve. Ela simplesmente não participa desses níveis — as 11 RGIs e 3 RGInts seguem sem
-município, como já seguiam (item 9), só que agora com um polígono e um nome explicando por quê.
-
-#### 4.4 O que a unidade NÃO resolve, e fica declarado
-
-Três perdas, todas na mesma direção (a de uma agregação, não a de um dado inventado):
-
-1. **Mudar de município dentro do território não aparece como migração.** São 11.586 registros
-   (Σ peso 47.598) de pessoas que se mudaram entre dois dos 52 municípios. Elas entram na edição
-   como **não migrantes**, exatamente como o próprio questionário de 1980 trata quem se muda dentro
-   de um mesmo município (`v518 = '0000000'`). As alternativas eram piores: deixá-las como
-   "imigração de origem não informada" seria a única parcela dessa categoria, em todo o atlas, cuja
-   origem a fonte **informa**; e resolver a origem para a própria unidade criaria um autoloop
-   origem = destino, que o atlas não publica em nível nenhum.
-2. **A naturalidade do território é irrecuperável.** Quem nasceu no norte de Goiás e mora fora dele
-   traz, em `v512`, "Goiás" — era isso que o Censo de 1980 registrava. Consequência: `retorno_natal`
-   e "retorno à UF natal" ficam **subestimados** para a unidade (quem volta ao território vindo de
-   fora não é reconhecido como natural dele). Não há como corrigir sem inventar.
-3. **Não há detalhe interno.** A unidade tem o tamanho de um estado e é publicada como um ponto no
-   mapa de fluxos: os 3.285 imigrantes vindos de Goiânia chegaram "ao norte de Goiás", não a
-   Araguaína ou a Porto Nacional.
-
-#### 4.5 A origem não informada de 1980, agora com duas parcelas
-
-Com a mudança, a "origem não informada" de 1980 voltou a significar só o que o nome diz. A conta
-nos arquivos publicados é de **1.040.706** (Σ peso), ou **7,0%** dos migrantes internos, com duas
-parcelas, ambas do próprio questionário: a sentinela `UF‖'0000'` (a pessoa declarou a UF de origem,
-mas não o município) e as sentinelas "Brasil sem especificação" e "ignorado". A terceira parcela de
-antes — os 15.350 do norte de Goiás, cuja origem a fonte informava e o atlas é que não tinha onde
-colocar — saiu daqui: eles são migrantes de origem válida como quaisquer outros. A decomposição
-equivalente está em `pipeline/sql/1980/MAPEAMENTO_02_classify.md` §2.4, e o histórico completo das
-três decisões, com as medições de cada uma, em `pipeline/sql/1980/MAPEAMENTO_norte_goias.md`.
+1. **A naturalidade é só por UF.** Quem nasceu no norte de Goiás e mora fora traz em `v512`
+   "Goiás" — era isso que o Censo de 1980 registrava, e ele não pergunta o município de nascimento.
+   Consequência: `retorno_uf_natal` (e a categoria `retorno_natal` do status) fica **subestimado**
+   no Tocantins e **superestimado** no restante de Goiás; só `v513` ("nasceu neste município") vale
+   por município. Não há como corrigir sem inventar.
+2. **Mesmo código não é mesmo território.** 34 dos 52 municípios cederam área a municípios criados
+   depois de 1980 (o Tocantins de 2022 tem 139). Na série "Ao longo dos censos", os 87 criados
+   depois recebem o município-mãe por sobreposição de área com a malha de 1980, como qualquer outro
+   município do país (`docs/genealogia.md`), e a série dos que cederam área leva o aviso
+   `municipio_mae` ("Comparação entre censos", item 2).
+3. **A UF de hoje sobre a divisão de 1980** (4.4): as trocas com o restante de Goiás aparecem como
+   interestaduais.
+4. **Pares pequenos suprimidos** (4.5): o custo comum da resolução municipal.
 
 ### 5. Fernando de Noronha
 
-As 298 linhas com `sigla_uf = 'FN'` também chegam sem `id_municipio` — ao contrário do que o plano
-presumia, a Base dos Dados não lhes atribui geocódigo. A malha municipal de 1980 traz o município
-com o código `2000107` (prefixo 20, Território Federal até 1988), inexistente no sistema atual. A
-atribuição é feita explicitamente, **pela sigla da UF e nos dois lados do fluxo**: como destino,
-todo registro de `FN` recebe o código **`2605459`** (Fernando de Noronha/PE nos recortes de 2022) e
-a UF `26`; como origem, os códigos `2000107` (141 registros) e `2000008` — "UF 20 sem especificação
-de município", e o território só tinha um — recebem o mesmo tratamento, assim como o código 14 da
-tabela de UF de nascimento (670 registros). É o **único município da edição cuja UF publicada não é
-a de 1980**, e a exceção está declarada aqui.
+Fernando de Noronha era Território Federal em 1980 (`sigla_uf = 'FN'`, 298 registros), e a malha
+municipal de 1980 traz o município com o código `2000107` (prefixo 20), inexistente no sistema
+atual. Até `1.0.7-1980` as 298 linhas chegavam da Base dos Dados sem `id_municipio` — pela mesma
+causa dos 52 municípios do norte de Goiás (item 4.1), e ao contrário do que o plano da edição
+presumia — e a atribuição era feita pela sigla da UF; desde `1.1.0-1980` o censobr traz `2000107`, e
+a atribuição é feita pelo código, na mesma tabela de recodificação dos 52
+(`pipeline/norte_goias_1980.py`). O resultado publicado é o mesmo, **nos dois lados do fluxo**: como
+destino, todo registro de Fernando de Noronha recebe o código **`2605459`** (Fernando de Noronha/PE
+nos recortes de 2022) e a UF `26`; como origem, os códigos `2000107` (141 registros) e `2000008` —
+"UF 20 sem especificação de município", e o território só tinha um — recebem o mesmo tratamento,
+assim como o código 14 da tabela de UF de nascimento (670 registros). Com os 52 do norte de Goiás
+(UF `17`), são os **53 municípios da edição cuja UF publicada não é a de 1980**, pelo mesmo motivo:
+a comparabilidade das séries de UF.
 
 ### 6. Ocupação, escolaridade e deslocamento pendular
 
@@ -1233,10 +1294,13 @@ elas; nas demais UFs, cerca de 17%, uniformemente de 0 a 9 anos, o que denuncia 
 trabalho infantil). Com o piso de **10 anos** — o universo econômico do Censo 1980, e o mesmo
 verificado em 1991 — a taxa cai para **35,52%** da população, contra os ~35,5% da população
 ocupada de 1980 apurados pelo IBGE, variando entre 26,8% (Amapá) e 40,8% (São Paulo). É a regra
-adotada. (Todas as taxas desta seção são do **universo publicado**, já sem os registros do norte de
-Goiás do item 4; medidas antes da exclusão elas diferem na segunda casa decimal, e é essa a origem
-das pequenas diferenças frente aos números de `pipeline/sql/1980/MAPEAMENTO_02_classify.md`, que
-foram apurados no arquivo de entrada.)
+adotada. (As taxas desta seção foram medidas na versão `1.0.0-1980`, no universo publicado de
+então — sem os registros do norte de Goiás, item 4.2 — e na Base dos Dados; medidas antes da
+exclusão elas diferem na segunda casa decimal, e é essa a origem das pequenas diferenças frente aos
+números de `pipeline/sql/1980/MAPEAMENTO_02_classify.md`, que foram apurados no arquivo de entrada.
+Na versão atual (`1.1.0-1980`, território incluído, fonte censobr) a taxa de ocupação é **35,47%**
+da população, de 26,8% (Amapá) a 40,8% (São Paulo) — a mesma faixa, com diferença só na segunda
+casa; a regra de ocupação não muda, porque o universo de 10 anos ou mais já era o dela.)
 
 **Escolaridade.** 1980 não tem "anos de estudo" (a variável derivada que 2000 e 1991 têm). Tem o
 par "última série concluída" × "grau da última série concluída", e o `nivel_instr_4` é
@@ -1277,6 +1341,25 @@ correspondente é simplesmente "empregado". Publicar uma dimensão inventando es
 pior que não publicá-la. Tempo de deslocamento, frequência de retorno e meio de transporte não
 existem em 1980, como não existiam em 2000.
 
+**O universo do fluxo de estudo mudou em `1.1.0-1980`, e a mudança é uma correção.** Na Base dos
+Dados, o município de trabalho ou estudo (`v527`) vinha preenchido também para crianças pequenas —
+em São Paulo, 13.466 menores de 5 anos; em Goiás, 828 —, junto com outros campos que o IBGE não
+edita fora do universo do quesito (em São Paulo, 363.157 crianças de menos de 5 anos com "última
+série concluída" maior que zero e 267.607 com "trabalhou nos últimos 12 meses"). Das crianças de
+menos de 10 anos com `v527` preenchido, **menos da metade** frequentava escola segundo o próprio
+registro (41% em Goiás, 38% em São Paulo, 46% em Minas Gerais). O censobr, como a cópia DBF do
+IBGE, deixa `v527` nulo abaixo de 10 anos, que é o universo do quesito. O fluxo de estudo publicado
+passa de 764 pares e 272.565 pessoas (`1.0.7-1980`) para **575 pares e 160.855 pessoas**: a série
+anterior contava como deslocamento para estudo crianças cujos campos não tinham sido editados. O
+fluxo de trabalho praticamente não muda (2.599 → 2.596 pares; 2.660.250 → 2.659.195 pessoas),
+porque o universo de ocupados já era de 10 anos ou mais. **Consequência para a comparação**: nas
+outras edições com pendular, o fluxo de estudo cobre quem frequenta escola em qualquer idade; em
+1980, só quem tem 10 anos ou mais. Somado à precedência do trabalho, o fluxo de estudo de 1980 é um
+piso sobre um universo mais estreito — comparável com as outras edições em composição e direção,
+com o aviso de universo, e nunca em nível. (A proporção de registros com `v527` preenchido citada
+acima, 3,28%, foi medida na Base dos Dados; na fonte censobr, que já aplica o universo de 10 anos
+ou mais, ela é de **2,99%** dos 29.378.753 registros.)
+
 Uma ressalva de comparação: a classe "ocupações elementares" **existe** em 1980 (serviço doméstico,
 porteiros, serventes), ao contrário de 2000, mas é **mais estreita** que o grande grupo equivalente
 das classificações de 2010 e 2022, porque os trabalhadores braçais da indústria, da construção e da
@@ -1285,18 +1368,24 @@ edições.
 
 ### 7. A edição 1980 não publica renda
 
-As variáveis de rendimento — os valores em cruzeiros e as classes em salários mínimos calculadas
-pelo IBGE — estão preenchidas na partição do **Ceará** e em **0,0% das outras 26 UFs**. Não é efeito
-da extração: a mesma consulta roda nas 27 partições. A tabela de origem não traz renda fora do
-Ceará.
-
-Por isso **todas as colunas de renda da edição 1980 são nulas**: renda pessoal do trabalho, renda
-domiciliar per capita, e as duas dimensões de classe de renda. Publicar a renda apenas do Ceará
+Até `1.0.7-1980`, as variáveis de rendimento — os valores em cruzeiros e as classes em salários
+mínimos calculadas pelo IBGE — estavam preenchidas na partição do **Ceará** da Base dos Dados e em
+**0,0% das outras 26 UFs**. Não era efeito da extração: a mesma consulta rodava nas 27 partições, e
+a tabela de origem simplesmente não trazia renda fora do Ceará. Publicar a renda apenas do Ceará
 produziria um mapa em que 26 unidades da federação aparecem como "sem informação" e um recorte
-nacional construído sobre 4,5% da amostra — pior do que declarar a ausência. **O filtro de renda
-não existe em 1980.** Isso é uma perda maior do que o plano da edição previa: ele já contava com a
-ausência da renda *per capita* (que depende de uma chave de domicílio inexistente, item 8), mas não
-com a da renda individual.
+nacional construído sobre 4,5% da amostra — pior do que declarar a ausência. Por isso **todas as
+colunas de renda da edição 1980 são nulas**: renda pessoal do trabalho, renda domiciliar per capita,
+e as duas dimensões de classe de renda. Isso foi uma perda maior do que o plano da edição previa:
+ele já contava com a ausência da renda *per capita* (que depende de uma chave de domicílio
+inexistente, item 8), mas não com a da renda individual.
+
+**Desde `1.1.0-1980` a fonte tem a renda em todas as UFs — e a edição continua sem publicá-la.** O
+censobr traz os rendimentos nas 27 partições. A versão `1.1.0-1980` é uma troca de fonte e de
+território, validada por identidade com a anterior; abrir uma dimensão nova é outra decisão, com
+passos próprios que ainda não foram feitos: medir a cobertura da renda por UF e por universo,
+reconciliar o salário mínimo fora do Ceará, validar contra as tabulações do IBGE e verificar o
+filtro e a dimensão pendular de renda sob os limiares de revelação de 1980. Fica registrada como
+trabalho futuro. **O filtro de renda não existe em 1980.**
 
 Mesmo sem publicá-la, o **salário mínimo de referência foi reconciliado**, pela mesma técnica usada
 em 1991: cruzando, no Ceará, os valores em cruzeiros com as treze faixas em salários mínimos que o
@@ -1305,14 +1394,19 @@ de 1980, o valor de novembro de 1979 e o de novembro de 1980 reproduzem 2 de 13 
 cravam o valor ao cruzeiro. Ao contrário de 1991 — onde o salário mínimo implícito nas faixas do
 questionário **não** era o mínimo legal vigente —, aqui o valor reconciliado coincide com o mínimo
 legal da região I de maio de 1980, o que é uma confirmação externa adicional. O valor fica
-declarado nos metadados para documentar a unidade monetária da época e para uma eventual
-reextração que traga a renda das demais unidades da federação.
+declarado nos metadados para documentar a unidade monetária da época e para a publicação futura da
+renda, que com o censobr passou a ser possível; antes dela, a reconciliação deve ser repetida fora
+do Ceará.
 
 ### 8. Sem chave de domicílio: sem erro amostral, e com um piso de revelação diferente
 
-A tabela da Base dos Dados **não publica chave de domicílio**: o campo de ordem vai de 1 a 29 e é o
-número da pessoa dentro do domicílio, não um identificador; e a extração veio do BigQuery, que não
-garante ordem física, de modo que os domicílios não são reconstruíveis como foram em 1991. Essa
+Nenhuma das duas fontes da edição, no esquema que o pipeline lê, traz **chave de domicílio**. Na
+Base dos Dados o campo de ordem vai de 1 a 29 e é o número da pessoa dentro do domicílio, não um
+identificador, e a extração veio do BigQuery, que não garante ordem física; no censobr esse campo
+nem existe. Os domicílios, portanto, não são reconstruíveis como foram em 1991. (O censobr tem
+variáveis de domicílio e de controle que o esquema da edição não lê; se alguma combinação delas
+serve de chave de domicílio é uma possibilidade **não investigada** —
+`pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md` §2.1.) Essa
 única ausência tem duas consequências independentes, e vale separá-las: uma na precisão (8.1) e
 outra no controle de revelação (8.2). A segunda não estava prevista no plano da edição e foi
 decidida em F9.5.
@@ -1369,7 +1463,10 @@ que têm a chave, e não escolhidos por analogia:
 O efeito conjunto é o que importa e é visível no arquivo publicado: os 18.142 pares com `n` entre 20
 e 49 publicam **apenas o total arredondado**, e só os 11.295 com `n ≥ 50` publicam composição por
 status, escolaridade e idade/sexo. O caso residual de risco — um par sustentado por uma família
-grande — fica confinado à faixa que publica só um número redondo.
+grande — fica confinado à faixa que publica só um número redondo. (Os números desta subseção são
+os da calibração, na versão `1.0.0-1980`. Na `1.1.0-1980`, com os 52 municípios do Tocantins e a
+fonte censobr, a edição publica 29.840 pares, cobrindo 70,5% do volume migratório estimado: 18.407
+só com o total arredondado e 11.433 com detalhe.)
 
 Três limites desta decisão, ditos explicitamente:
 
@@ -1393,7 +1490,7 @@ publicar abaixo do limiar. Os limiares efetivos vão para `meta.json` e para o r
 revelação da edição, com `min_domicilios` nulo em vez de `3`, para que a página de metodologia do
 site não prometa um piso que não foi aplicado.
 
-### 9. Os recortes de 2022 sobre a malha de 1980: 21 regiões imediatas sem nenhum município
+### 9. Os recortes de 2022 sobre a malha de 1980: 10 regiões imediatas sem nenhum município
 
 A convenção do atlas — aplicar a divisão territorial de 2022 (RGI, RGInt, RM) retroativamente por
 código de município, sem áreas mínimas comparáveis — foi mantida em 1980, pelo mesmo motivo das
@@ -1404,43 +1501,43 @@ indistinguível, no mapa, de um recorte sem fluxo:
 
 | Nível | 2022 / 2010 / 2000 / 1991 | 1980 |
 |---|---|---|
-| Unidades com dado publicado no nível municipal | 5.570 / 5.565 / 5.507 / 4.491 | **3.940** (3.939 municípios + 1 unidade agregada) |
-| Códigos de `labels.RECORTES` sem par na edição | 3 / 8 / 66 / 1.082 | **1.634** |
-| Regiões imediatas (RGI) povoadas | 510 em todas | **489** (21 vazias) |
-| Regiões intermediárias (RGInt) povoadas | 133 em todas | **130** (3 vazias) |
-| Regiões metropolitanas com ao menos um município | 81 em todas | **78** (3 ausentes) |
+| Unidades com dado publicado no nível municipal | 5.570 / 5.565 / 5.507 / 4.491 | **3.991** |
+| Códigos de `labels.RECORTES` sem par na edição | 3 / 8 / 66 / 1.082 | **1.582** |
+| Regiões imediatas (RGI) povoadas | 510 em todas | **500** (10 vazias) |
+| Regiões intermediárias (RGInt) povoadas | 133 em todas | **133** |
+| Regiões metropolitanas com ao menos um município | 81 em todas | **80** (1 ausente) |
 | RMs com um único município | 0 / 0 / 0 / 3 | **4** |
 
 A segunda linha está medida do mesmo jeito nas cinco colunas — códigos do dicionário de 2022 que
 não aparecem na edição —, e por isso a coluna de 2022 não é zero: **três** códigos de
 `labels.RECORTES` não têm dado em edição nenhuma (as duas lagoas do Rio Grande do Sul, que não são
 municípios, e Boa Esperança do Norte/MT, criado mas não instalado). Descontados esses três, são 5
-municípios de 2022 ausentes em 2010, 63 em 2000, 1.079 em 1991 e **1.631 em 1980**. Não confundir
+municípios de 2022 ausentes em 2010, 63 em 2000, 1.079 em 1991 e **1.579 em 1980**. Não confundir
 com os "quatro" e "seis" citados em `docs/EDICOES.md` para 2010 e 2000: aqueles são municípios que
 o recorte **metropolitano** perde, uma medida diferente e muito menor.
 
-As 3 RGInts vazias (Palmas, Araguaína e Gurupi) e 11 das 21 RGIs vazias são o território do atual
-Tocantins, que a edição cobre como **uma unidade agregada** e não distribui por RGI/RGInt (item 4)
-— não são efeito do anacronismo, são a consequência declarada daquela decisão: a unidade cobre as
-onze RGIs e não é de nenhuma, então nenhuma delas recebe dado. As 3 RMs ausentes têm a mesma
-causa e a mesma leitura. As outras 10 RGIs vazias (Jaru, Pacaraima, Rorainópolis, Parauapebas,
-Xinguara, Laranjal do Jari, Porto Grande, Açailândia, Sorriso e Peixoto de Azevedo–Guarantã do
-Norte) são áreas de ocupação recente — frente agrícola, garimpo e projetos de colonização —, e
-nelas **nenhum município membro existia como unidade em 1980**: a região existe no recorte de 2022
-e não tem antecessor nenhum no censo. Das três RMs ausentes, duas são tocantinenses (Palmas e
-Gurupi) e a terceira é a RM do Sul do Estado (RR), também sem nenhum município na malha de 1980.
+As 10 RGIs vazias (Jaru, Pacaraima, Rorainópolis, Parauapebas, Xinguara, Laranjal do Jari, Porto
+Grande, Açailândia, Sorriso e Peixoto de Azevedo–Guarantã do Norte) são áreas de ocupação recente —
+frente agrícola, garimpo e projetos de colonização —, e nelas **nenhum município membro existia como
+unidade em 1980**: a região existe no recorte de 2022 e não tem antecessor nenhum no censo. A RM
+ausente é a do Sul do Estado (RR), pelo mesmo motivo. Até `1.0.7-1980` eram 21 RGIs, 3 RGInts e 3
+RMs vazias: as 11 RGIs, as 3 RGInts (Palmas, Araguaína e Gurupi) e as RMs de Palmas e Gurupi que o
+território do atual Tocantins cobre ficavam sem município porque o território era publicado como
+uma unidade agregada, sem recorte (item 4.2). Desde `1.1.0-1980` elas têm os seus municípios de
+1980.
 
 Quatro RMs ficam com **um único município** em 1980 — Capital (RR), Central (RR), Porto Velho (RO)
 e Santarém (PA) —, contra três em 1991. Nessas quatro, todo indicador intrametropolitano (fluxo
 núcleo↔periferia, pendularidade intra-RM) é **zero por construção, não por medida**, e deve ser
-lido como ausência de recorte e não como ausência de movimento. Nenhuma RM de 1980 precisou do
-fallback de núcleo da tabela de decisões de `docs/EDICOES.md`: as 78 presentes têm o núcleo de
-`pipeline/rm_nucleo.csv` na malha do censo.
+lido como ausência de recorte e não como ausência de movimento. Das 80 RMs presentes, 70 têm menos
+municípios que em 2022. **Uma** precisa do fallback de núcleo da tabela de decisões de
+`docs/EDICOES.md`: a RM de Palmas, cujo núcleo no `pipeline/rm_nucleo.csv` (Palmas) não existe em
+1980 — o núcleo efetivo é o membro mais populoso presente, Porto Nacional. As outras 79 têm o núcleo
+do CSV na malha do censo.
 
-No sentido inverso não há perda: os 3.939 municípios de 1980 têm **todos** par em `RECORTES`, e
-nenhum *município* publicado fica sem RGI, RGInt ou UF — a única unidade sem RGI/RGInt é a unidade
-agregada do item 4, por decisão e não por lacuna. A malha geográfica acompanha exatamente esses
-números (3.940 polígonos no nível municipal, 489 RGIs, 130 RGInts, 27 UFs em
+No sentido inverso não há perda: os 3.991 municípios de 1980 têm **todos** par em `RECORTES`, e
+nenhum município publicado fica sem RGI, RGInt ou UF. A malha geográfica acompanha exatamente esses
+números (3.991 polígonos no nível municipal, 500 RGIs, 133 RGInts, 27 UFs em
 `data/processed/1980/geo/`), de modo que o mapa não desenha unidade sem dado nem dado sem unidade.
 
 ### 10. Resumo de comparabilidade
@@ -1453,14 +1550,15 @@ números (3.940 polígonos no nível municipal, 489 RGIs, 130 RGInts, 27 UFs em
 | Status migratório | vocabulário reduzido (2010/2000/1991) | idêntico | sim |
 | Retorno ao município natal | medido (1991) ou inferido (2000/2010) | **medido** | sim |
 | Escolaridade | anos de estudo ou nível de instrução | reconstruída de série × grau | com ressalva |
-| Renda pessoal e domiciliar | publicadas | **ausentes** | **não** |
-| Fluxos pendulares | sim (exceto 1991) | sim, com o fluxo de estudo como piso (regra de 2000) | sim |
+| Renda pessoal e domiciliar | publicadas | **não publicadas** (na fonte até `1.0.7-1980`, só no Ceará) | **não** |
+| Fluxos pendulares de trabalho | sim (exceto 1991) | sim | sim |
+| Fluxos pendulares de estudo | sim (exceto 1991); piso em 2000; estudantes de qualquer idade | sim, piso (regra de 2000) e **só 10 anos ou mais** (universo do quesito, desde `1.1.0-1980`) | **com ressalva** — composição e direção, não nível |
 | Dimensões do módulo pendular | 6 (2000) / 7 (2010) | **4** (sem posição na ocupação, sem renda) | parcial |
 | Tempo, frequência e modo do deslocamento | 2010 e 2022 | ausentes (como em 2000) | não |
 | Erro amostral (`se`/`cv`) | publicado (aproximado em 1991) | **`sem_estimativa`** | **não** |
 | Limiar de revelação R1 | `n ≥ 5` e `≥ 3` domicílios | **`n ≥ 20`** (sem chave de domicílio) | sim — calibrado para a mesma cobertura de volume (70,7%, faixa das outras: 67,6%–71,6%) |
 | Limiar de detalhe R2 | `n ≥ 20` | **`n ≥ 50`** | sim — 11.295 pares com detalhe, faixa das outras: 10.814–14.095 |
-| Cobertura territorial | Brasil inteiro | Brasil inteiro (100% da população recenseada), mas com o território do atual Tocantins publicado como **uma unidade agregada** de 52 municípios, sem detalhe interno e sem RGI/RGInt: 3.939 municípios + 1 unidade | com nota |
+| Cobertura territorial | Brasil inteiro | Brasil inteiro (100% da população recenseada), 3.991 municípios; os 52 do atual Tocantins publicados com o código de 2022 e a UF de hoje (`'17'`), como Fernando de Noronha sob `'26'` | com nota |
 
 ## Comparação entre censos (F12)
 
@@ -1495,7 +1593,7 @@ ela não constrói AMC, não toca o pipeline e não recarimba nenhum dos cinco g
 `data/processed[/<edição>]/`, que já passou pelo controle de revelação.
 
 A consequência é dupla e conhecida. No nível municipal, **1.082 códigos de 2022 não existem em
-1991 e 1.634 não existem em 1980** (contra 8 em 2010 e 66 em 2000); a série desses municípios
+1991 e 1.582 não existem em 1980** (contra 8 em 2010 e 66 em 2000); a série desses municípios
 **trunca** nas edições anteriores à criação, e a célula vazia nomeia o município de origem do
 desmembramento, com um atalho para a série dele. As duas séries nunca são somadas nem emendadas —
 emendá-las produziria um degrau de fronteira apresentado como evento migratório. Nos níveis
@@ -1527,8 +1625,9 @@ fronteira agrícola, que é o objeto migratório mais interessante do período. 
 C.J.C. (2011), "Polígonos de Voronoi como alternativa aos problemas das áreas mínimas comparáveis:
 uma aplicação à Região Norte do Brasil", *Revista Brasileira de Estudos de População* 28(1):133–151,
 mostram que no Norte a AMC agrega municípios inteiros em blocos do tamanho de estados e propõem uma
-alternativa geométrica — crítica que atinge em cheio o caso do atlas, já que é exatamente ali que
-está `NORTEGO`, a unidade agregada de 52 municípios que representa o atual Tocantins em 1980.
+alternativa geométrica — crítica que atingia em cheio o atlas até a versão `1.0.7-1980`, quando o
+atual Tocantins era publicado em 1980 como uma unidade agregada de 52 municípios (`NORTEGO`); desde
+`1.1.0-1980` os 52 são municípios comuns (seção de 1980, item 4).
 
 A decisão foi **assumir o viés e sinalizá-lo**, não corrigi-lo, por três razões. (a) Uma AMC mudaria
 a unidade de análise das **cinco** edições ao mesmo tempo, inclusive de 2022, que é a edição que o
@@ -1554,9 +1653,9 @@ edição publica:
 - **`cobertura_pop` — cobertura territorial.** Fração da população de 2022 da unidade cujo
   território está representado, naquela edição, por alguma unidade **da mesma unidade de 2022**: o
   próprio município, quando existe no censo; senão o município-mãe, quando ele pertence à mesma
-  unidade; em 1980, a unidade agregada `NORTEGO` cobre o território dos 52 municípios **no nível de
-  UF** (ela tem UF `'17'`) e **não cobre** em RGI, RGInt e RM, onde ela é `NULL` por decisão
-  declarada. É a cobertura que vale para tudo que **atravessa a fronteira** da unidade: imigração,
+  unidade. (Até `1.0.7-1980` havia uma exceção: a unidade agregada `NORTEGO` cobria o território
+  dos 52 municípios do atual Tocantins só no nível de UF, e não em RGI, RGInt e RM.) É a cobertura
+  que vale para tudo que **atravessa a fronteira** da unidade: imigração,
   emigração, saldo, taxas, IEM, distância, conectividade, Gini.
 - **`cobertura_cod` — cobertura de observação direta.** Fração da população de 2022 em municípios
   que existem **individualmente** na edição. É a cobertura que vale para tudo que depende da
@@ -1615,13 +1714,22 @@ Cortada = célula sem número, isto é, `insuficiente` (cobertura abaixo de 0,90
 | 2010 | 0 | 0 | 0 | 0 |
 | 2000 | 0 | 0 | 0 | 0 |
 | 1991 | 18 | 2 | 0 | 1 |
-| 1980 | 53 (32 + **21 vazias**) | 9 (6 + **3 vazias**) | 1 (Tocantins, ver abaixo) | 3 (**as 3 vazias**) |
+| 1980 (`1.1.0`) | **46** (36 + as **10 vazias**) | **6** (nenhuma vazia) | **0** | **2** (1 + **1 vazia**) |
+| 1980 (`1.0.2`–`1.0.7`) | 53 (32 + 21 vazias) | 9 (6 + 3 vazias) | 0 | 3 (as 3 vazias) |
 
-Com cobertura `parcial` — número publicado, com o selo de cobertura ao lado — ficam, em 1980, 356
-RGIs, 121 RGInts, 68 RMs e 25 UFs; em 1991, 326, 113, 64 e 25; em 2000, 44, 25, 6 e 12; em 2010,
-5, 4, 4 e 3. Em 2022, por definição, tudo é `plena`. Independentemente do critério territorial,
-as **4 RMs unitárias de 1980 e as 3 de 1991** têm os indicadores intrametropolitanos suprimidos, e
-o critério de `cobertura_cod` corta esses mesmos indicadores em 27 RMs em 1980 e 14 em 1991.
+A linha de 1980 da versão `1.1.0` vem da série reconstruída com a edição nova (as 11 RGIs do
+Tocantins deixam de ser vazias e 4 delas ficam `insuficiente`; as 3 RGInts e as RMs de Palmas e
+Gurupi passam a ter número); a de `1.0.2` a `1.0.7` fica como registro (e corrige a versão anterior
+desta tabela, que dava 1 UF cortada em 1980: a UF 17 era publicada, com a nota da unidade
+agregada). Com cobertura `parcial` — número publicado, com o selo de cobertura ao lado — ficam, em
+1991, 326 RGIs, 113 RGInts, 64 RMs e 25 UFs; em 2000, 44, 25, 6 e 12; em 2010, 5, 4, 4 e 3; em
+1980, até `1.0.7-1980`, 356, 121, 68 e 26 (com 1 UF `plena`), e na `1.1.0-1980`, **363, 124, 69 e
+26** (com 1 UF `plena`). Em 2022, por definição, tudo é `plena`.
+Independentemente do critério territorial, as **4 RMs unitárias de 1980 e as 3 de 1991** têm os
+indicadores intrametropolitanos suprimidos, e o critério de `cobertura_cod` corta esses mesmos
+indicadores em 14 RMs em 1991 e em 27 em 1980 — o mesmo número até `1.0.7-1980` e na `1.1.0-1980`,
+porque as RMs de Palmas e Gurupi já contavam entre as 27 (com `cobertura_cod = 0`, vazias) e
+continuam abaixo de 0,90 (0,34 e 0,71) com os 52 municípios publicados.
 
 As alternativas foram medidas: a 0,95 o corte subiria para 96 RGIs em 1991 e 141 em 1980 (19% e 28%
 do nível) para eliminar uma distorção mediana de 0,039 de IEM — que é um terço do sinal e já vem com
@@ -1629,20 +1737,31 @@ selo; a 0,80 o corte cairia para 17 e 45, mas passaria a publicar células com d
 20% na taxa, da ordem do próprio sinal. **0,90 é o ponto em que o ruído territorial deixa de
 competir com a variação que a série existe para mostrar.**
 
-O caso do Tocantins em 1980 é o teste da definição: no **nível de UF**, `NORTEGO` cobre o
-território dos 52 municípios e a cobertura territorial da UF `'17'` é praticamente plena, com
-`cobertura_cod = 0` — a UF publica volume e IEM (com a nota `unidade_agregada_1980`) e **não**
-publica nada que dependa da composição interna. Nos níveis de RGI, RGInt e RM, `NORTEGO` não
-participa, e as 11 RGIs, 3 RGInts e 3 RMs correspondentes saem como `sem_cobertura` — que é
-diferente de "sem fluxo" e é assim que a interface as desenha.
+O caso do Tocantins em 1980 mostra as duas coberturas funcionando. Os 52 municípios de 1980 são
+observados diretamente e os 87 criados depois recebem a mãe por sobreposição de área, então a UF
+`'17'` tem cobertura territorial praticamente plena e `cobertura_cod` igual à fração da população de
+2022 que mora nos 52 (**0,555** na série construída; `cobertura_pop` = 1,0): publica volume e IEM
+com o selo `parcial` e suprime o que depende da partição interna. Nas RGIs do Tocantins a cobertura
+depende de quantos municípios foram criados depois de 1980 dentro de cada uma, e o resultado foi
+mais estrito do que se esperava: só **Miracema do Tocantins** passa do limiar de `cobertura_cod`
+(0,94; `parcial` porque alguns pares internos ainda faltam); Araguaína (0,75), Dianópolis (0,78),
+Gurupi (0,78), Tocantinópolis (0,58), Araguatins (0,47) e Porto Nacional (0,82) ficam `parcial`
+(`cobertura_pop` ≥ 0,96); Colinas (0,65), Guaraí (0,68), Paraíso (0,60) e Palmas (0,02) ficam
+`insuficiente`. As 3 RGInts são `parcial` (0,35, 0,66 e 0,78); a RM de Palmas é `parcial` (0,34) e a
+de Gurupi `insuficiente` (0,71): nas duas os indicadores intrametropolitanos são cortados pelo
+critério de `cobertura_cod`. Até `1.0.7-1980` o caso era outro: a
+unidade agregada `NORTEGO` cobria o território só no nível de UF (com `cobertura_cod = 0` e a nota
+`unidade_agregada_1980`), e as 11 RGIs, 3 RGInts e 2 RMs do Tocantins saíam como `sem_cobertura` —
+que é diferente de "sem fluxo" e é assim que a interface desenha as 10 RGIs e a RM que continuam
+vazias.
 
 **O limiar da RM deve ser mais estrito?** Sim, e não por um número diferente: por medir outra
 coisa. Os indicadores metropolitanos que interessam — fluxo núcleo↔periferia, migração intra-RM,
 pendularidade interna — não dependem do total populacional da região, e sim de a **partição
 interna** existir. Por isso a RM (como qualquer indicador marcado `composicao_interna`) é avaliada
 pelo **mesmo limiar de 0,90 aplicado a `cobertura_cod`**, que é bem mais exigente na prática: em
-1991, 14 das 81 RMs ficam abaixo dele, e em 1980, 27 das 81 — contra 2 e 4 pelo critério
-territorial. Somam-se a isso duas condições incondicionais, que valem **independentemente de
+1991, 14 das 81 RMs ficam abaixo dele, e em 1980, 27 das 81 (tanto até `1.0.7-1980` quanto na
+`1.1.0-1980`) — contra 1 e 2 pelo critério territorial (3 até `1.0.7-1980`). Somam-se a isso duas condições incondicionais, que valem **independentemente de
 qualquer limiar**:
 
 1. **RM unitária.** Uma região reduzida a um único município na edição tem `rm_unitaria = true` e
@@ -1654,7 +1773,8 @@ qualquer limiar**:
    interior.
 2. **Núcleo divergente.** Quando o núcleo de `pipeline/rm_nucleo.csv` não existe na malha da edição
    e o atlas usa o fallback do município mais populoso presente (caso da RM do Sul do Estado/RR em
-   1991, Rorainópolis → São João da Baliza), a decomposição núcleo × periferia daquela edição **não
+   1991, Rorainópolis → São João da Baliza, e, desde `1.1.0-1980`, da RM de Palmas em 1980, Palmas →
+   Porto Nacional), a decomposição núcleo × periferia daquela edição **não
    é a mesma medida** das demais e sai como `insuficiente`, com a nota `nucleo_divergente`. O total
    da RM continua publicado.
 
@@ -1707,7 +1827,7 @@ avaliar o branch decidir.
 
 As medidas do sistema (CMI, SMI, MEI agregado, ANMR, β de Fielding) são calculadas sobre as
 unidades **existentes em cada edição**, não sobre as de 2022: 5.570 municípios em 2022, 5.565 em
-2010, 5.507 em 2000, 4.491 em 1991 e 3.940 em 1980. Calcular sobre as de 2022 seria impossível sem
+2010, 5.507 em 2000, 4.491 em 1991 e 3.991 em 1980. Calcular sobre as de 2022 seria impossível sem
 AMC; calcular sobre as de cada edição e calar o fato seria apresentar como queda de intensidade o
 que é, em parte, uma malha mais grossa.
 
@@ -1716,21 +1836,49 @@ As três decisões, nessa ordem:
 1. **Publicar `n_unidades` ao lado de cada ponto**, sempre, em `sistema_serie.parquet`.
 2. **Rebaixar a célula** para `comparavel_com_ressalva`, nota `n_unidades_variavel`, sempre que
    `n_unidades` diferir do de 2022 naquele nível. No nível municipal isso atinge as quatro edições
-   antigas; nos níveis agregados, apenas 1980 (489 RGIs, 130 RGInts e 78 RMs, contra 510/133/81).
+   antigas; nos níveis agregados, apenas as RGIs de 1980 (500, contra 510). Até `1.0.7-1980` atingia
+   também as RGInts de 1980 (130, contra 133); desde `1.1.0-1980` elas são as mesmas 133 de 2022.
 3. **Quantificar o artefato com a inclinação medida na própria figura de Courgeau**: a série publica,
    ao lado da CMI municipal de cada edição, o deslocamento esperado
    `Δ = β_courgeau(edição) × [log₁₀(n_2022) − log₁₀(n_edição)]` — que em 1980 corresponde a
-   `log₁₀(5570/3940) = 0,150` de argumento. Esse valor é **anotação**, nunca substitui a CMI medida
+   `log₁₀(5570/3991) = 0,145` de argumento. Esse valor é **anotação**, nunca substitui a CMI medida
    e nunca entra em nenhum cálculo derivado; ele existe para que o leitor saiba de que tamanho é a
    parcela de recorte antes de ler a parcela de comportamento.
 
-O mesmo cuidado vale para as duas medidas de estrutura. O **Duncan D** entre duas edições e a
-**decomposição log-linear** são calculados sobre a **matriz comum** às duas edições comparadas —
-pares cuja origem e cujo destino existem nas duas —, com as duas matrizes renormalizadas nesse
-conjunto. Sem isso, os 1.634 municípios que aparecem entre 1980 e 2022 fariam o índice medir criação
-de município como se fosse mudança de padrão migratório, que é exatamente o erro que a seção
-inteira existe para evitar. `build_series.py` publica `n_pares_comuns` e a fração do volume coberta
-pela matriz comum ao lado de cada valor (notas `duncan_matriz_comum` e `loglinear_matriz_comum`).
+As duas medidas de estrutura **não** têm hoje um cuidado equivalente, e a versão anterior deste
+parágrafo dizia que tinham. **Correção registrada na auditoria de 30/09/2026**, descrevendo o que o
+código faz:
+
+- O **Duncan D** (`duncan_d_ant` em `sistema_serie.parquet`) compara cada edição com a anterior no
+  tempo, no mesmo nível, sobre a **união** dos pares publicados das duas (`pipeline/medidas.py`,
+  `duncan_d`; chamado em `pipeline/build_series.py`, `build_sistema_e_loglinear`): um par ausente
+  numa das matrizes entra como zero nela, e cada matriz é normalizada pelo seu próprio total
+  publicado. Não há restrição à matriz comum nem renormalização nela, e `sistema_serie` não publica
+  `n_pares_comuns` nem a fração do volume coberta. Consequência: o D mistura três coisas — a
+  mudança de padrão migratório que ele pretende medir; a **mudança de malha**, porque os pares são
+  identificados por código de 2022 e um município criado entre as duas edições só tem pares na mais
+  nova (no nível municipal, entre 1980 e 1991, são cerca de 500 municípios: 1.579 − 1.079); e a
+  **mudança de supressão**, porque um par publicado numa edição e suprimido na outra conta como
+  realocação — e 1980 publica com `n ≥ 20`, contra `n ≥ 5` nas demais. Os dois últimos componentes
+  só inflam o D, e mais no nível municipal e nas comparações que envolvem 1980. Leitura correta até
+  a correção do cálculo: o D publicado é um **limite superior** da mudança de estrutura; nos níveis
+  agregados, onde a malha é constante, o componente de malha some e resta o de supressão.
+- A **decomposição log-linear** (`loglinear_serie.parquet`) não compara edições: é ajustada **em
+  cada edição, sobre a matriz publicada daquela edição** (`decomposicao_loglinear`), com as
+  unidades que ela tem. Os parâmetros `O`, `D` e `OD` de duas edições são estimados sobre conjuntos
+  de unidades e de pares diferentes, e a comparação de um mesmo parâmetro entre edições herda essa
+  diferença.
+
+**Pendência (decisão de cálculo, não tomada).** A alternativa é a que este parágrafo descrevia antes:
+calcular o D, e ajustar a decomposição quando ela for usada para comparar, sobre a **matriz comum**
+a cada par de edições — pares cuja origem e cujo destino existem nas duas, de preferência restritos
+também aos pares acima do limiar mais alto das duas (`n_faixa` a partir de 20, que é publicado),
+para neutralizar a diferença de supressão —, com as duas matrizes renormalizadas nesse conjunto e
+`n_pares_comuns` e a fração do volume coberta publicados ao lado de cada valor. Exige mudar
+`pipeline/medidas.py` e `pipeline/build_series.py`, rodar de novo `pipeline/tests/test_series.py` e
+rever os gráficos do Bloco 2. Até lá, as notas `duncan_matriz_comum`, `duncan_matriz_comum_1980`,
+`loglinear_matriz_comum` e `loglinear_matriz_comum_1980` de `pipeline/comparabilidade_regras.py`,
+que descrevem a matriz comum como se ela existisse, precisam passar a dizer o que o cálculo faz.
 
 ### 6. Harmonização dos vocabulários de perfil
 
@@ -1832,8 +1980,16 @@ item 8.1 da seção de 1980) e **tempo, frequência e modo do deslocamento pendu
 `nao_comparavel` (`conectividade_limiar_1980`): a contagem de parceiros publicados depende do limiar
 de revelação, e 1980 é a única edição com limiar próprio (`n ≥ 20`), publicando 11,0% dos pares da
 amostra contra 16,2%–20,4% nas demais. Já a **concentração** (Gini) de 1980 é `comparavel_com_ressalva`, e não `nao_comparavel`, porque a cobertura de *volume* publicada é equivalente à das
-outras edições (70,7%, contra a faixa 67,6%–71,6%) — foi exatamente para isso que o limiar
-substituto foi calibrado (item 8.2 da seção de 1980).
+outras edições (70,7% na calibração e 70,5% na versão `1.1.0-1980`, contra a faixa 67,6%–71,6%) —
+foi exatamente para isso que o limiar substituto foi calibrado (item 8.2 da seção de 1980).
+
+Desde a `1.1.0-1980`, o **fluxo pendular de estudo** de 1980 cobre só estudantes de 10 anos ou mais
+(o universo do quesito, que a fonte atual aplica; item 6 da seção de 1980), enquanto nas outras
+edições com pendular cobre estudantes de qualquer idade. Além do piso (`estudo_piso`, comum a 2000 e
+1980), as medidas de estudo de 1980 pedem uma ressalva de universo: comparáveis em composição e
+direção, não em nível. A regra correspondente em `pipeline/comparabilidade_regras.py` (uma nota de
+universo para `pend_estudo_saida`/`pend_estudo_entrada` em 1980) ainda não existe — dependência
+para o `implementador`.
 
 ### 8. A tipologia de Baeninger sobre o IEM
 
@@ -1906,30 +2062,31 @@ Quatro invariantes, verificados nos testes da F12.4-t e F12.5-t:
 — **nunca microdados, nunca o pipeline** — e grava `data/processed/series/`, com `.gate_ok` próprio
 (`verify_gate.py --dir data/processed/series`) cuja `versao_dados` é a concatenação das cinco versões
 publicadas. Nenhum arquivo de edição é reescrito e nenhum dos cinco gates é recarimbado. Tamanho da
-série construída:
+série construída com a edição 1980 em `1.1.0-1980` (os números entre parênteses são os da
+construção anterior, com a `1.0.7-1980`):
 
 | tabela | linhas | conteúdo |
 |---|---:|---|
-| `unidades_serie.parquet` | 31.606 | Bloco 1 por `(nível, código, edição)`: 27.851 municipais, 2.550 de RGI, 665 de RGInt, 405 de RM e 135 de UF — 6.321 linhas por edição (6.322 em 1980, com `NORTEGO`). Cobertura: 27.539 `plena`, 1.201 `parcial`, 59 `insuficiente`, 2.806 `sem_cobertura` (das quais 2.778 são municípios que não existiam) |
-| `pares_serie.parquet` | 914.610 | fluxos por par e edição: 642.895 de migração, 156.615 de trabalho e 115.100 de estudo; por nível, 764.505 municipais, 117.740 de RGI, 28.935 de RGInt e 3.430 de UF |
-| `perfil_serie.parquet` | 1.667.956 | Bloco 4, com o vocabulário já harmonizado pelo item 6 |
+| `unidades_serie.parquet` | 31.605 (31.606) | Bloco 1 por `(nível, código, edição)`: 27.850 municipais, 2.550 de RGI, 665 de RGInt, 405 de RM e 135 de UF — 6.321 linhas por edição (6.322 em 1980 até `1.0.7-1980`, com `NORTEGO`). Cobertura: 27.591 `plena`, 1.213 `parcial`, 64 `insuficiente`, 2.737 `sem_cobertura` (das quais 2.726 são municípios que não existiam); antes, 27.539 / 1.201 / 59 / 2.806 |
+| `pares_serie.parquet` | 914.495 (914.610) | fluxos por par e edição: 642.860 de migração, 156.590 de trabalho e 115.045 de estudo; por nível, 764.215 municipais, 117.905 de RGI, 28.945 de RGInt e 3.430 de UF (o pendular de estudo de 1980 cobre só 10 anos ou mais, item 6) |
+| `perfil_serie.parquet` | 1.670.683 (1.667.956) | Bloco 4, com o vocabulário já harmonizado pelo item 6 |
 | `sistema_serie.parquet` | 20 | Bloco 2: uma linha por `(nível, edição)` nos quatro níveis com sistema fechado (município, RGI, RGInt, UF) × cinco edições |
-| `loglinear_serie.parquet` | 421.898 | parâmetros `O`, `D` e `OD` da decomposição, sobre a matriz comum a cada par de edições (item 5) |
+| `loglinear_serie.parquet` | 422.668 (421.898) | parâmetros `O`, `D` e `OD` da decomposição, ajustada sobre a matriz publicada de cada edição (item 5) |
 | `comparabilidade.json` | 1.115 células | a matriz do item 9, gerada por `pipeline/comparabilidade_regras.py` |
 
 Municípios de 2022 sem linha com número, por edição — é a medida direta do truncamento do item 1:
-**1.631** em 1980, **1.079** em 1991, **63** em 2000 e **5** em 2010, cada um com o município-mãe
-nomeado. (Esses valores vêm da genealogia, que compara contra a **malha** de cada censo; os
-1.634/1.082/66/8 citados nas seções das edições antigas comparam contra `labels.RECORTES`, uma
-tabela de rótulos. As duas medidas são próximas e não intercambiáveis.)
+**1.579** em 1980 (1.631 até `1.0.7-1980`), **1.079** em 1991, **63** em 2000 e **5** em 2010, cada um
+com o município-mãe nomeado. (Esses valores vêm da genealogia, que compara contra a **malha** de
+cada censo; os 1.582/1.082/66/8 citados nas seções das edições antigas comparam contra
+`labels.RECORTES`, uma tabela de rótulos. As duas medidas são próximas e não intercambiáveis.)
 
 Dois documentos de apoio, que esta seção não duplica:
 
 - **`docs/genealogia.md`** — a saída de `pipeline/build_genealogia.py`: ausências por edição,
-  municípios com mais de um território de origem (281 em 1980, 277 em 1991, 22 em 2000, 1 em 2010),
-  cobertura de cada RGI/RGInt/RM por edição, o tratamento de `NORTEGO` como território de origem dos
-  139 municípios do atual Tocantins em 1980, e a razão de nenhum caso ter precisado do casamento por
-  centroide. É o metadado que sustenta os itens 1 a 3 — e **não** é uma AMC: não entra em
+  municípios com mais de um território de origem (296 em 1980, 277 em 1991, 22 em 2000, 1 em 2010),
+  cobertura de cada RGI/RGInt/RM por edição, o Tocantins em 1980 (52 municípios que já existiam e 87
+  criados depois, com a mãe por sobreposição de área, sem caso especial desde `1.1.0-1980`), e a
+  razão de nenhum caso ter precisado do casamento por centroide. É o metadado que sustenta os itens 1 a 3 — e **não** é uma AMC: não entra em
   `municipios_ref` nem no SQL do pipeline. O histórico completo da decisão AMC-vs-código, descartada
   três vezes, está no aviso 1 de `docs/EDICOES.md`.
 - **`docs/design_serie_censos.md`** — o desenho da interface (F12.4-d). Três pontos dele são
@@ -1952,13 +2109,15 @@ Dois documentos de apoio, que esta seção não duplica:
 - Na edição 2000, a dimensão ocupacional não é comparável em nível com as de 2010 e 2022: a CBO-Domiciliar 2000 não tem o grande grupo de "ocupações elementares" da ISCO-08, e a massa correspondente reaparece distribuída entre serviços/vendedores, agropecuária e indústria/construção/operadores. Ver o item 9 da mesma seção.
 - Na edição 1991, a precisão declarada é **aproximada e conservadora**: o Censo 1991 não tem área de ponderação, e o estrato do estimador de variância é um substituto (município × situação urbano/rural), mais heterogêneo que a área real. Estratificando os fluxos por tamanho de amostra, o coeficiente de variação mediano de 1991 fica 5% a 20% acima do de 2000 em pares de mesmo `n` — dentro da tendência já observada entre as edições, mas o suficiente para que `se` e `cv` de 1991 não sejam comparáveis ponto a ponto com os das edições que têm área de ponderação. Ver o item 9 e as validações da seção "Edição Censo 1991 e comparabilidade".
 - Na edição 1991, o anacronismo territorial é bem mais acentuado que nas edições recentes: **1.082 códigos municipais de 2022 não existem na malha de 1991** (contra 6 em 2000 e 4 em 2010), e o atlas mantém a convenção de aplicar os recortes de 2022 por código, sem áreas mínimas comparáveis. Regiões imediatas e intermediárias continuam todas povoadas, mas **66 das 81 regiões metropolitanas aparecem em 1991 com menos municípios que em 2022** e **três delas ficam com um único município** (Porto Velho, Santarém e Central), o que zera por construção — não por medida — todos os indicadores intrametropolitanos dessas três. Ver os itens 10 e 11 da mesma seção.
+- Na edição 1980, a fonte é **secundária**: o Parquet do censobr/IPEA v1.0.0 (até a versão `1.0.7-1980`, a Base dos Dados), porque as cópias distribuídas pelo IBGE não trazem o município de residência anterior; validado célula a célula contra a Base dos Dados e, no que as duas têm em comum, contra a cópia DBF do IBGE. Ver os itens 1 e 4.3 da seção "Edição Censo 1980 e comparabilidade".
 - Na edição 1980, a migração publicada é um **proxy** (última etapa + tempo de residência), não migração de data fixa: calibrado contra o Censo 1991, ele capta 100% dos migrantes verdadeiros, mas infla o volume em ~7% (migração de ida-e-volta), atenua os saldos líquidos em 6% a 9%, subestima a migração interestadual em cerca de 2 pontos percentuais e acerta a origem municipal de 89% dos migrantes (a UF de origem, de 96%). Níveis não são comparáveis com as edições de data fixa; composição, direção e hierarquia dos fluxos são. Ver os itens 1 e 2 da seção "Edição Censo 1980 e comparabilidade".
-- Na edição 1980, **não há precisão declarada**: a fonte não publica chave de domicílio e os domicílios não são reconstruíveis, então `se` e `cv` são nulos e `precisao` é `sem_estimativa` em todas as tabelas. Ver o item 8.1 da mesma seção.
+- Na edição 1980, **não há precisão declarada**: a fonte, no esquema que a edição lê, não traz chave de domicílio e os domicílios não são reconstruíveis, então `se` e `cv` são nulos e `precisao` é `sem_estimativa` em todas as tabelas. Ver o item 8.1 da mesma seção.
 - Na edição 1980, **os limiares de revelação R1 e R2 são diferentes dos das outras edições** — e é a única regra do atlas que varia por edição. Sem chave de domicílio, o piso de "≥ 3 domicílios amostrados" de R1 não é calculável, e foi substituído por pisos de pessoas mais altos: `n ≥ 20` para publicar a linha e `n ≥ 50` para publicar o detalhe por características (contra 5 e 20 nas demais). Os dois valores foram calibrados contra as quatro edições que têm a chave, de modo que a proteção e a cobertura de volume publicada fiquem equivalentes; o efeito colateral é que 1980 publica **menos pares** que as outras edições (11,0% dos pares da amostra, contra 16,2%–20,4%) para a mesma cobertura de volume. Ver o item 8.2 da mesma seção.
-- Na edição 1980, **não há nenhuma variável de renda**: a fonte traz os rendimentos preenchidos apenas na partição do Ceará e vazios nas outras 26 unidades da federação. O filtro de renda e a dimensão de renda do módulo pendular não existem nessa edição. Ver o item 7 da mesma seção.
-- Na edição 1980, o território do atual Tocantins é publicado como **uma unidade agregada** ("Norte de Goiás (atual Tocantins)", 52 municípios), e não município a município: a fonte não informa em qual dos 52 cada residente morava. A unidade tem população (739.049), imigração, emigração, saldo, deslocamento pendular, UF (Tocantins) e polígono próprios, e entra nos dois lados da matriz origem→destino — mas **não é um município**, não tem RGI/RGInt, e mudanças entre os 52 municípios não aparecem como migração. Ver o item 4 da mesma seção.
-- Na edição 1980, **os recortes de 2022 deixam de estar todos povoados**: 489 das 510 regiões imediatas e 130 das 133 regiões intermediárias têm ao menos um município em 1980, e das 81 regiões metropolitanas 78 aparecem, 71 com menos municípios que em 2022 e **4 com um único município** (Capital/RR, Central/RR, Porto Velho/RO e Santarém/PA), o que zera por construção — não por medida — os indicadores intrametropolitanos dessas quatro. As 3 RGInts e 11 das 21 RGIs vazias são o território do atual Tocantins; as outras 10 RGIs vazias são regiões de fronteira agrícola cujos municípios foram todos criados depois de 1980. Um recorte vazio não é um recorte sem fluxo. Ver o item 9 da mesma seção.
-- Na edição 1980, a **origem não informada é a maior do atlas** (7,0% dos imigrantes internos, contra 1,2% em 2022 e 6,8% em 2010), e ela é toda do próprio questionário: as sentinelas de UF conhecida sem município, "Brasil sem especificação" e "ignorado". (Até a versão `1.0.1-1980` havia uma terceira parcela, os 15.350 vindos do norte de Goiás, cuja origem a fonte informava mas o atlas não tinha onde colocar; com a unidade agregada do item 4 eles viraram migrantes de origem válida e a categoria caiu de 7,4% para 7,0%.) Como em todas as edições, esses registros contam na imigração total do destino e ficam fora da matriz origem→destino municipal. Ver os itens 4 e 10 da mesma seção.
+- Na edição 1980, **não há nenhuma variável de renda publicada**. Até a versão `1.0.7-1980` a fonte (Base dos Dados) trazia os rendimentos só na partição do Ceará; a fonte atual (censobr/IPEA) os traz em todas as UFs, mas publicar a renda é uma decisão ainda não tomada, com validações próprias. O filtro de renda e a dimensão de renda do módulo pendular não existem nessa edição. Ver o item 7 da mesma seção.
+- Na edição 1980, o **deslocamento pendular de estudo cobre só quem tem 10 anos ou mais** (universo do quesito, aplicado pela fonte desde a versão `1.1.0-1980`), enquanto nas outras edições com pendular ele cobre estudantes de qualquer idade; e, como em 2000, é um piso, por causa da precedência do trabalho. Comparável em composição e direção, nunca em nível. Ver o item 6 da mesma seção.
+- Na edição 1980, os 52 municípios do atual Tocantins são publicados com o código de 2022 e **sob a UF de hoje** (`'17'`), embora fossem Goiás em 1980: as trocas entre eles e o restante de Goiás aparecem como migração interestadual. E a naturalidade só existe por UF: quem nasceu no território e mora fora declarou "Goiás", de modo que o retorno à UF natal fica subestimado no Tocantins e superestimado no restante de Goiás. De `1.0.2` a `1.0.7-1980` o território era publicado como uma unidade agregada (`NORTEGO`), porque a fonte de então não informava em qual dos 52 municípios cada residente morava. Ver o item 4 da mesma seção.
+- Na edição 1980, **os recortes de 2022 deixam de estar todos povoados**: 500 das 510 regiões imediatas têm ao menos um município em 1980 (as 133 regiões intermediárias, todas), e das 81 regiões metropolitanas 80 aparecem, 70 com menos municípios que em 2022 e **4 com um único município** (Capital/RR, Central/RR, Porto Velho/RO e Santarém/PA), o que zera por construção — não por medida — os indicadores intrametropolitanos dessas quatro. As 10 RGIs vazias e a RM ausente (Sul do Estado/RR) são regiões de fronteira agrícola cujos municípios foram todos criados depois de 1980. A RM de Palmas tem o núcleo resolvido por fallback (Porto Nacional), porque Palmas não existia. Um recorte vazio não é um recorte sem fluxo. Ver o item 9 da mesma seção.
+- Na edição 1980, a **origem não informada é a maior do atlas** (7,0% dos imigrantes internos, contra 1,2% em 2022 e 6,8% em 2010), e ela é toda do próprio questionário: as sentinelas de UF conhecida sem município, "Brasil sem especificação" e "ignorado". (Até a versão `1.0.1-1980` havia uma terceira parcela, os 15.350 vindos do norte de Goiás, cuja origem a fonte informava mas o atlas não tinha onde colocar; desde a `1.0.2-1980` eles são migrantes de origem válida, e a categoria caiu de 7,4% para 7,0%.) Como em todas as edições, esses registros contam na imigração total do destino e ficam fora da matriz origem→destino municipal. Ver os itens 4 e 10 da mesma seção.
 - Na comparação entre censos, a série de um município **criado depois** de um censo é truncada (não recebe número naquela edição) e a série de um município **que cedeu território** contém um degrau de fronteira que não é migração: parte da queda de população e de fluxo entre dois censos é perda de área, e mudanças que hoje cruzam a divisa municipal eram, antes da emancipação, mudanças intramunicipais — isto é, não eram migração. O atlas assume esse viés em vez de construir áreas mínimas comparáveis, e o sinaliza célula a célula. Ver os itens 1 e 2 da seção "Comparação entre censos (F12)".
 - Na comparação entre censos, uma agregação (RGI, RGInt, UF, RM) só publica número quando **pelo menos 90% da população de 2022 da unidade** está coberta pelo território dos municípios presentes naquela edição; abaixo disso a célula diz "cobertura insuficiente", e uma unidade sem nenhum município diz "sem cobertura". Os indicadores intrametropolitanos usam o mesmo limiar sobre a cobertura por município individualmente presente, que é mais exigente, e são sempre suprimidos numa RM reduzida a um único município (zero por construção, não por medida). Ver o item 3 da mesma seção.
 - Na comparação entre censos, **intensidade migratória (CMI), SMI, ANMR, taxas brutas, distâncias, conectividade, Gini, Duncan D e os parâmetros do log-linear não podem ser comparados entre níveis territoriais diferentes** (município × RGI × RGInt × UF × RM): essas medidas crescem com o número de unidades da malha (efeito Courgeau/MAUP). O IEM/MEI e as medidas de composição e razão são livres de escala e podem. Ver o item 4 da mesma seção.

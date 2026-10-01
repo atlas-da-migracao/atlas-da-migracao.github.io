@@ -10,8 +10,9 @@ feição:
   2. Triangulação com o MESMO earcut que o deck.gl usa (`geo/validate_earcut.mjs`,
      web/node_modules/earcut) -- reprova se o centroide de algum triângulo cai fora do
      polígono, ou se a soma das áreas dos triângulos difere da área do polígono em mais de
-     0,1%. Um anel OGC-válido ainda pode triangular mal (ver docstring de
-     pipeline/gridsplit_geom.py) -- é essa checagem que captura o defeito visto no app.
+     0,1%. Um anel OGC-válido ainda pode triangular mal (vértices quase coincidentes numa
+     costura de -dissolve, anel com auto-toque) -- é essa checagem que captura o defeito
+     visto no app ("faixa/triângulo cortando o mapa").
   3. Deformação da simplificação (só municípios, versão Albers): o ponto-na-superfície de
      cada município, calculado por build_centroids.py sobre a malha BRUTA, tem de cair
      dentro do polígono PUBLICADO. Com `-simplify 1%` em todas as edições (até 30/09/2026),
@@ -110,7 +111,7 @@ def valida_arquivo(con: duckdb.DuckDBPyConnection, topojson_path: pathlib.Path, 
 
 # Fração máxima de municípios cujo ponto-na-superfície (malha bruta) cai fora do polígono
 # publicado -- ver item 3 da docstring. Medido depois da mudança para tolerância em metros:
-# 2/3.940 em 1980.
+# 2/3.991 em 1980 (malha com os 52 municípios do norte de Goiás, 1.1.0-1980).
 LIMIAR_FORA = 0.005
 
 # Item 4: diferença máxima, em metros, entre a caixa envolvente de um produto dissolvido

@@ -113,6 +113,8 @@ describe("página de metodologia por edição", () => {
     expect(html).not.toContain("acesso controlado");
     expect(html).not.toContain("31/07/2017");
     expect(html).toContain("Migração estimada por proxy");
+    // fonte vigente (1.1.0-1980) nomeada; a anterior aparece só como histórico
+    expect(html).toContain("censobr/IPEA");
     expect(html).toContain("Base dos Dados");
     expect(html).toContain("Esta edição não publica renda");
     expect(html).toContain("Esta edição não publica erro amostral");
@@ -121,6 +123,20 @@ describe("página de metodologia por edição", () => {
     expect(html).toContain("menos de 20 pessoas");
     expect(html).not.toContain("domicílios amostrados;");
     expect(html).toContain("Censo Demográfico 1980 (IBGE)");
+  });
+
+  it("1980: os 52 municípios do norte de Goiás entram com o código de 2022, não como uma unidade agregada", async () => {
+    const html = await renderizar("1980");
+    expect(html).toContain("Os 52 municípios que em 1988 formaram o Tocantins");
+    expect(html).toContain("17xxxxx");
+    expect(html).toContain("aparecem como interestaduais");
+    expect(html).toContain("10 continuam sem nenhum município em 1980");
+    // o texto da versão anterior (unidade única 'Norte de Goiás', sem RGI, 21 RGIs vazias)
+    expect(html).not.toContain("UMA unidade");
+    expect(html).not.toContain("NORTEGO");
+    expect(html).not.toContain("21 regiões imediatas");
+    // as demais edições não herdam a limitação
+    expect(await renderizar("2010")).not.toContain("norte de Goiás");
   });
 
   it("o piso de revelação é sobre registros AMOSTRADOS, não sobre estimativa ponderada", async () => {

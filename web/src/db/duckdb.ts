@@ -194,8 +194,9 @@ async function iniciarSerie(): Promise<duckdb.AsyncDuckDBConnection> {
   // Nomes das unidades para os cinco níveis. A base territorial da série é a de 2022 (todo
   // `codigo` em unidades_serie/pares_serie é, em princípio, um código de 2022 -- ver plano F12
   // "Base territorial"), então os nomes vêm de `municipios_ref` de 2022 COM PRIORIDADE. Mas uma
-  // edição antiga pode publicar uma unidade que não existe em 2022 (hoje 'NORTEGO', em 1980), e
-  // `pares_serie`/`unidades_serie` a referenciam: sem nome, o Bloco 3 mostraria o código cru.
+  // edição antiga pode publicar uma unidade que não existe em 2022 (um código que a base territorial
+  // atual não tem, ex.: uma unidade agregada de código não numérico), e `pares_serie`/
+  // `unidades_serie` a referenciam: sem nome, o Bloco 3 mostraria o código cru.
   // Por isso os `municipios_ref` das outras quatro edições entram também, e cada (nível, código)
   // fica com o nome da edição mais recente que o publica (`arg_min(..., prio)`: 2022 vence 2010,
   // que vence 2000 etc.; `em_2022` marca os que pertencem à base territorial 2022 -- a busca

@@ -66,18 +66,40 @@ export interface Meta {
   /** resumo de uma linha do aviso acima, para o card fechado (AvisoProxy.tsx expande para o
    *  texto completo sob demanda) -- mesma condição de presença que `aviso_proxy`. */
   aviso_proxy_resumo?: string | null;
+  /** aviso de universo do pendular de estudo (hoje só 1980: quesito aplicado a 10 anos ou
+   *  mais); PainelPendular.tsx mostra quando presente, para o tipo "estudo". */
+  aviso_pendular_estudo?: string | null;
   /** unidades publicadas que NÃO são municípios: conjuntos de municípios do censo agregados
-   *  numa unidade só, porque a fonte não distingue os municípios que os compõem. Hoje existe
-   *  em uma edição só (Censo 1980, 'NORTEGO' -- os 52 municípios do norte de Goiás que em 1988
-   *  formaram o Tocantins); ausente nas demais. O `codigo` é o `cd_mun` da unidade em
-   *  municipios.parquet/municipios_ref.parquet e na malha, de modo que o front a trata como
-   *  qualquer outra unidade e só acrescenta a `nota` -- ver AvisoUnidade.tsx e
-   *  pipeline/unidades_agregadas_1980.py. */
+   *  numa unidade só, com um `codigo` não numérico. Nenhuma edição a usa desde 1.1.0-1980
+   *  (o norte de Goiás passou a ser publicado município a município); mecanismo genérico
+   *  mantido inativo -- chave ausente = nada acontece. Quando presente, o `codigo` é o `cd_mun`
+   *  da unidade em municipios.parquet/municipios_ref.parquet e na malha, de modo que o front a
+   *  trata como qualquer outra unidade e só acrescenta a `nota` -- ver AvisoUnidade.tsx. */
   unidades_agregadas?: UnidadeAgregadaMeta[];
+  /** UFs publicadas sob o código de HOJE que não existiam (ou tinham outro território) na época
+   *  do censo -- hoje só o Tocantins em 1980 (52 municípios do norte de Goiás, mesmo precedente
+   *  de Fernando de Noronha). Ausente nas edições em que toda UF publicada já existia. Gerado
+   *  por pipeline/norte_goias_1980.py -> pipeline/build_meta.py; lido por `AvisoUnidadeUf`. */
+  ufs_fora_da_epoca?: UfForaDaEpocaMeta[];
 }
 
+/** Uma UF do nível "uf" cujo território, na época do censo, pertencia a outra UF. */
+export interface UfForaDaEpocaMeta {
+  /** UF publicada (código de hoje, 2 dígitos) */
+  uf: string;
+  uf_sigla: string;
+  /** UF a que o território pertencia na época do censo */
+  uf_censo: string;
+  uf_censo_sigla: string;
+  n_municipios: number;
+  /** frase pronta explicando o que a UF publicada é e como as trocas aparecem */
+  nota: string;
+}
+
+/** Nenhuma edição a usa desde 1.1.0-1980; mecanismo genérico mantido inativo (ver
+ *  `Meta.unidades_agregadas`). */
 export interface UnidadeAgregadaMeta {
-  /** código da unidade em municipios_ref/municipios/malha (ex.: "NORTEGO") */
+  /** código não numérico da unidade em municipios_ref/municipios/malha */
   codigo: string;
   nome: string;
   nome_curto: string;

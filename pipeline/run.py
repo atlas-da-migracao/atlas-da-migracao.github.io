@@ -55,8 +55,32 @@ def _scripts_da_edicao(ed) -> list[pathlib.Path]:
     return scripts
 
 
+def _checar_fonte(ed) -> None:
+    """Recusa amigável quando a fonte da edição não está no lugar -- antes de abrir o DuckDB e
+    sem ler nenhum registro. Em 1980 a fonte é o Parquet do censobr convertido por
+    scripts/prep_1980_censobr.py (um pessoa_<uf>.parquet por UF mais o sidecar JSON); sem ele o
+    01_extract.sql falharia tarde, com um erro de leitura ou com a guarda de id_municipio NULL."""
+    raw = ROOT / ed.raw
+    if ed.nome == "1980":
+        parquets = sorted(raw.glob("pessoa_*.parquet"))
+        sidecar = raw / "prep_1980_censobr.json"
+        if len(parquets) < 27 or not sidecar.exists():
+            raise SystemExit(
+                f"1980: fonte incompleta em {raw} ({len(parquets)} de 27 pessoa_<uf>.parquet; "
+                f"sidecar {'presente' if sidecar.exists() else 'ausente'}). A edição vem do Parquet "
+                "do censobr/IPEA v1.0.0: rode `python scripts/prep_1980_censobr.py` antes do "
+                "pipeline (ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md, seção 6)."
+            )
+    elif not raw.exists() or not any(raw.iterdir()):
+        raise SystemExit(
+            f"{ed.nome}: fonte ausente em {raw} (symlink/pasta vazia). Ver docs/EDICOES.md, "
+            "'Caminhos', e pipeline/edicoes.py."
+        )
+
+
 def run_all(prefix: str | None = None, edicao_nome: str = "2022") -> None:
     ed = get_edicao(edicao_nome)
+    _checar_fonte(ed)
 
     if ed.nome == "2022":
         # Comportamento 100% inalterado: mesma listagem, mesmos paths.

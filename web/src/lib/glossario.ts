@@ -387,7 +387,7 @@ export const GLOSSARIO: Record<string, TermoGlossario> = {
     interpretacao:
       "Muita gente em “retorno ao município natal” indica migração de volta — típica de regiões que exportaram população décadas antes. Predomínio de “não natural” indica migração de ida, para destinos novos. “Etapas múltiplas”, onde existe, revela trajetórias migratórias encadeadas, e não um único deslocamento.",
     limitacoes:
-      "O vocabulário muda entre edições: só 2022 separa “primeira saída” de “etapas múltiplas”, porque as demais não perguntam o município de nascimento. Na comparação entre censos, as duas categorias de 2022 são somadas em “não natural do destino”, para que todas as edições usem a mesma base; o detalhe fino continua disponível no painel da edição de 2022. Na edição 1980, o retorno ao município natal é subestimado no território do atual Tocantins, que era o norte de Goiás.",
+      "O vocabulário muda entre edições: só 2022 separa “primeira saída” de “etapas múltiplas”, porque as demais não perguntam o município de nascimento. Na comparação entre censos, as duas categorias de 2022 são somadas em “não natural do destino”, para que todas as edições usem a mesma base; o detalhe fino continua disponível no painel da edição de 2022. Na edição 1980, o retorno ao município natal vem do quesito “nasceu neste município” e vale para todos os municípios, inclusive os 52 do norte de Goiás (hoje Tocantins); o que fica subestimado no Tocantins é o retorno à UF natal, porque quem nasceu ali e mora fora declarou “Goiás” como UF de nascimento.",
   },
 
   escolaridade: {
@@ -407,7 +407,7 @@ export const GLOSSARIO: Record<string, TermoGlossario> = {
     interpretacao:
       "Como na escolaridade, o interesse está na comparação entre migrantes e residentes não migrantes: é isso que revela se a migração seleciona por renda, e em qual direção.",
     limitacoes:
-      "Não é publicada na edição 1980 — na fonte utilizada, os rendimentos estão preenchidos em apenas uma unidade da federação e vazios nas demais. Em 1991 o divisor é o salário mínimo implícito nas faixas de rendimento do próprio IBGE, e não o mínimo legal da época, o que é o que faz os cortes coincidirem com as tabulações oficiais daquele censo. Como a escolaridade, a renda é medida no fim do período: não se sabe se é causa ou consequência da migração.",
+      "Não é publicada na edição 1980: a fonte atual (censobr/IPEA v1.0.0) traz as variáveis de rendimento, mas elas ainda não foram mapeadas nem validadas para publicação — a fonte anterior (Base dos Dados) só as tinha preenchidas em uma unidade da federação. Em 1991 o divisor é o salário mínimo implícito nas faixas de rendimento do próprio IBGE, e não o mínimo legal da época, o que é o que faz os cortes coincidirem com as tabulações oficiais daquele censo. Como a escolaridade, a renda é medida no fim do período: não se sabe se é causa ou consequência da migração.",
   },
 
   idade_sexo: {

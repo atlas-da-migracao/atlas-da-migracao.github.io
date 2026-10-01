@@ -88,7 +88,7 @@ def _build_outra_edicao(ed: Edicao, dest: pathlib.Path) -> None:
         ) from e
     municipios_ed = getattr(labels_mod, f"MUNICIPIOS_{ed.nome}")
 
-    rows = list(_linhas_unidades_agregadas(ed))
+    rows = list(_linhas_recodificadas(ed))
     sem_recorte = []
     for cd, info in municipios_ed.items():
         rec = labels.RECORTES.get(cd)
@@ -133,57 +133,55 @@ def _build_outra_edicao(ed: Edicao, dest: pathlib.Path) -> None:
           f"{n_sem_rgi} sem RGI, {n_com_rm} com RM")
 
 
-def _modulo_unidades_agregadas(ed: Edicao):
-    """Módulo de unidades agregadas da edição, ou None se ela não tiver nenhuma.
+def _modulo_norte_goias(ed: Edicao):
+    """Módulo de recodificação do norte de Goiás (pipeline/norte_goias_1980.py), ou None.
 
-    Import tardio e condicional: só a edição 1980 tem esse módulo, e a ausência dele nunca
-    pode afetar as demais.
+    Import tardio e condicional: só a edição 1980 o tem, e a ausência dele nunca pode afetar
+    as demais.
     """
     if ed.nome != "1980":
         return None
-    import unidades_agregadas_1980 as U
-    return U
+    import norte_goias_1980 as N
+    return N
 
 
-def _linhas_unidades_agregadas(ed: Edicao) -> list[dict]:
-    """Linhas de `municipios_ref.parquet` das unidades agregadas da edição.
-
-    Uma unidade agregada é um conjunto de municípios de 1980 publicado como UMA unidade,
-    porque a fonte não distingue os municípios que o compõem (hoje só o norte de Goiás --
-    ver pipeline/unidades_agregadas_1980.py). Ela entra em `ref` como qualquer outra unidade:
-    03_indicators.sql varre `ref` e lhe dá população, imigração, emigração e saldo; 04_flows.sql
-    a junta nos dois lados da matriz origem->destino. O que a distingue são os recortes de 2022
-    NULL (cd_rgi/cd_rgint/cd_rm), que a mantêm fora dos níveis agregados sem nenhum código
-    especial -- `o_rgi <> d_rgi` nunca é verdadeiro quando um dos lados é NULL.
+def _linhas_recodificadas(ed: Edicao) -> list[dict]:
+    """Linhas de `municipios_ref.parquet` dos municípios de 1980 que só existem em `MUN6_1980`
+    (o norte de Goiás: 52 códigos `52xxxxx` que a edição publica como `17xxxxx`, com nome de
+    1980, UF '17' e os recortes de 2022 do código atual). Ver pipeline/norte_goias_1980.py;
+    até 1.0.7-1980 esta função devolvia a unidade agregada 'NORTEGO' no lugar deles.
     """
-    U = _modulo_unidades_agregadas(ed)
-    return U.linhas_referencia() if U else []
+    N = _modulo_norte_goias(ed)
+    return N.linhas_referencia() if N else []
 
 
-def _build_unidades_agregadas(ed: Edicao, dest: pathlib.Path) -> None:
-    """<interim>/unidades_agregadas.parquet: a COMPOSIÇÃO de cada unidade agregada.
+def _build_mun6_lookup(ed: Edicao, dest: pathlib.Path) -> None:
+    """<interim>/mun6_lookup.parquet: `prefixo6 (UF||MUNIC de 1980) -> cd_mun publicado, uf`.
 
-    Uma linha por município componente, com `prefixo6` para o JOIN com `org6`/`trab6` em
-    01_extract.sql -- é por ele que uma origem de migração ou um destino de deslocamento
-    pendular em qualquer dos 52 municípios do norte de Goiás resolve para a unidade, do mesmo
-    jeito que um município real resolve por `municipios_ref`.
-
-    A unidade em si NÃO sai daqui (ela já está em municipios_ref, ver
-    `_linhas_unidades_agregadas`); esta tabela é só o mapa prefixo6 -> unidade, que
-    municipios_ref não pode dar porque o código sintético não tem prefixo de 6 dígitos próprio.
+    É o dicionário que pipeline/sql/1980/01_extract.sql usa para resolver a origem da migração
+    (v518) e o destino do deslocamento pendular (v527), chaveado pelo prefixo DE 1980 -- os 52
+    do norte de Goiás (`'520210'` -> `'1702109'`) e Fernando de Noronha (`'200010'` ->
+    `'2605459'`) já recodificados. Todo `cd_mun` do dicionário tem de existir em `ref`.
     """
-    U = _modulo_unidades_agregadas(ed)
-    if U is None:
+    N = _modulo_norte_goias(ed)
+    if N is None:
         return
-    linhas = U.linhas_composicao()  # noqa: F841
+    linhas = N.mun6_lookup()  # noqa: F841
     con = duckdb.connect()
     import pandas as pd
     df = pd.DataFrame(linhas)  # noqa: F841
-    con.execute("CREATE TABLE ua AS SELECT * FROM df")
-    con.execute(f"COPY ua TO '{dest}' (FORMAT PARQUET)")
-    n_u, n_m = con.execute("SELECT COUNT(DISTINCT cd_unidade), COUNT(*) FROM ua").fetchone()
-    print(f"unidades_agregadas.parquet ({ed.nome}): {n_u} unidade(s) agregada(s), "
-          f"{n_m} municípios componentes")
+    con.execute("CREATE TABLE lk AS SELECT * FROM df")
+    con.execute(f"CREATE TABLE ref AS SELECT cd_mun FROM read_parquet('{dest.parent / 'municipios_ref.parquet'}')")
+    orfaos = con.execute("SELECT COUNT(*) FROM lk ANTI JOIN ref USING (cd_mun)").fetchone()[0]
+    if orfaos:
+        raise SystemExit(f"mun6_lookup: {orfaos} entrada(s) apontam para cd_mun fora de municipios_ref")
+    con.execute(f"COPY lk TO '{dest}' (FORMAT PARQUET)")
+    n, n_rec = con.execute(
+        "SELECT COUNT(*), COUNT(*) FILTER (WHERE SUBSTR(prefixo6, 1, 2) <> SUBSTR(cd_mun, 1, 2)) FROM lk"
+    ).fetchone()
+    print(f"mun6_lookup.parquet ({ed.nome}): {n} prefixos de 1980, {n_rec} recodificados para outra UF")
+    # até 1.0.7-1980 existia unidades_agregadas.parquet aqui; não deixar um órfão para trás
+    (dest.parent / "unidades_agregadas.parquet").unlink(missing_ok=True)
 
 
 def main() -> None:
@@ -199,7 +197,7 @@ def main() -> None:
         _build_2022(dest)
     else:
         _build_outra_edicao(ed, dest)
-        _build_unidades_agregadas(ed, dest.parent / "unidades_agregadas.parquet")
+        _build_mun6_lookup(ed, dest.parent / "mun6_lookup.parquet")
 
 
 if __name__ == "__main__":

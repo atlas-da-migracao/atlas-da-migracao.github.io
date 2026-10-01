@@ -1,8 +1,8 @@
 {
   "edicao": "1980",
-  "versao_dados": "2026-09-30",
-  "gerado_em": "2026-09-30T19:25:01",
-  "fonte": "IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos)",
+  "versao_dados": "2026-10-01",
+  "gerado_em": "2026-10-01T00:23:17",
+  "fonte": "IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos), via censobr/IPEA v1.0.0 (Parquet público derivado dos mesmos microdados; ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)",
   "periodo_referencia": {
     "de": "1975-09-01",
     "ate": "1980-09-01"
@@ -108,16 +108,16 @@
   },
   "aviso": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 1980 (IBGE, dados públicos), sujeitas a controle estatístico de revelação, publicadas sem estimativa de erro amostral (a fonte não permite calculá-lo); podem divergir das tabulações oficiais do IBGE (SIDRA).",
   "aviso_proxy": "Esta edição não tem quesito de data fixa: a migração é um proxy (tempo de residência no município + município de residência anterior), calibrado contra a data fixa do Censo 1991. Ele capta 100% dos migrantes, acerta a origem municipal de 89% deles e reproduz as taxas líquidas com correlação de 0,98; em troca, infla o volume em cerca de 7%, atenua os saldos em 6% a 9% e subestima a migração interestadual em cerca de 2 pontos percentuais. Como a calibração foi feita em 1991, esses desvios são um piso. Entre edições, compare composição, direção e hierarquia dos fluxos — não o nível.",
+  "aviso_pendular_estudo": "Em 1980 o quesito de município de estudo só foi aplicado a quem tinha 10 anos ou mais: o deslocamento pendular para estudo desta edição não inclui as crianças de 5 a 9 anos, ao contrário das outras edições. Compare composição e direção, não o volume.",
   "aviso_proxy_resumo": "O Censo 1980 não perguntou onde a pessoa morava 5 anos antes: a migração aqui é estimada por um proxy, com volume cerca de 7% acima do real e saldos mais fracos do que seriam. Compare direção e composição entre municípios — não o volume total.",
-  "unidades_agregadas": [
+  "ufs_fora_da_epoca": [
     {
-      "codigo": "NORTEGO",
-      "nome": "Norte de Goiás (atual Tocantins)",
-      "nome_curto": "Norte de Goiás",
-      "n_municipios": 52,
       "uf": "17",
+      "uf_sigla": "TO",
       "uf_censo": "52",
-      "nota": "Não é um município: é a agregação dos 52 municípios do norte de Goiás que em 1988 formaram o Tocantins, publicados como uma unidade só porque a fonte desta edição não informa em qual deles cada residente morava. Os números abaixo são do conjunto; mudanças de município dentro dele não aparecem como migração."
+      "uf_censo_sigla": "GO",
+      "n_municipios": 52,
+      "nota": "O Tocantins foi criado em 1988. Em 1980 este território eram 52 municípios do norte de Goiás, publicados aqui sob o código de UF de hoje (mesmo precedente de Fernando de Noronha) para que a série de UF compare o mesmo território nas cinco edições. As trocas com o restante de Goiás aparecem como migração interestadual; quem nasceu aqui e mora fora declarou Goiás como UF de nascimento."
     }
   ]
 }

@@ -22,6 +22,19 @@ Fontes usadas:
 - Consultas **agregadas** (contagens, somas de peso, cruzamentos com n ≥ 5, correlações) sobre os
   parquets acima. Nenhum registro individual foi lido, impresso ou exportado.
 
+> **Nota de `1.1.0-1980` — a fonte mudou.** Este documento foi escrito sobre os Parquet da Base dos
+> Dados (BD). Desde `1.1.0-1980`, `data/raw1980/pessoa_<uf>.parquet` vem do censobr/IPEA v1.0.0,
+> convertido por `scripts/prep_1980_censobr.py` para o mesmo esquema de 39 colunas e idêntico à BD
+> célula a célula nas colunas usadas (`pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md`,
+> `docs/qa/censobr_1980.md`). As decisões de classificação deste documento continuam valendo; o que
+> muda são quatro armadilhas que eram **da BD**, não dos microdados: a codificação de seis dígitos
+> do Ceará (§0.2, §2.3) não existe no censobr; a renda (§0.3, §7) está nas 27 UFs, e continua não
+> publicada; os 178.338 registros do norte de Goiás e os 298 de Fernando de Noronha (§0.4, §0.5, §3,
+> §4) chegam com o código de 1980 e são recodificados para o de 2022
+> (`pipeline/norte_goias_1980.py`); e o censobr aplica os universos do questionário — escolaridade
+> zerada abaixo de 5 anos, trabalho e `v527` nulos abaixo de 10 —, o que restringe o pendular de
+> estudo a 10 anos ou mais (§6.2). Contagens e percentuais citados abaixo são os medidos na BD.
+
 ---
 
 ## 0. Armadilhas desta edição (ler antes de escrever o `01_extract.sql`)
@@ -46,7 +59,7 @@ Fontes usadas:
 | Coluna do extrato | Variável(is) 1980 | Lógica | Observação |
 |---|---|---|---|
 | `uf` | `sigla_uf` | tabela sigla → código IBGE de 2 díg.; `'FN'` → `'26'` (PE) | Ou `SUBSTR(cd_mun, 1, 2)`, que dá o mesmo resultado depois de §4. |
-| `cd_mun` | `id_municipio`, `sigla_uf` | `CASE WHEN sigla_uf = 'FN' THEN '2605459' ELSE id_municipio END` | 7 díg. **Filtrar fora** `sigla_uf = 'GO' AND id_municipio IS NULL` (§3). Resultado: **3.939** municípios. |
+| `cd_mun` | `id_municipio`, `sigla_uf` | `CASE WHEN sigla_uf = 'FN' THEN '2605459' ELSE id_municipio END` | 7 díg. **Filtrar fora** `sigla_uf = 'GO' AND id_municipio IS NULL` (§3). Resultado: **3.939** municípios. *(Especificação de F9.2. Desde `1.1.0-1980`: `id_municipio` da fonte censobr recodificado pela tabela de `pipeline/norte_goias_1980.py` — 52 `52xxxxx → 17xxxxx` e `2000107 → 2605459` —, nenhum filtro, `id_municipio` nulo aborta; **3.991** municípios.)* |
 | `cd_apond` | `cd_mun`, `v598` | `cd_mun \|\| CASE WHEN v598 = '0' THEN 'U' ELSE 'R' END` | `v598`: `0` urbano (19.908.509), `1` rural (9.470.244), sempre preenchida. Coluna do contrato apenas — **não é UPA**, e `se`/`cv` saem NULL (§8). |
 | `controle` | — | `CAST(NULL AS VARCHAR)` | Sem chave de domicílio (§8). |
 | `peso` | `v604` | `CAST(v604 AS DOUBLE)`, **sem divisor** | §0.10. |
@@ -56,7 +69,7 @@ Fontes usadas:
 | `org6` | `v518` | `CASE WHEN v518 IS NULL OR v518 = '0000000' THEN NULL WHEN SUBSTR(v518,1,1) = '0' THEN SUBSTR(v518,2,6) ELSE SUBSTR(v518,1,6) END` | **Regra do Ceará** (§2.3). Produz sempre um código de 6 díg. `UF‖MUNIC` ou uma sentinela `80…`/`54…`/`99…`/`20…`. |
 | `df_local` | `v517`, `org6` | §2.2 | Vocabulário de `P0600`/2022. |
 | `df_uf` | `org6` + dicionário de unidades | UF da **unidade de origem** quando `org6` resolve (o que dá `'17'` para os 52 códigos do norte de Goiás — §3); senão `SUBSTR(org6,1,2)` quando `BETWEEN '11' AND '53'`; `'26'` quando `'20'` (Fernando de Noronha, §4); **`NULL`** para `'54'`, `'80'`, `'99'` | Mesma convenção de 1991: **sem sentinela**, `NULL` explícito (§2.5). A UF vem da unidade, não do prefixo, para `interestadual` e `fluxos_uf` não se contradizerem (§3). |
-| `df_mun` | `org6` + `muni_lookup` | `JOIN` de `org6` com os prefixos de 6 díg. das UNIDADES da edição → código da unidade; os 52 códigos do norte de Goiás → `'NORTEGO'` (§3); `'200000'`/`'2000107'` → `'2605459'` (§4); `NULL` nas sentinelas | Toda origem que a fonte informa tem unidade desde F9.9 — não há mais origem conhecida sem onde pendurar. |
+| `df_mun` | `org6` + `muni_lookup` | `JOIN` de `org6` com os prefixos de 6 díg. das UNIDADES da edição → código da unidade; os 52 códigos do norte de Goiás → `'NORTEGO'` (§3; desde `1.1.0-1980`, cada um → o seu `17xxxxx`, via `data/interim/1980/mun6_lookup.parquet`); `'200000'`/`'2000107'` → `'2605459'` (§4); `NULL` nas sentinelas | Toda origem que a fonte informa tem unidade desde F9.9 — não há mais origem conhecida sem onde pendurar. |
 | `trab6` | `v527` | mesma regra de `org6`, aplicada a `v527` | §6. |
 | `nasc_local` | `v513`, `v512` | `'1'` se `v513 = '1'`; se `v513 = '8'`: `'2'` quando `v512 ∈ 1..29`, `'3'` quando `v512 ∈ 30..99` | Vocabulário de `P0480`. §5. |
 | `nasc_uf` | `v513`, `v512` | a própria `uf` quando `v513 = '1'`; `UF_SEQ_1980[LPAD(v512,2,'0')]` **corrigido** (§0.6) quando `v513 = '8'` e `v512 ∈ 1..27`; `'26'` quando `v512 = 14`; `NULL` quando `v512 = 29` ou ≥ 30 | §5. |
@@ -149,7 +162,9 @@ válidas — 100% das do Ceará.
 *(Números corrigidos em F9.7 contra o resultado publicado — ver a nota ao fim desta subseção.*
 *ATENÇÃO: esta tabela é do universo de `1.0.1-1980`, SEM os 178.338 residentes do norte de Goiás.*
 *Desde F9.9 eles entram (§3): a origem municipal conhecida passa a 13.803.767 e a origem não*
-*informada a 1.040.706. As proporções e o argumento sobre o proxy não mudam.)*
+*informada a 1.040.706. Desde `1.1.0-1980` a migração entre os 52 municípios do norte de Goiás*
+*(47.598) também conta, e a origem municipal conhecida passa a 13.851.365; a não informada fica*
+*em 1.040.706. As proporções e o argumento sobre o proxy não mudam.)*
 
 | `df_local` | n | Σ peso | % dos 5+ |
 |---|---:|---:|---:|
@@ -310,6 +325,14 @@ intensa em 1975–1980 (fronteiras agrícolas, retorno do Sudeste para o Nordest
 
 ## 3. Decisão: os 52 municípios de Goiás que hoje são Tocantins
 
+> **Superada em `1.1.0-1980`.** Esta seção registra as decisões de F9.2 a F9.9 (versões `1.0.0` a
+> `1.0.7-1980`), tomadas sobre a Base dos Dados. A lacuna era da BD — um `merge` do código de 1980
+> contra o diretório atual de municípios no do-file que constrói a tabela —, e não dos microdados:
+> o censobr/IPEA traz o município dos 178.338 registros, e desde `1.1.0-1980` os 52 são publicados
+> como municípios comuns, com o código de 2022 e UF `'17'`. A decisão vigente e os números estão em
+> `MAPEAMENTO_norte_goias.md` §2.4; a fonte, em `MAPEAMENTO_fonte_censobr.md`. As afirmações abaixo
+> foram mantidas como registro, com o veredito corrigido onde eram categóricas.
+
 ### 3.1 O fato
 
 `docs/qa/sonda_1980_bd.md` registrou que **178.338 registros de `sigla_uf = 'GO'` têm
@@ -327,8 +350,8 @@ que não aparecem na BD**, somando exatamente 178.338. Confirmado nesta análise
 
 | Opção | Custo | Viabilidade |
 |---|---|---|
-| **(i) Recuperar `id_municipio` via `UF‖MUNIC` → DTB 1980 → código atual** | zero perda | **Inviável.** A tabela da Base dos Dados **não publica o código de 6 dígitos original** — `id_municipio` é a única coluna geográfica, e nesses 178.338 registros ela é NULL. Não é uma questão de fazer o join melhor: o dado de entrada do join não existe no parquet, e nem na tabela da BD. Reextrair não resolve. |
-| **(i') Casar linha a linha com a cópia DBF do IBGE** (que tem `UF`/`MUNIC`) | zero perda | **Rejeitada.** A extração veio do BigQuery **sem `ORDER BY`** e sem chave de linha; o BigQuery não preserva ordem física. Um join posicional entre 29,4 milhões de linhas de duas fontes diferentes seria uma reconstrução de registro individual sem verificação possível — o oposto do que as regras de sigilo e de qualidade deste projeto admitem. |
+| **(i) Recuperar `id_municipio` via `UF‖MUNIC` → DTB 1980 → código atual** | zero perda | **Inviável na BD** (o veredito original dizia só "inviável"). A tabela da Base dos Dados **não publica o código de 6 dígitos original** — `id_municipio` é a única coluna geográfica, e nesses 178.338 registros ela é NULL, porque o `merge` do do-file de construção contra o diretório atual o descarta. Reextrair da BD não resolve. **Viável com outra fonte**: o censobr/IPEA traz o código de 1980 desses registros, e é o que a `1.1.0-1980` faz (`MAPEAMENTO_fonte_censobr.md`). |
+| **(i') Casar linha a linha com a cópia DBF do IBGE** (que tem `UF`/`MUNIC`) | zero perda | **Rejeitada na forma avaliada** — o join **posicional**: a extração veio do BigQuery **sem `ORDER BY`** e sem chave de linha, e um join por posição entre 29,4 milhões de linhas de duas fontes seria reconstrução de registro sem verificação possível. A vinculação **por atributos**, que não foi avaliada em F9.2, é verificável e funciona (25 variáveis idênticas, 0 erros no gabarito de 171 municípios; `MAPEAMENTO_fonte_censobr.md` §5) — ficou como plano B. |
 | **(ii) Excluir os 178.338 registros** | perde 0,61% da amostra nacional e 19,1% da amostra de Goiás | **Adotada.** |
 
 ### 3.3 A decisão, e por que ela custa menos do que parece
@@ -372,7 +395,7 @@ dado:
 
 | lado | pergunta | o que a fonte tem | situação |
 |---|---|---|---|
-| **residência** (quem MORAVA no norte de Goiás em 1980) | em qual dos 52 municípios? | `id_municipio` NULL nos 178.338 registros; a BD não publica o código de 6 dígitos original | **perdido, em definitivo** (as 4 camadas da BD têm os mesmos 178.338 nulos). Mas é só ISSO que se perde: os 178.338 registros entram na edição sob a unidade agregada, com Σ peso 739.049. |
+| **residência** (quem MORAVA no norte de Goiás em 1980) | em qual dos 52 municípios? | `id_municipio` NULL nos 178.338 registros; a BD não publica o código de 6 dígitos original | **perdido na BD** (as 4 camadas da BD têm os mesmos 178.338 nulos; o veredito original dizia "em definitivo"). Recuperado em `1.1.0-1980` pela fonte censobr. De `1.0.2` a `1.0.7-1980`, só isso se perdia: os 178.338 registros entravam na edição sob a unidade agregada, com Σ peso 739.049. |
 | **origem** (quem SAIU do norte de Goiás entre 1975 e 1980) | de qual dos 52 municípios veio? | `v518` preenchido, com um dos 52 códigos — e o destino é um município publicado normalmente | **não falta dado nenhum.** 15.350 registros / Σ peso 64.639, hoje `origem_valida` com `df_mun = 'NORTEGO'`. |
 
 **A decisão, em três etapas (F9.2 → F9.8 → F9.9).** A forma final está descrita em
@@ -393,9 +416,13 @@ revelação. Medido no universo publicável:
 | 52 origens separadas | 1.614 | 145 | 41.364 (64,0%) | 30.407 (47,0%) |
 
 Com 52 origens, um terço do que se sabe morre no limiar, e menos da metade da massa chega ao piso
-de caracterização — e o preço seriam 52 unidades sem população, malha ou recorte. A composição
-municipal da unidade fica documentada em `unidades_agregadas_1980.MEMBROS` (os 52 códigos e nomes,
-da malha pública de 1980), de onde pode ser recuperada se um dia houver como publicá-la.
+de caracterização — e o preço seriam 52 unidades sem população, malha ou recorte. *(Revisto na
+auditoria de 30/09/2026: a perda no limiar é o efeito comum de R1 sobre qualquer município pequeno,
+que o atlas não usa como motivo para agregar em lugar nenhum; e o "preço" dependia de a residência
+ser irrecuperável, o que só valia na BD. Em `1.1.0-1980` os 52 são publicados: 145 pares de saída
+passam em R1, exatamente como medido aqui.)* A composição municipal da unidade ficava documentada em
+`unidades_agregadas_1980.MEMBROS` (removido em `1.1.0-1980`; os 52 códigos e nomes estão agora em
+`pipeline/norte_goias_1980.py`).
 
 **Por que, em F9.8, a tabela era própria — e por que deixou de ser.** O argumento de F9.8 era: a
 origem não tem população, malha nem centroide, e as consultas do front cruzam `fluxos` com
@@ -435,7 +462,9 @@ premissa: agora Tocantins **tem** unidade na edição, e a soma nacional fecha e
 publica um município de 1980 sob a UF de 2022 pelo mesmo motivo — comparabilidade da série. A UF é
 lida de `municipios_ref`/`unidades_agregadas.parquet` em todos os pontos (residência, `df_uf` e
 `desloc_uf`), nunca de `SUBSTR` do código, para que `interestadual` e `fluxos_uf` não possam
-divergir.
+divergir. *(Desde `1.1.0-1980` a decisão pela UF `'17'` continua, agora para os 52 municípios
+recodificados; a UF da origem e do destino pendular vem de `mun6_lookup.parquet`, e a da residência
+do prefixo do código **publicado** (`17xxxxx`), que dá o mesmo resultado. `fluxos_uf` ficou idêntico.)*
 
 ---
 
@@ -665,6 +694,15 @@ pendular_trab   = COALESCE(trab_local  = '3' AND trab_mun   IS NOT NULL AND trab
 pendular_estudo = COALESCE(estudo_local= '2' AND estudo_mun IS NOT NULL AND estudo_mun <> cd_mun, FALSE)
 ```
 
+> **Nota de `1.1.0-1980` — universo do fluxo de estudo.** Na fonte censobr (como na cópia DBF do
+> IBGE), `v527` é nulo abaixo de 10 anos, e `v520`–`v524` zerados abaixo de 5; a BD trazia valores
+> brutos, não editados, nessas idades. O fluxo de estudo passa a cobrir só estudantes de 10 anos ou
+> mais: `pendular_estudo.parquet` foi de 764 pares / 272.565 pessoas (`1.0.7-1980`) a 575 / 160.855,
+> e o de trabalho ficou praticamente igual (2.599 / 2.660.250 → 2.596 / 2.659.195). É uma correção
+> declarada, com o aviso de universo na comparação com as outras edições
+> (`MAPEAMENTO_fonte_censobr.md` §4, item b; `docs/METODOLOGIA.md`, item 6 de 1980). Os volumes da
+> tabela abaixo são os medidos na BD.
+
 `trab_local = '1'` (trabalha em casa/na propriedade) e `'5'` (mais de um município) **nunca ocorrem
 em 1980**, exatamente como em 2000 — o quesito não separa essas situações. Mapear "neste município"
 para `'2'` preserva `trabalha_no_mun = trab_local IN ('1','2')` em `07_pendular.sql`.
@@ -806,6 +844,12 @@ A cobertura das variáveis de renda nos parquets, por UF:
 Não é efeito da extração — `scripts/extract_1980_bd.py` roda a mesma `SELECT` nas 27 partições. A
 tabela da Base dos Dados simplesmente **não traz renda fora do Ceará**.
 
+> **Nota de `1.1.0-1980`.** No censobr, fonte desde esta versão, as variáveis de renda estão
+> preenchidas nas 27 UFs. A decisão de §7.2 foi mantida — a edição continua sem publicar renda —,
+> agora por outro motivo: abrir a dimensão exige passos próprios (cobertura por UF e universo,
+> reconciliação do salário mínimo fora do Ceará, validação externa, limiares), registrados como
+> trabalho futuro em `docs/METODOLOGIA.md`, item 7 de 1980.
+
 ### 7.2 Decisão
 
 **`renda_trab`, `renda_pc`, `renda_classe` e `renda_trab_classe` ficam `NULL` na edição 1980
@@ -908,7 +952,7 @@ Mesmo nome, mesma ordem e mesmo tipo de 2022/2010/2000/1991.
 | # | Coluna | Tipo | Variável(is) 1980 | Lógica resumida |
 |---:|---|---|---|---|
 | 1 | `uf` | VARCHAR | `sigla_uf` | 2 díg.; `'FN'` → `'26'` (§4) |
-| 2 | `cd_mun` | VARCHAR | `id_municipio`, `sigla_uf` | §1, §3, §4 — 3.939 municípios + a unidade agregada `'NORTEGO'` |
+| 2 | `cd_mun` | VARCHAR | `id_municipio`, `sigla_uf` | §1, §3, §4 — 3.991 municípios desde `1.1.0-1980` (os 52 do norte de Goiás recodificados para `17xxxxx`); de `1.0.2` a `1.0.7-1980`, 3.939 + a unidade agregada `'NORTEGO'` |
 | 3 | `cd_apond` | VARCHAR | `cd_mun`, `v598` | `cd_mun ‖ 'U'/'R'`; **não é estrato** (§8) |
 | 4 | `controle` | VARCHAR | — | `NULL` (§8) |
 | 5 | `peso` | DOUBLE | `v604` | sem divisor (§0.10) |
@@ -1018,6 +1062,15 @@ nova entra no front-end por causa de 1980.
 ---
 
 ## 12. Lista de verificações para o QA da F9.3 (auditor)
+
+> **Nota de `1.1.0-1980`.** Os itens 1, 2, 4, 5, 13 e 14 descrevem a edição sobre a Base dos Dados
+> (até `1.0.7-1980`). Na `1.1.0-1980`: 0 registros com `cd_mun` nulo (um nulo aborta a extração);
+> **3.991** códigos distintos em `cd_mun`, todos com par em `labels.RECORTES`; Σ peso **119.011.052**;
+> `'NORTEGO'`, os 52 códigos `52xxxxx` e `2000107` **ausentes** de todo arquivo publicado, e cada um
+> dos 53 códigos recodificados presente uma vez, com população, UF e recortes (R6 do gate); a regra
+> do Ceará (item 4) não tem mais o que corrigir; Σ imigrantes = Σ emigrantes = 13.851.365; e a guarda
+> `origem = residência` de `df_local` dispara em 0 registros. As âncoras vigentes estão em
+> `pipeline/tests/test_edicao_1980.py`.
 
 1. **(revisto em F9.9)** `01_extract.sql` não exclui registro nenhum; os **178.338** de
    `sigla_uf='GO' AND id_municipio IS NULL` recebem `cd_mun = 'NORTEGO'`. Σ peso final =

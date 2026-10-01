@@ -198,40 +198,57 @@ def main() -> int:
     else:
         ok("R2", f"nenhum fluxo com menos de {L.min_pessoas_detalhe} observações publica detalhe")
 
-    # ---- R6: as UNIDADES AGREGADAS declaradas são unidades de verdade (F9.9) ----
-    # Uma unidade agregada (hoje só 'NORTEGO', o norte de Goiás em 1980 -- ver
-    # pipeline/unidades_agregadas_1980.py) é publicada como qualquer outra unidade, e é
-    # justamente por isso que ela precisa de uma verificação própria: o gate confere que ela
-    # NÃO é um fantasma (tem linha em municipios_ref e em municipios, com população > 0), que
-    # não vira autoloop em nenhum fluxo, e que a composição não vazou -- nenhum dos 52 códigos
-    # municipais que ela agrega pode aparecer como unidade publicada, sob pena de publicar um
-    # território duas vezes. Os limiares R1/R2 dela são os mesmos de todo mundo e já foram
-    # verificados acima, junto com os demais pares de fluxos.parquet.
+    # ---- R6: os 52 municípios do norte de Goiás são publicados como municípios (1.1.0-1980) ----
+    # De 1.0.2 a 1.0.7-1980 eles saíam como UMA unidade agregada, 'NORTEGO'; desde 1.1.0-1980
+    # cada um sai no seu código de 2022 (pipeline/norte_goias_1980.py). O gate confere que a
+    # transição foi completa: nenhum código sintético, nenhum código de 1980 (52xxxxx /
+    # 2000107) publicado, e cada um dos 53 códigos recodificados exatamente uma vez, com
+    # população, UF e recortes. Os limiares R1/R2 deles são os mesmos de todo mundo e já foram
+    # verificados acima. Diferenciação contra os totais 'NORTEGO' das versões anteriores: não é
+    # risco de sigilo -- os microdados de 1980 são públicos e o que muda é o código de
+    # município de registros já públicos; R1 continua valendo célula a célula.
     if ed.nome == "1980":
-        import unidades_agregadas_1980 as UA
-        for cod, info in UA.UNIDADES_AGREGADAS_1980.items():
-            n_ref, n_mun = con.execute(f"""
-                SELECT (SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios_ref.parquet')
-                        WHERE cd_mun = '{cod}'),
-                       (SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios.parquet')
-                        WHERE cd_mun = '{cod}' AND pop > 0)
-            """).fetchone()
-            if not (n_ref == 1 and n_mun == 1):
-                falha("R6", f"unidade agregada {cod}: {n_ref} linha(s) em municipios_ref e "
-                            f"{n_mun} em municipios com população > 0 (esperado 1 e 1)")
-            v = con.execute(
-                f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/fluxos.parquet') "
-                f"WHERE origem = destino AND origem = '{cod}'").fetchone()[0]
-            membros = ", ".join(f"'{m}'" for m in UA.MEMBROS[cod])
-            vaz = con.execute(
-                f"SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios_ref.parquet') "
-                f"WHERE cd_mun IN ({membros})").fetchone()[0]
-            if v or vaz:
-                falha("R6", f"unidade agregada {cod}: {v} autoloop(s) em fluxos.parquet e "
-                            f"{vaz} município(s) componente(s) publicado(s) à parte")
-            else:
-                ok("R6", f"unidade agregada {cod} ({info['n_municipios']} municípios de 1980): "
-                         "publicada como uma unidade, sem autoloop e sem componente solto")
+        import norte_goias_1980 as N
+        antigos = ", ".join(f"'{c}'" for c in list(N.CODIGO_PUBLICADO) + ["NORTEGO"])
+        novos = ", ".join(f"'{c}'" for c in N.CODIGO_PUBLICADO.values())
+        vazamentos = []
+        # Varre TODO arquivo publicado, não uma lista por nome: cada coluna VARCHAR de cada
+        # parquet (raiz e geo/) e o texto dos JSON/TopoJSON. Um arquivo novo entra na varredura
+        # sem ninguém lembrar de listá-lo.
+        for arq in sorted(list(PROCESSED.glob("*.parquet")) + list((PROCESSED / "geo").glob("*.parquet"))):
+            rel = arq.relative_to(PROCESSED).as_posix()
+            cols = [c[0] for c in con.execute(f"DESCRIBE SELECT * FROM read_parquet('{arq}')").fetchall()
+                    if c[1].upper() == "VARCHAR"]
+            for col in cols:
+                v = con.execute(f'SELECT COUNT(*) FROM read_parquet(\'{arq}\') WHERE "{col}" IN ({antigos})').fetchone()[0]
+                if v:
+                    vazamentos.append(f"{rel}.{col}: {v}")
+        import re as _re
+        padrao = _re.compile(r'"(?:' + "|".join(_re.escape(c) for c in list(N.CODIGO_PUBLICADO) + ["NORTEGO"]) + r')"')
+        for arq in sorted(list(PROCESSED.glob("*.json")) + list((PROCESSED / "geo").glob("*.topojson"))
+                          + list((PROCESSED / "geo").glob("*.json"))):
+            achados = len(padrao.findall(arq.read_text(encoding="utf-8")))
+            if achados:
+                vazamentos.append(f"{arq.relative_to(PROCESSED).as_posix()}: {achados} ocorrência(s)")
+        if vazamentos:
+            falha("R6", "código de 1980 ou 'NORTEGO' ainda publicado: " + "; ".join(vazamentos))
+        n_ref, n_mun, d_ref, d_mun = con.execute(f"""
+            SELECT (SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios_ref.parquet')
+                    WHERE cd_mun IN ({novos}) AND uf IN ('17', '26') AND cd_rgi IS NOT NULL AND cd_rgint IS NOT NULL),
+                   (SELECT COUNT(*) FROM read_parquet('{PROCESSED}/municipios.parquet')
+                    WHERE cd_mun IN ({novos}) AND pop > 0),
+                   (SELECT COUNT(DISTINCT cd_mun) FROM read_parquet('{PROCESSED}/municipios_ref.parquet')
+                    WHERE cd_mun IN ({novos})),
+                   (SELECT COUNT(DISTINCT cd_mun) FROM read_parquet('{PROCESSED}/municipios.parquet')
+                    WHERE cd_mun IN ({novos}))
+        """).fetchone()
+        esperado = len(N.CODIGO_PUBLICADO)
+        if not (n_ref == esperado and n_mun == esperado and d_ref == esperado and d_mun == esperado):
+            falha("R6", f"recodificação 52->17 incompleta: {n_ref} linhas/{d_ref} códigos distintos de {esperado} em "
+                        f"municipios_ref (com UF, RGI e RGInt) e {n_mun} linhas/{d_mun} distintos em municipios com população > 0")
+        elif not vazamentos:
+            ok("R6", f"os 52 municípios do norte de Goiás (17xxxxx) e Fernando de Noronha publicados como "
+                     "municípios, cada um uma vez, sem código de 1980 nem 'NORTEGO' em nenhum arquivo")
 
     # ---- R1 nos perfis municipais ----
     v = con.execute(f"""

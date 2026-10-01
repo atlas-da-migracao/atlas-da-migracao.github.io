@@ -201,15 +201,14 @@ const CONFIG_NIVEL: Record<NivelAgregado, { fluxos: string; campo: string; nomeC
   uf: { fluxos: "fluxos_uf", campo: "uf", nomeCol: "uf_nome", centroides: "geo/centroides_uf.parquet" },
 };
 
-/** NOTA (F9.9, edição 1980): `WHERE ${campo} IS NOT NULL` em todas as listas de unidade
- *  agregada abaixo. Uma UNIDADE AGREGADA de `municipios_ref` (hoje só 'NORTEGO', os 52
- *  municípios do norte de Goiás publicados como uma unidade só -- ver
- *  pipeline/unidades_agregadas_1980.py) cobre 11 RGIs e 3 RGInts de 2022 e não é de nenhuma,
- *  então sai com cd_rgi/cd_rgint nulos. Sem o filtro, o `SELECT DISTINCT` traria um código
- *  nulo como se fosse uma RGI/RGInt, que apareceria no seletor e no painel como uma unidade
- *  sem nome. No nível de UF o filtro é inócuo (a unidade TEM UF publicada, '17'), e nas
- *  demais edições também -- lá nenhum município fica sem recorte. A contrapartida geográfica
- *  do mesmo filtro está em geo/build.sh (`-filter "cd_rgi != null"` antes do -dissolve). */
+/** NOTA (F9.9): `WHERE ${campo} IS NOT NULL` em todas as listas de unidade agregada abaixo.
+ *  Uma linha de `municipios_ref` sem recorte de 2022 -- por exemplo uma UNIDADE AGREGADA (código
+ *  não numérico que reúne municípios de várias RGIs/RGInts e não é de nenhuma; mecanismo
+ *  genérico, hoje inativo: nenhuma edição a publica desde 1.1.0-1980) -- sai com
+ *  cd_rgi/cd_rgint nulos. Sem o filtro, o `SELECT DISTINCT` traria um código nulo como se fosse
+ *  uma RGI/RGInt, que apareceria no seletor e no painel como uma unidade sem nome. No nível de
+ *  UF o filtro é inócuo (toda unidade TEM UF publicada). A contrapartida geográfica do mesmo
+ *  filtro está em geo/build.sh (`-filter "cd_rgi != null"` antes do -dissolve). */
 /** Indicadores de todas as unidades de um nível, para o coroplético e os painéis. */
 export function carregarUnidades(nivel: NivelAgregado) {
   const { fluxos, campo, nomeCol } = CONFIG_NIVEL[nivel];

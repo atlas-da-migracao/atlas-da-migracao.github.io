@@ -284,7 +284,9 @@ Regras de construção (todas já refletidas em `geo/build.sh`):
 4. `fitBoundsCartesiano` com teste unitário (bbox quadrado, bbox degenerado, padding maior que o
    viewport).
 5. Visual: o Brasil não sai de cabeça para baixo (`flipY`), os arcos curvam, e a seleção de um
-   município enquadra o polígono — nas 5 edições, incluindo o `NORTEGO` de 1980.
+   município enquadra o polígono — nas 5 edições, incluindo os 52 municípios do norte de Goiás em
+   1980. (Histórico: até `1.0.7-1980` a malha de 1980 tinha, no lugar deles, a feição dissolvida
+   `NORTEGO`, e era ela o caso de teste deste critério.)
 
 ---
 

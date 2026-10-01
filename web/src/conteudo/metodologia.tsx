@@ -140,13 +140,16 @@ const TEXTO: Record<Censo, TextoEdicao> = {
       + "antes — este último coletado de quem mora no município há menos de dez anos, inclusive "
       + "de quem nasceu nele.",
     fonteNota:
-      "Os microdados da amostra de 1980 são públicos, mas as cópias em circulação omitem a "
-      + "variável de município de residência anterior, que é o que sustenta a migração desta "
-      + "edição. O atlas usa, por isso, a cópia publicada pela Base dos Dados (BigQuery), cujas "
-      + "contagens por unidade da federação foram conferidas uma a uma contra a cópia em DBF do "
-      + "IBGE. É a única edição do atlas alimentada por uma fonte secundária.",
+      "Os microdados da amostra de 1980 são públicos, mas a cópia atual do IBGE omite a variável "
+      + "de município de residência anterior, que é o que sustenta a migração desta edição. O "
+      + "atlas usa o Parquet do censobr/IPEA (v1.0.0), derivado dos mesmos microdados, que traz "
+      + "essa variável e o município de residência de todos os registros; até a versão anterior "
+      + "a edição vinha da cópia da Base dos Dados (BigQuery), que perdia o município de 178.636 "
+      + "registros. As duas cópias foram conferidas célula a célula entre si e, por unidade da "
+      + "federação, contra a cópia em DBF do IBGE. É a única edição do atlas alimentada por uma "
+      + "fonte secundária.",
     origemNaoInformada:
-      "Cerca de 7,0% dos migrantes internos têm origem não informada — a maior parcela do atlas. "
+      "Cerca de 7,5% dos migrantes internos têm origem não informada — a maior parcela do atlas. "
       + "São as próprias sentinelas do questionário de 1980: quem declarou a unidade da federação "
       + "de origem mas não o município, e as respostas \u201cBrasil sem especificação\u201d e "
       + "\u201cignorado\u201d.",
@@ -158,15 +161,14 @@ const TEXTO: Record<Censo, TextoEdicao> = {
       + "fluxos, não para o nível.",
       "Não há nenhuma variável de renda nesta edição, e não há erro amostral publicado: as "
       + "estimativas são pontuais, sem intervalo de confiança.",
-      "O território do atual Tocantins aparece como UMA unidade, não município a município: os "
-      + "52 municípios do norte de Goiás chegam sem código de município na fonte, e por isso são "
-      + "publicados juntos, sob o nome \u201cNorte de Goiás (atual Tocantins)\u201d. Essa unidade "
-      + "tem população, imigração, emigração, saldo e um polígono próprios, e aparece nos dois "
-      + "lados dos fluxos — mas não é um município: mudanças entre os 52 não contam como "
-      + "migração, e ela não pertence a nenhuma região imediata ou intermediária. Por isso, e "
-      + "pelo recorte de 2022 aplicado a uma malha de 1980, 21 regiões imediatas e 3 "
-      + "intermediárias aparecem sem nenhum município. Um recorte vazio não é um recorte sem "
-      + "fluxo.",
+      "Norte de Goiás (atual Tocantins). Os 52 municípios que em 1988 formaram o Tocantins "
+      + "entram com o código de 2022 (17xxxxx), a partir do Parquet do censobr/IPEA — a Base dos "
+      + "Dados, fonte até a versão anterior, não trazia o município de residência deles. A UF "
+      + "publicada é a de hoje: as trocas com o restante de Goiás aparecem como interestaduais, e "
+      + "quem nasceu no território e mora fora declarou \u201cGoiás\u201d como UF de nascimento "
+      + "(o retorno à UF natal fica subestimado no Tocantins). Das regiões imediatas de 2022, 10 "
+      + "continuam sem nenhum município em 1980 (fronteira agrícola criada depois), nenhuma delas "
+      + "no Tocantins.",
     ],
   },
 };

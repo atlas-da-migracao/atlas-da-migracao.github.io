@@ -143,7 +143,8 @@ interface Props {
   /** F2 (mapa-representacao): malha de arestas (topojson.mesh, fronteiras únicas) da mesma
    *  malha ativa -- usada só para o contorno "normal", em vez de contornar cada feição (o
    *  que desenha toda fronteira compartilhada duas vezes e revela arestas internas de
-   *  MultiPolygon, ex.: a grade do NORTEGO). null enquanto a topologia bruta não carregou. */
+   *  MultiPolygon: as arestas entre as partes da mesma feição). null enquanto a topologia bruta
+   *  não carregou. */
   contornos?: Feature | null;
   porCodigo: Map<string, ValorMapa>;
   metrica: Metrica;
@@ -490,7 +491,7 @@ export function MapaAtlas({
     // Contorno "normal": malha de arestas (fronteiras únicas), não por feição. `contornos`
     // vem de topojson.mesh((a,b) => a !== b) em App.tsx -- some tanto a duplicação de uma
     // fronteira compartilhada (desenhada 1x em vez de 2x) quanto a aresta interna de um
-    // MultiPolygon da mesma feição (ex.: a grade que aparecia dentro do NORTEGO em 1980).
+    // MultiPolygon da mesma feição (as arestas entre as partes de uma mesma feição).
     const contornosMalha = dadosContornos && new GeoJsonLayer({
       id: "contornos-malha",
       data: dadosContornos,

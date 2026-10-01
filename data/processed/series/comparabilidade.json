@@ -3451,35 +3451,35 @@
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_saida",
       "nivel": "mun",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_saida",
       "nivel": "rgi",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_saida",
       "nivel": "rgint",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_saida",
       "nivel": "uf",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_saida",
       "nivel": "rm",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "2022",
@@ -3626,35 +3626,35 @@
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_entrada",
       "nivel": "mun",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_entrada",
       "nivel": "rgi",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_entrada",
       "nivel": "rgint",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_entrada",
       "nivel": "uf",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "1980",
       "estado": "comparavel_com_ressalva",
       "medida": "pend_estudo_entrada",
       "nivel": "rm",
-      "nota": "estudo_piso"
+      "nota": "pend_estudo_universo_1980"
     },
     {
       "edicao": "2022",
@@ -8876,25 +8876,27 @@
     "cobertura_insuficiente": "Nesta edição, menos de 90% da população de 2022 desta unidade está coberta pelo território dos municípios existentes: a unidade não é mais a mesma e o número não é publicado.",
     "conectividade_limiar_1980": "O número de parceiros publicados depende do limiar de revelação, e 1980 é a única edição com limiar próprio (n ≥ 20 em vez de n ≥ 5, por não ter chave de domicílio): ela publica 11,0% dos pares da amostra, contra 16,2%–20,4% nas demais. A contagem de parceiros de 1980 não é comparável com a das outras edições.",
     "conectividade_supressao": "O número de parceiros conta pares publicados: pares pequenos são suprimidos pelas regras de revelação e não aparecem. Como o tamanho da amostra varia entre censos, a contagem mede em parte a supressão, não só a conectividade — e também cai quando o território da unidade ainda não estava subdividido como hoje.",
-    "duncan_matriz_comum": "Calculado sobre a matriz comum às duas edições comparadas, com as duas matrizes renormalizadas nesse conjunto: sem isso, o índice mediria criação de município como se fosse mudança de padrão migratório.",
-    "duncan_matriz_comum_1980": "Duncan D calculado sobre a matriz comum às duas edições. Entre 1980 e 1991 a interseção é a menor da série (1.634 municípios de 2022 não existem em 1980, e o território do atual Tocantins entra como uma unidade agregada), e o índice mede mudança de estrutura apenas nessa interseção.",
+    "duncan_matriz_comum": "Calculado sobre a união dos pares publicados nas duas edições comparadas, com o par ausente numa delas valendo 0 e cada matriz normalizada pelo próprio total. Por isso o índice é um limite superior da mudança de padrão: ele soma à mudança migratória a criação de município e a supressão de revelação entre as duas edições. A versão sobre a matriz comum (só pares existentes nas duas), com `n_pares_comuns` publicado, fica como pendência declarada.",
+    "duncan_matriz_comum_1980": "Duncan D calculado sobre a união dos pares publicados nas duas edições (par ausente numa delas vale 0). Entre 1980 e 1991 é a comparação mais afetada da série: 1.579 municípios de 2022 não existem em 1980 (os 52 do norte de Goiás, hoje Tocantins, entram com o código de 2022), então a parcela do índice que é fronteira e supressão, não mudança de padrão, é a maior de todas; leia-o como limite superior.",
     "edu_anos_estudo": "Nesta edição o nível de instrução é derivado de 'anos de estudo': uma graduação de três anos soma 14 anos e cai em 'médio completo/superior incompleto', o que subestima ligeiramente 'superior completo' frente a 2010 e 2022.",
     "edu_reconstruida_1980": "A escolaridade de 1980 é reconstruída do par 'última série concluída' × 'grau', com a lista de graus do dicionário do IBGE corrigida de um deslocamento de código. É uma aproximação declarada: quem estava estudando tem o nível subestimado, e o fim do curso superior é uma faixa, não um ponto.",
     "escala_cmi": "Intensidade e migração líquida agregada dependem do número de unidades do nível: comparar o valor de um município com o de uma UF não tem significado. A série é sempre lida dentro de um mesmo nível territorial.",
     "estudo_piso": "O deslocamento pendular para estudo é um piso, não uma estimativa do total: o censo tem um quesito único de trabalho/estudo com precedência do trabalho, e quem trabalha no próprio município e estuda em outro assinala 'neste município'. Comparável em composição e direção, nunca em nível.",
     "faixas_largas": "Calculada sobre as cinco faixas etárias publicadas (5–14, 15–24, 25–39, 40–59, 60+). A granularidade não permite ajustar um perfil de Rogers-Castro nem detectar deslocamentos da idade do pico menores que a largura da faixa.",
+    "fonte_1980": "Em 1980 os 52 municípios do norte de Goiás (hoje Tocantins) são publicados como municípios, com o código de 2022, a partir do Parquet do censobr/IPEA (fonte da edição desde 1.1.0-1980); a Base dos Dados não trazia o código de município deles.",
     "frequencia_definicao_2010": "2010 pergunta se a pessoa retorna do trabalho para casa DIARIAMENTE; 2022 pergunta se retorna TRÊS OU MAIS DIAS POR SEMANA. Os códigos coincidem, as definições não: comparável em ordem de grandeza, não como série.",
-    "gini_limiar_1980": "Concentração calculada sobre os pares publicados, com o limiar próprio de 1980 (n ≥ 20). A cobertura de volume é equivalente à das demais edições (70,7%, contra 67,6%–71,6%), então a concentração da massa publicada é comparável; a contagem de pares não é.",
+    "gini_limiar_1980": "Concentração calculada sobre os pares publicados, com o limiar próprio de 1980 (n ≥ 20). A cobertura de volume é equivalente à das demais edições (70,5%, contra 67,6%–71,6%), então a concentração da massa publicada é comparável; a contagem de pares não é.",
     "gini_supressao": "Concentração calculada sobre os fluxos publicados; a cauda suprimida (cerca de 30% do volume, em todas as edições) não entra na conta.",
     "iem_sem_guarda_1980": "A tipologia de 1980 é publicada sem guarda estatística: a edição não estima erro amostral, então não há como distinguir eficácia pequena de ruído.",
-    "loglinear_matriz_comum": "Ajustado sobre a matriz comum às duas edições. Todos os parâmetros exceto T são livres de escala, de modo que a razão entre dois censos mede mudança de estrutura, não de volume.",
-    "loglinear_matriz_comum_1980": "Decomposição ajustada sobre a matriz comum às duas edições, a menor da série. Os parâmetros O, D e OD são livres de escala, mas o conjunto de unidades sobre o qual foram ajustados é menor que o de 2022.",
+    "loglinear_matriz_comum": "Ajustado por edição, sobre a matriz publicada daquela edição (não sobre uma matriz comum). Todos os parâmetros exceto T são livres de escala, de modo que a razão entre dois censos mede mudança de estrutura, não de volume -- mas o conjunto de unidades ajustado difere entre edições, e isso entra na comparação.",
+    "loglinear_matriz_comum_1980": "Decomposição ajustada sobre a matriz publicada de 1980, a de menor conjunto de unidades da série. Os parâmetros O, D e OD são livres de escala, mas o conjunto sobre o qual foram ajustados é menor que o de 2022 e o volume vem do proxy de data fixa.",
     "mei_estavel": "O índice de eficácia é uma razão entre saldo e volume e é estável a partir de ~20 unidades: pode ser lido entre níveis territoriais diferentes.",
     "municipio_mae": "Nesta edição o município era territorialmente maior: parte da área que ele ocupa aqui é hoje de outro município. A queda de volume entre censos inclui, portanto, um degrau de fronteira que não é migração.",
     "municipio_nao_existia": "O município não existia nesta edição. Seu território fazia parte do município de origem do desmembramento, cuja série pode ser aberta ao lado — as duas nunca são somadas nem emendadas.",
     "n_unidades_variavel": "Medida do sistema calculada sobre as unidades existentes naquela edição, que são menos que as de 2022. A intensidade migratória cresce com o número de unidades (efeito Courgeau): parte da variação entre censos é de recorte, não de comportamento. O número de unidades é publicado ao lado de cada ponto.",
     "nucleo_divergente": "O núcleo metropolitano desta edição não é o mesmo das demais (o município-núcleo ainda não existia e o atlas usa o mais populoso presente): a decomposição núcleo × periferia não forma série.",
     "ocup_elementares": "A classe 'ocupações elementares' não é comparável nesta edição: em 2000 ela é estruturalmente vazia (a CBO-Domiciliar 2000 distribui essa massa por três outras classes) e em 1980 ela existe, mas mais estreita que o grande grupo da ISCO-08.",
+    "pend_estudo_universo_1980": "Em 1980 o quesito de município de trabalho/estudo só é aplicado a quem tem 10 anos ou mais (universo econômico do censo): o fluxo pendular de estudo exclui as crianças de 5 a 9 anos que as outras edições incluem. Comparável em composição e direção, com este aviso de universo; nunca em nível.",
     "posto_supressao_1980": "O ranking de 1980 é montado sobre menos pares publicados (limiar n ≥ 20): parceiros pequenos podem estar ausentes do ranking por supressão, não por não existirem.",
     "precisao_aproximada_1991": "1991 não tem área de ponderação: o estrato do estimador de variância é um substituto (município × situação urbano/rural), mais heterogêneo que a área real. O CV mediano fica 5% a 20% acima do de 2000 em pares de mesmo tamanho amostral — leia `se` e `cv` de 1991 como conservadores, não como comparáveis ponto a ponto.",
     "proxy_1980_distancia": "A migração em etapas transfere fluxo longo para fluxo curto: em 1991, o proxy reduz a participação interestadual de 35,07% para 32,96%. 1980 subestima a distância percorrida, em magnitude não medida.",
@@ -8909,14 +8911,13 @@
     "sem_estimativa_1980": "A edição 1980 não publica erro amostral: a fonte não traz chave de domicílio e os domicílios não são reconstruíveis, então não há unidade primária de amostragem. `se` e `cv` são nulos e a precisão é declarada como 'sem estimativa'.",
     "sem_modo_2010": "O questionário de 2010 não tem quesito de meio de transporte: a dimensão 'modo' não existe nesta edição.",
     "sem_pendular_1991": "O questionário da amostra de 1991 não pergunta em que município a pessoa trabalha ou estuda: a edição não tem módulo de deslocamento pendular. A ausência é do questionário, não do atlas — a célula não é zero, é não medida.",
-    "sem_renda_1980": "A edição 1980 não publica nenhuma variável de renda: na fonte, os rendimentos estão preenchidos só na partição do Ceará e vazios nas outras 26 unidades da federação.",
+    "sem_renda_1980": "A edição 1980 não publica nenhuma variável de renda: a fonte atual (censobr/IPEA, desde 1.1.0-1980) traz as variáveis de rendimento nas 27 unidades da federação, mas elas ainda não foram mapeadas nem validadas para publicação (a fonte anterior, a Base dos Dados, só as tinha preenchidas no Ceará).",
     "sem_tempo_freq_modo": "O bloco de deslocamento desta edição tem só o município de destino: não há tempo gasto, frequência de retorno nem meio de transporte. A célula não é zero, é não medida.",
     "sexo_indeterminado_2022": "O sexo 'indeterminado' só existe em 2022 e pesa menos de 0,03% da massa. Ele entra no total da faixa etária e fica fora do denominador da razão de sexo, em todas as edições, para que a comparação use a mesma base.",
     "sm_implicito_1991": "Em 1991 o divisor de salário mínimo é o valor implícito nas faixas de rendimento do próprio IBGE (Cr$ 36.161,60, que reproduz 24 de 24 limites de faixa), e não o mínimo legal vigente. É o que faz os cortes relativos coincidirem com as tabulações oficiais da época.",
     "status_colapsado_2022": "Só 2022 separa quem saiu do município natal pela primeira vez de quem já morava fora dele. Para comparar com as outras quatro edições, as duas categorias são somadas em 'não natural do município' — a distinção fina continua disponível no painel da edição de 2022.",
-    "status_retorno_1980": "Em 1980, `retorno_natal` é subestimado no território do atual Tocantins: quem nasceu lá declarava 'Goiás' como naturalidade, e a unidade agregada `NORTEGO` não é reconhecível como município natal.",
-    "tempo_vocabulario_2010": "As cinco faixas de tempo de deslocamento de 2010 não são aninhadas nas oito de 2022 (a segunda faixa de 2010 atravessa duas de 2022), e 2010 não mede minutos. As distribuições não formam série; cada edição publica o próprio vocabulário.",
-    "unidade_agregada_1980": "Em 1980, os 52 municípios do norte de Goiás (hoje Tocantins) são publicados como uma única unidade, `NORTEGO`. No nível de UF ela cobre o território; em RGI, RGInt e RM ela não participa, e as regiões correspondentes ficam sem cobertura."
+    "status_retorno_1980": "Em 1980 o retorno ao município natal (`retorno_natal`) vem do quesito 'nasceu neste município' e vale para todos os municípios, inclusive os 52 do norte de Goiás (hoje Tocantins). O que a UF de nascimento distorce é só a leitura por UF: quem nasceu no território do atual Tocantins declarava 'Goiás', então o retorno à UF natal (indicador auxiliar, não publicado) fica subestimado no Tocantins e superestimado no restante de Goiás.",
+    "tempo_vocabulario_2010": "As cinco faixas de tempo de deslocamento de 2010 não são aninhadas nas oito de 2022 (a segunda faixa de 2010 atravessa duas de 2022), e 2010 não mede minutos. As distribuições não formam série; cada edição publica o próprio vocabulário."
   },
   "tipologia_iem": {
     "classes": [

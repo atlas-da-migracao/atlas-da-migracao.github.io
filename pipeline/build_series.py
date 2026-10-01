@@ -23,26 +23,17 @@ Decisões de escopo tomadas nesta implementação (documentadas aqui porque não
 óbvio para o leitor de `build_series.py` encontrá-las juntas; a metodologia de fundo, os
 limiares e a harmonização de vocabulário continuam em `pipeline/comparabilidade_regras.py`):
 
-1. **Unidade agregada `NORTEGO` (1980)**. Não é um `cd_mun` de 2022, então não entra no loop
-   dos 5.570 códigos de `unidades_serie` nível `mun`. Ganha, em vez disso, UMA linha extra
-   `(nivel='mun', codigo='NORTEGO', edicao='1980')` com as medidas calculadas a partir da linha
-   `NORTEGO` de `data/processed/1980/municipios.parquet` -- é a única forma de não perder a
-   informação que essa unidade carrega (pop, imig, emig...). As colunas de cobertura
-   (`existia`, `n_mun_edicao`, `n_mun_2022`, `cobertura_*`, `estado_cobertura`) não se aplicam a
-   ela (ficam `NULL`): cobertura mede a fração de um código de 2022 coberta, e `NORTEGO` não é
-   um código de 2022. Os 139 municípios de 2022 do atual Tocantins that mapeiam para ela via
-   `cd_mun_mae='NORTEGO'` continuam recebendo sua própria linha em cada edição, com
-   `existia=False` em 1980 e `cd_mun_mae='NORTEGO'` -- a interface os liga à série de
-   `NORTEGO`, nunca soma as duas.
+1. (Sem decisão 1: até 1.0.7-1980 havia aqui a unidade agregada `NORTEGO`; desde 1.1.0-1980 os 52
+   municípios do norte de Goiás são publicados como municípios comuns, com o código de 2022, e
+   não existe linha nem tratamento especial para eles. A numeração dos itens abaixo foi mantida
+   porque o código os cita por número.)
 
 2. **Cobertura territorial (`cobertura_pop`) credita o município-mãe, dentro do mesmo nível.**
    Um município de 2022 que não existia numa edição, mas cujo município-mãe (a) existe nessa
    edição e (b) pertence à MESMA unidade de 2022 num dado nível (mesma RGI/RGInt/UF/RM), tem seu
    território considerado coberto NAQUELE NÍVEL -- o território dele estava lá, só que agregado
    ao do mãe. Se o mãe pertence a uma unidade de 2022 diferente naquele nível (ex.: desmembra-
-   mento que atravessou fronteira de RGI), não é creditado. `NORTEGO` credita o território dos
-   139 municípios do atual Tocantins apenas no nível UF (ela tem UF preenchida e RGI/RGInt/RM
-   nulos -- ver `pipeline/sql/1980/MAPEAMENTO_norte_goias.md`). `cobertura_cod` NUNCA credita o
+   mento que atravessou fronteira de RGI), não é creditado. `cobertura_cod` NUNCA credita o
    mãe: mede só observação individual.
 
 3. **Medidas do Bloco 2 (`sistema_serie`) e a decomposição log-linear não são calculadas para
@@ -262,7 +253,7 @@ def _cobertura_mun(genealogia: pd.DataFrame, base2022: pd.DataFrame) -> pd.DataF
     cobertura = pd.concat(linhas, ignore_index=True)
     cobertura = cobertura.merge(membresia, on="cd_mun_2022", how="left")
 
-    # membresia do município-mãe (quando é um código real, não NORTEGO)
+    # membresia do município-mãe (NaN quando não há mãe)
     mae = membresia.rename(columns={
         "cd_mun_2022": "cd_mun_mae", "uf": "uf_mae", "cd_rgi": "cd_rgi_mae",
         "cd_rgint": "cd_rgint_mae", "cd_rm": "cd_rm_mae", "pop": "pop_mae",
@@ -276,8 +267,6 @@ def _cobertura_mun(genealogia: pd.DataFrame, base2022: pd.DataFrame) -> pd.DataF
         cobertura[f"coberto_{nivel}"] = cobertura.apply(
             lambda r, col=col, mae_col=mae_col: (
                 True if r["existia"]
-                else (col == "uf" and r["cd_mun_mae"] == "NORTEGO" and r["uf"] == "17")
-                if r["cd_mun_mae"] == "NORTEGO"
                 else (False if pd.isna(r.get(mae_col)) else r[col] == r[mae_col])
             ),
             axis=1,
@@ -640,8 +629,8 @@ def build_unidades_serie(genealogia: pd.DataFrame, base2022: pd.DataFrame,
     medidas_df = pd.concat(partes_medidas, ignore_index=True, sort=False)
     cobertura_df = pd.concat(partes_cobertura, ignore_index=True, sort=False)
 
-    # outer: uma unidade agregada de 2022 (ex.: uma RM ausente inteira de uma edição, como as 3
-    # RMs sem nenhum município em 1980) tem que aparecer na série com medidas NULL e
+    # outer: uma unidade agregada de 2022 (ex.: uma RM ausente inteira de uma edição, como a RM
+    # cujos municípios ainda não existiam em 1980) tem que aparecer na série com medidas NULL e
     # `estado_cobertura='sem_cobertura'`, não desaparecer -- `cobertura_df` é o esqueleto
     # completo (toda unidade de 2022 x toda edição); `medidas_df` só tem linha onde a unidade
     # aparece nas tabelas publicadas daquela edição.
@@ -679,14 +668,7 @@ def build_unidades_serie(genealogia: pd.DataFrame, base2022: pd.DataFrame,
     out.loc[mun_mask & existia_bool, "cobertura_pop"] = 1.0
     out.loc[mun_mask & ~existia_bool, "cobertura_pop"] = 0.0
 
-    # linha especial NORTEGO (1980): existia/cobertura não se aplicam (ver decisão de escopo 1).
-    nortego_mask = (out["nivel"] == "mun") & (out["codigo"] == "NORTEGO")
-    out.loc[nortego_mask, ["existia", "n_mun_edicao", "n_mun_2022", "cobertura_cod",
-                           "cobertura_pop"]] = None
-
     def _estado(row):
-        if row["nivel"] == "mun" and row["codigo"] == "NORTEGO":
-            return None
         cob_pop = row.get("cobertura_pop")
         cob_cod = row.get("cobertura_cod")
         n_ed = row.get("n_mun_edicao")
@@ -797,8 +779,8 @@ def build_pares_serie() -> pd.DataFrame:
                     # ausente: decidir o motivo
                     motivo = "suprimido"
                     if nivel == "mun":
-                        o_existia = existia_map.get((origem, edicao), edicao == "2022" or origem == "NORTEGO")
-                        d_existia = existia_map.get((destino, edicao), edicao == "2022" or destino == "NORTEGO")
+                        o_existia = existia_map.get((origem, edicao), edicao == "2022")
+                        d_existia = existia_map.get((destino, edicao), edicao == "2022")
                         if not (o_existia and d_existia):
                             motivo = "nao_existia"
                     if tipo == "trab" and not cap.pendular:

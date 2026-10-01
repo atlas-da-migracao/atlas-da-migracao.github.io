@@ -11,9 +11,11 @@
 --      transporte (ver 02_classify.sql pontos 9-10).
 --   3. FALLBACK DE NÚCLEO (igual a 1991): pipeline/rm_nucleo.csv é compartilhado entre todas as
 --      edições e não é alterado aqui. Nem toda RM de 2022 tem o município-núcleo existindo em
---      1980 -- em especial, municípios que hoje são núcleo de RM mas foram criados depois de
---      1980, ou que caem no território do atual Tocantins (excluído desta edição, ver
---      01_extract.sql/02_classify.sql ponto 4). Regra de fallback: IDÊNTICA à de
+--      1980 -- municípios que hoje são núcleo de RM mas foram criados depois de 1980. Caso
+--      concreto desde 1.1.0-1980, quando os 52 municípios do norte de Goiás passaram a ser
+--      publicados (antes, as RMs do Tocantins não apareciam na edição): a RM de Palmas (901),
+--      cujo núcleo no CSV, Palmas (1721000), não existe em 1980 -- o núcleo efetivo é o membro
+--      mais populoso presente, Porto Nacional. Regra de fallback: IDÊNTICA à de
 --      pipeline/build_rm_nucleo.py quando não há homônimo -- o município MAIS POPULOSO (pop de
 --      municipios_bruto, desempate por cd_mun) entre os membros da RM que existem na malha
 --      desta edição. `nm_nucleo` publicado em rm_resumo_bruto vem da mesma fonte que resolve

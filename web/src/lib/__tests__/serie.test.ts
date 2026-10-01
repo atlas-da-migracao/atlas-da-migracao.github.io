@@ -158,7 +158,7 @@ describe("fraseSintese", () => {
     expect(frase).toContain("Santarém");
   });
 
-  it("T3 -- truncado, com NORTEGO (unidade agregada)", () => {
+  it("T3 -- truncado, município criado depois de 1980 (Palmas, mãe Porto Nacional)", () => {
     const entrada: EntradaFrase = {
       nome: "Palmas", nivel: "mun",
       pontos: [
@@ -166,21 +166,50 @@ describe("fraseSintese", () => {
         ponto({ edicao: "1991", iem: 0.52, tipo: "absorcao_forte", imig: 900, emig: 300 }),
         ponto({ edicao: "2022", iem: 0.36, tipo: "absorcao_forte", imig: 1200, emig: 500 }),
       ],
-      mae: { nome: "Norte de Goiás (atual Tocantins)", edicoes: ["1980"], agregada: true },
+      mae: { nome: "Porto Nacional", edicoes: ["1980"], agregada: false },
     };
     const frase = fraseSintese(entrada);
-    // mãe de código não numérico = unidade agregada: o território é PUBLICADO (junto com outros),
-    // a frase não afirma criação posterior
-    expect(frase).toContain("publicado agregado em Norte de Goiás (atual Tocantins)");
+    expect(frase).toContain("foi criado depois de 1980; até então seu território fazia parte de Porto Nacional");
+    expect(frase).not.toContain("publicado agregado");
+  });
+
+  // O mecanismo de unidade agregada está INATIVO (nenhuma edição declara uma desde 1.1.0-1980),
+  // mas segue no código: estes testes o mantêm coberto com uma mãe sintética de código não numérico.
+  it("T3 -- mãe agregada (código não numérico): 'publicado agregado em', sem afirmar criação posterior", () => {
+    const entrada: EntradaFrase = {
+      nome: "Município X", nivel: "mun",
+      pontos: [
+        ponto({ edicao: "1980", estado: "nao_existia" }),
+        ponto({ edicao: "1991", iem: 0.52, tipo: "absorcao_forte", imig: 900, emig: 300 }),
+        ponto({ edicao: "2022", iem: 0.36, tipo: "absorcao_forte", imig: 1200, emig: 500 }),
+      ],
+      mae: { nome: "Unidade agregada sintética", codigo: "AGREG01", edicoes: ["1980"], agregada: true },
+    };
+    const frase = fraseSintese(entrada);
+    // o território é PUBLICADO (junto com outros): a frase não afirma criação posterior
+    expect(frase).toContain("publicado agregado em Unidade agregada sintética");
     expect(frase).toContain("Em 1980");
     expect(frase).not.toContain("foi criado depois");
   });
 
+  it("T5 -- mãe agregada: 'Nas demais edições' diz que o território é publicado agregado", () => {
+    const entrada: EntradaFrase = {
+      nome: "Município X", nivel: "mun",
+      pontos: [
+        ponto({ edicao: "1980", estado: "nao_existia" }),
+        ponto({ edicao: "2022", iem: 0.36, tipo: "absorcao_forte", imig: 1200, emig: 500 }),
+      ],
+      mae: { nome: "Unidade agregada sintética", codigo: "AGREG01", edicoes: ["1980"], agregada: true },
+    };
+    const frase = fraseSintese(entrada);
+    expect(frase).toContain("Nas demais edições, o território é publicado agregado em Unidade agregada sintética.");
+  });
+
   it("T6 -- mãe agregada: 'Abra a série' diz 'em que o território está agregado'", () => {
     const entrada: EntradaFrase = {
-      nome: "Palmas", nivel: "mun",
+      nome: "Município X", nivel: "mun",
       pontos: [ponto({ edicao: "1980", estado: "nao_existia" })],
-      mae: { nome: "Norte de Goiás (atual Tocantins)", edicoes: ["1980"], agregada: true },
+      mae: { nome: "Unidade agregada sintética", codigo: "AGREG01", edicoes: ["1980"], agregada: true },
     };
     const frase = fraseSintese(entrada);
     expect(frase).toContain("em que o território está agregado");
@@ -565,12 +594,13 @@ describe("maeDaSerie", () => {
     expect(mae).toBeUndefined();
   });
 
-  it("mãe de código não numérico (NORTEGO) = agregada", () => {
+  it("mãe de código não numérico (unidade agregada sintética) = agregada", () => {
     const mae = maeDaSerie([
-      lin("1980", false, "NORTEGO", "Norte de Goiás (atual Tocantins)"),
+      lin("1980", false, "AGREG01", "Unidade agregada sintética"),
       lin("1991", true), lin("2022", true),
     ], TODAS);
     expect(mae?.agregada).toBe(true);
+    expect(mae?.codigo).toBe("AGREG01");
     expect(mae?.edicoes).toEqual(["1980"]);
   });
 });

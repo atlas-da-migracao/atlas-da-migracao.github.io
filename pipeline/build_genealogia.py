@@ -1,6 +1,6 @@
 """Genealogia municipal (F12.1): para cada município de 2022 e cada edição antiga (2010, 2000,
 1991, 1980), registra se o território já existia naquela edição e, se não, de qual município
-(ou unidade agregada) da época seu território fazia parte -- por SOBREPOSIÇÃO ESPACIAL das
+da época seu território fazia parte -- por SOBREPOSIÇÃO ESPACIAL das
 malhas municipais, nunca por reconstrução de AMC (ver plano, "Decisões arquiteturais -> 1.
 Genealogia municipal como metadado, não como unidade de análise"). Não toca em `data/raw*`/
 `data/interim*`; lê só `data/geo/raw/**` (malhas públicas do IBGE) e
@@ -18,11 +18,11 @@ Saídas:
                                           da malha bruta -- que traz mojibake (2000, CP437 lido
                                           como Latin-1) e CAIXA ALTA SEM ACENTO (1991/2010); ver
                                           `_resolver_nomes_mae`, que também é a asserção de
-                                          integridade (toda mãe não-NORTEGO tem que existir em
-                                          municipios_ref da edição).
+                                          integridade (toda mãe tem que existir em municipios_ref
+                                          da edição).
   pipeline/area_km2.parquet          -- nivel, codigo, edicao, area_km2 (mun/rgi/rgint/uf, nas
                                           cinco edições -- ver F12.3, β de Fielding).
-  docs/genealogia.md                 -- relatório (contagens, casos-âncora, NORTEGO).
+  docs/genealogia.md                 -- relatório (contagens, casos-âncora, Tocantins em 1980).
 
 Método (município ausente da malha da edição, por código):
   1. `ST_SetCRS(geom, 'EPSG:4674')` nas duas malhas antes de qualquer operação -- as malhas
@@ -36,16 +36,12 @@ Método (município ausente da malha da edição, por código):
   3. Sem NENHUMA interseção (ilhas/arquipélagos): casa por centroide (`ST_PointOnSurface`) mais
      próximo (`ST_Distance` mínima) -- `metodo = 'sem_intersecao_por_centroide'`. Sem nenhum
      candidato (malha antiga vazia): `metodo = 'sem_correspondencia'`, `cd_mun_mae = NULL`.
-  4. CASO ESPECIAL -- `NORTEGO` (edição 1980): o território do atual Tocantins (UF '17', 139
-     municípios de 2022) é publicado pela edição 1980 como UMA unidade agregada, porque a fonte
-     tabular não distingue os 52 municípios que o compunham em 1980 (ver
-     `pipeline/unidades_agregadas_1980.py`). A malha bruta de 1980 (`geo/fetch_1980.sh`) já chega
-     com essas 52 feições DISSOLVIDAS numa só, `CD_MUN = 'NORTEGO'` -- a sobreposição espacial
-     acharia esse polígono sozinho para os 139 municípios de Tocantins (ele cobre exatamente essa
-     área), com `metodo` genérico `'unico_pai'`. Isso mascararia a unidade agregada: por isso os
-     139 municípios de UF '17' são tratados à parte, ANTES do cálculo espacial genérico, com
-     `cd_mun_mae = 'NORTEGO'` e `metodo = 'unidade_agregada'` fixos -- o dado publicado não
-     distingue os 52 municípios de origem, então a genealogia não pode fingir que distingue.
+  (Sem caso especial para o norte de Goiás/Tocantins em 1980: desde 1.1.0-1980 os 52 municípios
+  do território são publicados como municípios comuns, com o código de 2022 -- ver
+  `pipeline/norte_goias_1980.py` --, e a malha bruta de 1980 traz as 52 feições separadas. Esses
+  52 caem em `existia = True` pelo casamento de código; os 87 municípios de 2022 do Tocantins
+  criados depois de 1980 recebem a mãe por este mesmo método de sobreposição, como qualquer
+  outro município ausente.)
 
 Área por edição (F12.3, β de Fielding): a malha de 2022 já traz `AREA_KM2` pronta no shapefile
 (campo do IBGE); as demais são calculadas transformando a geometria para a MESMA cônica
@@ -67,7 +63,6 @@ import duckdb
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 from edicoes import edicao as get_edicao  # noqa: E402
-from unidades_agregadas_1980 import NORTE_GOIAS  # noqa: E402
 
 EDICOES_ANTIGAS = ["2010", "2000", "1991", "1980"]
 TODAS_EDICOES = ["2022"] + EDICOES_ANTIGAS
@@ -126,34 +121,19 @@ def _genealogia_edicao(con: duckdb.DuckDBPyConnection, nome: str) -> list[dict]:
     """Uma linha por município de 2022 para a edição `nome` (2010/2000/1991/1980)."""
     linhas: list[dict] = []
 
-    # -- caso especial NORTEGO (só 1980): tratado À PARTE, antes do cálculo espacial genérico,
-    # para os 139 municípios de UF '17' (Tocantins) -- ver docstring do módulo, passo 4.
-    tocantins: set[str] = set()
-    if nome == "1980":
-        tocantins_rows = con.execute(
-            "SELECT cd_mun, nm_mun FROM m2022 WHERE uf = '17'"
-        ).fetchall()
-        tocantins = {cd for cd, _ in tocantins_rows}
-        for cd, nm in tocantins_rows:
-            linhas.append({
-                "cd_mun_2022": cd, "nm_mun_2022": nm, "edicao": nome,
-                "existia": False, "cd_mun_mae": NORTE_GOIAS, "nm_mun_mae": None,
-                "metodo": "unidade_agregada",
-            })
-
     # -- existia: código igual na malha da edição.
     existia_rows = con.execute("""
         SELECT m.cd_mun, m.nm_mun
         FROM m2022 m JOIN m_edicao e ON m.cd_mun = e.cd_mun_e
     """).fetchall()
-    existia_codes = {cd for cd, _ in existia_rows} | tocantins
+    existia_codes = {cd for cd, _ in existia_rows}
     for cd, nm in existia_rows:
         linhas.append({
             "cd_mun_2022": cd, "nm_mun_2022": nm, "edicao": nome,
             "existia": True, "cd_mun_mae": None, "nm_mun_mae": None, "metodo": "existia",
         })
 
-    # -- ausentes (exceto Tocantins em 1980, já tratado acima): sobreposição espacial.
+    # -- ausentes: sobreposição espacial.
     exceto = ", ".join(f"'{c}'" for c in existia_codes) or "''"
     con.execute(f"""
         CREATE OR REPLACE TABLE ausentes AS
@@ -247,9 +227,8 @@ def _resolver_nomes_mae(con: duckdb.DuckDBPyConnection, nome: str, linhas: list[
     `NM_MUN` da malha bruta -- que traz mojibake em 2000 e CAIXA ALTA SEM ACENTO em 1991/2010,
     ver auditoria do F12.1). Modifica `linhas` in place.
 
-    Também é a única asserção de integridade do módulo: todo `cd_mun_mae` não-nulo (exceto o
-    sentinela `NORTEGO`, tratado à parte) tem que existir em `municipios_ref` da edição -- essa
-    garantia é o que protege contra o código-sentinela `'0'` presente na malha bruta de 2000 e
+    Também é a única asserção de integridade do módulo: todo `cd_mun_mae` não-nulo tem que
+    existir em `municipios_ref` da edição -- essa garantia é o que protege contra o código-sentinela `'0'` presente na malha bruta de 2000 e
     contra as "duas lagoas do RS" que aparecem em algumas malhas mas não são município publicado
     (ver `docs/METODOLOGIA.md`, item 9) entrando como pai por engano.
     """
@@ -258,7 +237,7 @@ def _resolver_nomes_mae(con: duckdb.DuckDBPyConnection, nome: str, linhas: list[
     ).fetchall())
 
     maes = {l["cd_mun_mae"] for l in linhas if l["cd_mun_mae"] is not None}
-    faltando = maes - {NORTE_GOIAS} - set(ref_map)
+    faltando = maes - set(ref_map)
     if faltando:
         raise AssertionError(
             f"edição {nome}: cd_mun_mae fora de municipios_ref.parquet: {sorted(faltando)} -- "
@@ -282,8 +261,7 @@ def _area_edicao(con: duckdb.DuckDBPyConnection, nome: str) -> list[dict]:
     else:
         # Restrito às unidades PUBLICADAS pela edição (municipios_ref) -- a malha bruta pode
         # trazer feições extras sem par publicado (placeholders/artefatos de água, ver
-        # EXCLUIDOS em build_centroids.py); a unidade agregada NORTEGO (1980) está em
-        # municipios_ref e passa por este mesmo filtro, sem tratamento especial.
+        # EXCLUIDOS em build_centroids.py).
         ref = con.execute(
             f"SELECT cd_mun, cd_rgi, cd_rgint, uf FROM read_parquet('{_municipios_ref_path(nome).as_posix()}')"
         ).fetchdf()
@@ -330,23 +308,24 @@ def _escrever_relatorio(con: duckdb.DuckDBPyConnection, genealogia: list[dict]) 
 
     linhas_md.append("## Ausência por edição\n")
     linhas_md.append("| Edição | Municípios de 2022 ausentes na malha | `multiplos_pais` | "
-                      "`sem_intersecao_por_centroide` | `sem_correspondencia` | `unidade_agregada` |")
-    linhas_md.append("|---|---:|---:|---:|---:|---:|")
+                      "`sem_intersecao_por_centroide` | `sem_correspondencia` |")
+    linhas_md.append("|---|---:|---:|---:|---:|")
     resumo = con.execute("""
         SELECT edicao,
                SUM(CASE WHEN NOT existia THEN 1 ELSE 0 END) AS ausentes,
                SUM(CASE WHEN metodo = 'multiplos_pais' THEN 1 ELSE 0 END) AS multiplos,
                SUM(CASE WHEN metodo = 'sem_intersecao_por_centroide' THEN 1 ELSE 0 END) AS centroide,
-               SUM(CASE WHEN metodo = 'sem_correspondencia' THEN 1 ELSE 0 END) AS sem_corresp,
-               SUM(CASE WHEN metodo = 'unidade_agregada' THEN 1 ELSE 0 END) AS agregada
+               SUM(CASE WHEN metodo = 'sem_correspondencia' THEN 1 ELSE 0 END) AS sem_corresp
         FROM _gen_df GROUP BY edicao
         ORDER BY CASE edicao WHEN '2010' THEN 1 WHEN '2000' THEN 2 WHEN '1991' THEN 3 WHEN '1980' THEN 4 END
     """).fetchall()
-    esperado = {"2010": 8, "2000": 66, "1991": 1082, "1980": 1634}
-    for ed, ausentes, multiplos, centroide, sem_corresp, agregada in resumo:
+    # 1980: 1.634 -> 1.582 em 1.1.0-1980 (os 52 códigos do norte de Goiás, antes ausentes da malha
+    # porque dissolvidos em `NORTEGO`, agora têm par; 1.634 - 52).
+    esperado = {"2010": 8, "2000": 66, "1991": 1082, "1980": 1582}
+    for ed, ausentes, multiplos, centroide, sem_corresp in resumo:
         linhas_md.append(
             f"| {ed} | {ausentes} (esperado ~{esperado[ed]}, `docs/METODOLOGIA.md`) | {multiplos} | "
-            f"{centroide} | {sem_corresp} | {agregada} |"
+            f"{centroide} | {sem_corresp} |"
         )
     linhas_md.append(
         "\nA contagem \"esperado\" de `docs/METODOLOGIA.md` mede **códigos de `labels.RECORTES` "
@@ -384,20 +363,29 @@ def _escrever_relatorio(con: duckdb.DuckDBPyConnection, genealogia: list[dict]) 
         )
     linhas_md.append("")
 
-    linhas_md.append("## `NORTEGO` como pai em 1980 (Tocantins)\n")
-    n_nortego = con.execute(
-        "SELECT COUNT(*) FROM _gen_df WHERE edicao='1980' AND cd_mun_mae='NORTEGO'"
-    ).fetchone()[0]
-    n_agregada = con.execute(
-        "SELECT COUNT(*) FROM _gen_df WHERE edicao='1980' AND metodo='unidade_agregada'"
-    ).fetchone()[0]
+    linhas_md.append("## Tocantins em 1980\n")
+    # UF '17' vem de municipios_ref de 2022 (a genealogia não carrega UF). Os 52 municípios do
+    # norte de Goiás chegam como `existia = true` (código de 2022 na malha e na edição); os demais
+    # 87 são municípios criados depois e recebem a mãe pelo método genérico, sem caso especial.
+    n_to, n_to_existia = con.execute(
+        "SELECT COUNT(*), COUNT(*) FILTER (WHERE g.existia) FROM _gen_df g JOIN read_parquet('"
+        + _municipios_ref_path("2022").as_posix()
+        + "') r ON r.cd_mun = g.cd_mun_2022 WHERE g.edicao = '1980' AND r.uf = '17'"
+    ).fetchone()
+    por_metodo = con.execute(
+        "SELECT g.metodo, COUNT(*) FROM _gen_df g JOIN read_parquet('"
+        + _municipios_ref_path("2022").as_posix()
+        + "') r ON r.cd_mun = g.cd_mun_2022 WHERE g.edicao = '1980' AND r.uf = '17' "
+        "AND NOT g.existia GROUP BY g.metodo ORDER BY g.metodo"
+    ).fetchall()
+    detalhe = ", ".join(f"{n} com `metodo = '{m}'`" for m, n in por_metodo) or "nenhum"
     linhas_md.append(
-        f"{n_nortego} municípios de 2022 têm `cd_mun_mae = 'NORTEGO'` na edição 1980, dos quais "
-        f"{n_agregada} com `metodo = 'unidade_agregada'` (os 139 municípios de UF '17', "
-        "Tocantins -- tratados à parte da sobreposição espacial genérica, ver docstring do "
-        "módulo, passo 4: o dado publicado de 1980 não distingue os 52 municípios de origem, "
-        "então nenhum deles pode aparecer como pai único mesmo que a malha traga o polígono "
-        "real dissolvido sob o mesmo código.)\n"
+        f"Dos {n_to} municípios de 2022 na UF '17' (Tocantins), {n_to_existia} já existiam em "
+        "1980 (`existia = true`: os 52 municípios do norte de Goiás, que a edição 1980 publica "
+        "como municípios comuns, com o código de 2022 -- ver `pipeline/norte_goias_1980.py`) e "
+        f"{n_to - n_to_existia} foram criados depois: recebem a mãe por sobreposição de área com "
+        f"a malha de 1980, pelo mesmo caminho genérico de qualquer outro município ausente "
+        f"({detalhe}). Não há caso especial nem unidade agregada.\n"
     )
 
     linhas_md.append("## Cobertura de RGI/RGInt/RM por edição\n")

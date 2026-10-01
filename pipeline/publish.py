@@ -186,13 +186,13 @@ def main() -> None:
     # era uma unidade da edição (sem população, malha ou recorte) e somá-la a fluxos.parquet
     # deixaria municípios com o maior fluxo de entrada invisível no mapa.
     #
-    # Esse bloco foi REMOVIDO, não desativado, porque a premissa dele deixou de valer: desde
-    # 1.0.2-1980 o norte de Goiás É uma unidade publicada ('NORTEGO' em municipios_ref, em
-    # municipios.parquet e na malha -- ver pipeline/unidades_agregadas_1980.py), então os
-    # mesmos fluxos entram em `fluxos.parquet` pelo caminho normal, com origem clicável dos
-    # dois lados, e a tabela separada seria uma segunda publicação do mesmo dado sob outro
-    # regime. Nada aqui precisa de código especial para a unidade agregada: ela é uma linha de
-    # `municipios_ref` como as outras.
+    # Esse bloco foi REMOVIDO, não desativado, porque a premissa dele deixou de valer: de
+    # 1.0.2 a 1.0.7-1980 o norte de Goiás foi uma unidade publicada ('NORTEGO'), e desde
+    # 1.1.0-1980 os 52 municípios são publicados um a um, com o código de 2022 (fonte censobr;
+    # ver pipeline/norte_goias_1980.py). Nos dois casos os mesmos fluxos entram em
+    # `fluxos.parquet` pelo caminho normal, com origem clicável dos dois lados, e a tabela
+    # separada seria uma segunda publicação do mesmo dado sob outro regime. Nada aqui precisa
+    # de código especial para esse território.
 
     # ================= F2b: pendular e metropolitano =================
     # Edições sem quesito de deslocamento pendular no questionário (ex.: Censo 1991,

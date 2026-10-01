@@ -28,9 +28,10 @@ export interface Edicao {
     /** tempo de deslocamento em minutos (mediana); só faixas categóricas quando false */
     tempoMinutos: boolean;
     /** dimensão de renda (pessoal e do trabalho principal, ver lib/paletas DIMENSOES.renda e
-     *  DIMENSOES_PENDULAR.renda_trab); false só no Censo 1980, cuja fonte (Base dos Dados) só
-     *  tem as variáveis de rendimento preenchidas no Ceará (0,0% nas outras 26 UFs) -- por isso
-     *  a edição não publica nenhuma coluna de renda, nem pessoal nem do trabalho. Ver
+     *  DIMENSOES_PENDULAR.renda_trab); false só no Censo 1980: a edição não publica nenhuma
+     *  coluna de renda, nem pessoal nem do trabalho (a fonte anterior, a Base dos Dados, só
+     *  tinha rendimento no Ceará; a atual, o censobr/IPEA, o traz, mas a renda de 1980 ainda não
+     *  foi mapeada nem validada para publicação). Ver
      *  docs/METODOLOGIA.md, "Edição Censo 1980 e comparabilidade", item 7. Componentes que
      *  mostram filtro/dimensão de renda devem esconder/desabilitar quando `false`, no mesmo
      *  padrão usado para `modo`/`tempoMinutos`. */
@@ -152,7 +153,8 @@ export const EDICOES: Record<Censo, Edicao> = {
     periodo: { de: "1975-09-01", ate: "1980-09-01" },
     // pendular completo a partir de v527 (município que trabalha/estuda); sem meio de
     // transporte nem tempo/frequência (quesitos que só existem a partir de 2010); sem renda
-    // (fonte só tem as variáveis de rendimento preenchidas no Ceará -- ver `renda` acima);
+    // (a fonte atual, censobr/IPEA, traz rendimento, mas ele ainda não foi mapeado nem validado
+    // para publicação -- ver `renda` acima);
     // sem posição na ocupação (o questionário não distingue com/sem carteira/estatutário --
     // ver `posicao` acima).
     recursos: { rm: true, pendular: true, modo: false, tempoMinutos: false, renda: false, posicao: false },

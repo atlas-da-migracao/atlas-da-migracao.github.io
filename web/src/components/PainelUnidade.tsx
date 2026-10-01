@@ -63,7 +63,8 @@ interface Props {
   unidade: UnidadeAgregada | null;
   /** F9.7-b: true quando há uma unidade selecionada (URL/estado), as unidades deste nível/edição
    *  já carregaram, e mesmo assim ela não foi encontrada -- ex.: link para uma região imediata
-   *  de Tocantins numa edição anterior a 1988. Calculado em App.tsx; ver PainelMunicipio. */
+   *  de 2022 que não tem nenhum município na edição aberta (fronteira agrícola criada depois
+   *  dela). Calculado em App.tsx; ver PainelMunicipio. */
   naoEncontrado: boolean;
   fluxos: (Fluxo & { direcao?: string })[];
   carregando: boolean;

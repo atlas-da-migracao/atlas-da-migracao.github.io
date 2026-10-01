@@ -132,8 +132,8 @@ export const useStore = create<Estado>((set, get) => ({
   // volta para o Brasil inteiro e ele tinha de refazer a navegação a cada edição.
   //
   // Manter o código é seguro mesmo quando ele não existe na edição de destino (os recortes
-  // territoriais mudam entre censos: 1980 tem 3.940 municípios contra 5.570 em 2022, o
-  // Tocantins não existia, e a lista de RMs é retroativa por edição). Esse caso já tinha
+  // territoriais mudam entre censos: 1980 tem 3.991 municípios contra 5.570 em 2022, e a
+  // lista de RMs é retroativa por edição). Esse caso já tinha
   // tratamento próprio e continua valendo: `municipioNaoEncontrado`/`unidadeNaoEncontrada`
   // em App.tsx alimentam a prop `naoEncontrado` dos painéis, e `PainelRM.tsx` tem o guard
   // equivalente -- o painel diz que aquela unidade não existe naquele ano em vez de ficar

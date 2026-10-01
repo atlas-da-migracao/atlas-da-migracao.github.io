@@ -266,6 +266,21 @@ Os três itens do "Resumo para F9.2/F9.3" acima estão **decididos**. Justificat
    Cobertura final: 29.200.415 registros, Σ peso 118.272.013 (99,39%), 3.939 municípios. Os 52
    códigos também não são publicados como origem (30.656 registros vão para "origem não
    informada", com a UF de origem preservada).
+
+   > **Conclusão superada (auditoria de 30/09/2026; versão `1.1.0-1980`).** "Inviável" valia para
+   > a Base dos Dados, não para os microdados. A causa do nulo é um `merge m:1 id_municipio_6` do
+   > código de 1980 contra o diretório **atual** de municípios no do-file Stata que constrói a
+   > tabela (`basedosdados/mais`, `bases/br_ibge_censo_demografico/code/build.do`): os `52xxxx` do
+   > norte de Goiás e o `20xxxx` de Fernando de Noronha não casam e o código original é descartado
+   > antes do dbt — por isso as quatro camadas sondadas tinham os mesmos nulos. A opção (i) do resumo
+   > acima era, em substância, a certa, só que com outra fonte: o Parquet do censobr/IPEA v1.0.0 traz
+   > o código de 1980 dos 178.636 registros, e desde `1.1.0-1980` é a fonte da edição inteira; os 52
+   > são publicados como municípios comuns, recodificados para o código de 2022. Também é falso que
+   > a cópia DBF não tenha `V517` (o campo `MITEMPMU` existe e bate com `v517`; só `V518` falta), e
+   > o join posicional rejeitado aqui não era a única forma de casar BD e DBF: a vinculação por
+   > atributos funciona e ficou como plano B. Ver `pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md` e
+   > `pipeline/sql/1980/MAPEAMENTO_norte_goias.md` §1.1 e §2.4. O item (a) acima ("o crosswalk usado
+   > pela BD não cobre códigos pré-1988") estava certo na direção e impreciso no mecanismo.
 2. **Fernando de Noronha — regra escrita.** Atribuição por `sigla_uf = 'FN'` → `cd_mun = '2605459'`,
    `uf = '26'`; e, no lado da origem, `v518`/`v527` iguais a `'2000107'` (141 registros) ou
    `'2000008'` (30) → `'2605459'`; `v512 = 14` (670) → `nasc_uf = '26'`.

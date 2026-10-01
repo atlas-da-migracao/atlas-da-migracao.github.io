@@ -539,10 +539,11 @@ export interface EntradaFrase {
   nivel: NivelSerie;
   pontos: PontoFrase[];
   /** Município de origem quando esta unidade não existia em alguma edição marcada (ver
-   *  `maeDaSerie`). `agregada`: o código da mãe não é numérico (unidade agregada da edição,
-   *  ex.: `NORTEGO` em 1980) -- a frase diz "publicado agregado em", NÃO "foi criado depois de":
-   *  a coluna segue sem número, mas não se afirma criação posterior. `ultimaEdicaoAusente` =
-   *  edição mais recente (da série completa) em que a unidade ainda não existia. */
+   *  `maeDaSerie`). `agregada`: o código da mãe não é numérico (unidade agregada da edição --
+   *  mecanismo genérico, hoje inativo: nenhuma edição declara uma desde 1.1.0-1980) -- a frase
+   *  diz "publicado agregado em", NÃO "foi criado depois de": a coluna segue sem número, mas
+   *  não se afirma criação posterior. `ultimaEdicaoAusente` = edição mais recente (da série
+   *  completa) em que a unidade ainda não existia. */
   mae?: {
     nome: string; edicoes: string[]; agregada: boolean; codigo?: string; ultimaEdicaoAusente?: string;
   };
@@ -608,7 +609,7 @@ const ehCodigoNumerico = (c: string): boolean => /^\d+$/.test(c);
  *  não existia -- a que cedeu o território por último -- e não a da primeira edição com mãe: para
  *  ~137 municípios a mãe muda entre edições (a mãe de 1980 de um município criado em 2013 pode ser
  *  uma terceira, que já tinha perdido o território antes). `agregada`: o código da mãe não é
- *  numérico (unidade agregada da edição, ex.: `NORTEGO`). */
+ *  numérico (unidade agregada da edição; caso genérico, hoje inativo). */
 export function maeDaSerie(
   linhas: readonly Pick<LinhaSerieFrase, "edicao" | "existia" | "cd_mun_mae" | "nm_mun_mae">[],
   edicoesMarcadas: readonly EdicaoSerie[],
@@ -753,9 +754,10 @@ function ressalvaCobertura(entrada: EntradaFrase, fim: PontoFrase): string | nul
 
 function prefixoTruncamento(entrada: EntradaFrase): string | null {
   if (!entrada.mae) return null;
-  // Mãe de código não numérico = unidade agregada da edição (ex.: `NORTEGO`, 1980): o território
-  // É publicado, só que junto com outros. A coluna da edição fica sem número, mas a frase NÃO
-  // afirma "foi criado depois de" -- não se sabe (nem se diz) quando a separação aconteceu.
+  // Mãe de código não numérico = unidade agregada da edição (caso genérico, hoje inativo): o
+  // território É publicado, só que junto com outros. A coluna da edição fica sem número, mas a
+  // frase NÃO afirma "foi criado depois de" -- não se sabe (nem se diz) quando a separação
+  // aconteceu.
   if (entrada.mae.agregada) {
     const anos = entrada.mae.edicoes.length > 0 ? `Em ${entrada.mae.edicoes.join(", ")}` : "Em edições anteriores";
     return `${anos}, ${entrada.nome} não tem número próprio: o território é publicado agregado em ` +

@@ -118,7 +118,7 @@ export function poligonoEspiga(
  *           1980  841.965
  *
  *  Por quê: normalizar cada edição pelo PRÓPRIO maior valor (o que o mapa fazia antes desta
- *  correção) faz edições com distribuição menos concentrada -- 1980 tem só 3.940 unidades e,
+ *  correção) faz edições com distribuição menos concentrada -- 1980 tem só 3.991 unidades e,
  *  no proxy de data fixa, mais municípios ficam com saldo próximo do maior valor da própria
  *  edição -- parecerem muito mais "cheias" de espigas grandes que as outras, mesmo quando o
  *  volume absoluto é menor (o maior saldo de 1980, 150.660, é 3,5x menor que o de 2000). Uma

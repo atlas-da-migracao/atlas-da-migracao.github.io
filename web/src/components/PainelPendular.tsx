@@ -49,9 +49,9 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }
   // vêm undefined nessa edição, e a dimensão correspondente nem é publicada em
   // pendular_trab_dim_bruto.parquet (07_pendular.sql), então tem de ser filtrada aqui como
   // "modo" já era.
-  // 1980 não tem renda (nem pessoal, nem do trabalho principal -- fonte só preenche as
-  // variáveis de rendimento no Ceará, ver docs/METODOLOGIA.md, "Edição Censo 1980 e
-  // comparabilidade", item 7): mesmo `recursos.renda` que esconde a dimensão "renda" nos
+  // 1980 não publica renda (nem pessoal, nem do trabalho principal -- a fonte atual, censobr/
+  // IPEA, traz rendimento, mas ele ainda não foi mapeado nem validado; ver docs/METODOLOGIA.md,
+  // "Edição Censo 1980 e comparabilidade", item 7): mesmo `recursos.renda` que esconde a dimensão "renda" nos
   // outros painéis também esconde "renda_trab" aqui.
   // 1980 também não tem "posicao" (o questionário não distingue empregado com/sem carteira/
   // militar estatutário, os únicos valores que o vocabulário do atlas usa para essa dimensão
@@ -127,6 +127,14 @@ export function PainelPendular({ origem, destino, tipo, escuro, aoFechar, meta }
         </div>
         <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
       </header>
+
+      {/* universo do quesito (hoje só 1980, estudo: 10 anos ou mais) -- texto vem do meta,
+          mesma nota que a série mostra (pend_estudo_universo_1980), nunca hardcoded aqui */}
+      {tipo === "estudo" && meta?.aviso_pendular_estudo && (
+        <div className="aviso aviso-unidade" role="note">
+          <p><strong>Universo desta edição.</strong> {meta.aviso_pendular_estudo}</p>
+        </div>
+      )}
 
       <div className="kpis">
         <div className="kpi">

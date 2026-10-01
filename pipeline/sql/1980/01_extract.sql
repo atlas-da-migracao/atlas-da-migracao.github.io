@@ -2,36 +2,45 @@
 -- Parquet -- não há largura fixa a parsear, ao contrário de 1991/2000/2010) para Parquet
 -- intermediário. Override de pipeline/sql/01_extract.sql.
 --
+-- FONTE (desde 1.1.0-1980): o Parquet do censobr/IPEA v1.0.0, convertido por
+-- scripts/prep_1980_censobr.py para o mesmo esquema de 39 colunas que a Base dos Dados (BD)
+-- fornecia até 1.0.7-1980, célula a célula idêntico a ela nas colunas que a edição usa (gates
+-- de identidade em docs/qa/censobr_1980.md; ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md).
+-- A diferença que importa: a BD perdia o código de município de 178.636 registros -- os 52
+-- municípios do norte de Goiás (hoje Tocantins) e Fernando de Noronha, num `merge` contra o
+-- diretório ATUAL de municípios --, e o censobr traz `code_muni` para todos, na malha de 1980
+-- (52xxxxx e 2000107). Entre 1.0.2 e 1.0.7-1980 esses 52 foram publicados como UMA unidade
+-- agregada, 'NORTEGO'; ver MAPEAMENTO_norte_goias.md para a história.
+--
 -- Ver pipeline/sql/1980/MAPEAMENTO_02_classify.md (§0-§9) e
 -- pipeline/sql/1980/CABECALHO_02_classify.txt para a justificativa completa de cada decisão.
 -- Resumo das armadilhas que importam a este script:
---   - 178.338 registros de sigla_uf='GO' chegam com id_municipio NULL (norte de Goiás, hoje
---     Tocantins): a Base dos Dados não publica o código de 6 dígitos original e não há como
---     recuperá-lo -- a sondagem das quatro camadas da BD (produção, dev e as duas variantes de
---     staging) achou exatamente os mesmos 178.338 nulos em todas, então o campo é nulo na
---     ORIGEM, não é efeito de safe_cast (ver MAPEAMENTO §3 e MAPEAMENTO_norte_goias.md).
---     Até 1.0.1-1980 eles eram EXCLUÍDOS. Desde 1.0.2-1980 recebem cd_mun = 'NORTEGO', a
---     UNIDADE AGREGADA que a edição publica no lugar dos 52 municípios (uma unidade com
---     população, imigração, emigração, saldo, pendular e malha próprias -- ver
---     pipeline/unidades_agregadas_1980.py). Cobertura final: 29.378.753 registros,
---     Sigma peso 119.011.062 (100,0% dos recenseados).
---   - Fernando de Noronha (sigla_uf='FN', 298 registros) chega com id_municipio NULL --
---     atribuído a '2605459' por sigla_uf, nos dois lados (residência e origem/trabalho/
---     estudo). É o único município cuja UF publicada (26, PE) não é a UF de 1980 (território
---     federal). Ver MAPEAMENTO §4.
+--   - Os 52 municípios do norte de Goiás chegam com id_municipio = código de 1980 (52xxxxx) e
+--     Fernando de Noronha com 2000107; os dois são RECODIFICADOS para o código de 2022 pela
+--     tabela `recodificacao` (pipeline/norte_goias_1980.CODIGO_PUBLICADO, 53 entradas), com a
+--     UF publicada derivada do código publicado ('17' e '26'). É o mesmo tratamento para os
+--     dois casos em que a UF de 1980 e a de 2022 divergem. Cobertura: 29.378.753 registros,
+--     Sigma peso 119.011.052 (100,0% dos recenseados; o censobr corrige um peso de MS que a BD
+--     trazia errado, ver docs/qa/censobr_1980.md).
+--   - Um id_municipio NULL é ERRO de preparação (a fonte tem código para todos): o CASE de
+--     cd_mun aborta com error() em vez de inventar um valor.
 --   - v512 (UF/país de nascimento) é BIGINT, não VARCHAR -- precisa de
 --     LPAD(CAST(v512 AS VARCHAR), 2, '0') antes de casar com uf_seq_1980().
 --   - v530/v532 (ocupação/ramo de atividade) NÃO vêm zero-padded (LENGTH varia 1-3) --
 --     precisam de LPAD(..., 3, '0') antes de qualquer comparação BETWEEN com os códigos de
 --     3 dígitos do dicionário (verificado: sem o LPAD, '5' não cai entre '011' e '042').
---   - v518/v527 (origem / trabalho-estudo) vêm SEMPRE com 7 caracteres (extract_1980_bd.py já
---     aplica LPAD), mas no Ceará (e SÓ no Ceará) o valor original tem 6 dígitos
---     (UF||MUNIC, sem dígito verificador) -- o LPAD acrescenta um zero à esquerda
---     ('0230440'). Regra "org6"/"trab6": strip do zero à esquerda quando presente. Ver
---     MAPEAMENTO §2.3 (190.963 casos em v518, 13.090 em v527, TODOS em CE).
---   - v518 de não migrante em CE é NULL (não '0000000' como nas outras 26 UFs).
+--   - v518/v527 (origem / trabalho-estudo) vêm SEMPRE com 7 caracteres: 6 dígitos (UF||MUNIC)
+--     mais o dígito verificador do IBGE, acrescentado por prep_1980_censobr.py, em TODAS as
+--     UFs (a anomalia do Ceará da BD -- 6 dígitos com zero à esquerda -- não existe mais; a
+--     regra "org6"/"trab6" continua tolerando um zero à esquerda por segurança).
 --   - A sentinela de "não mudou" é '0000000' (7 dígitos) -- não existe um código "mesmo
---     município"; NULL/'0000000' são tratados de forma idêntica (org6 = NULL).
+--     município"; NULL/'0000000' são tratados de forma idêntica (org6 = NULL). Desde o censobr
+--     ela cobre também quem mora no município há 10 anos ou mais (v517 = 7/9) e quem nasceu
+--     nele (v517 = 8), nas 27 UFs.
+--   - UNIVERSOS (diferença da BD para o censobr, declarada): escolaridade (v520-v524) vem
+--     zerada abaixo de 5 anos e trabalho (v528-v533) e v527 vêm NULL abaixo de 10 anos, como
+--     na cópia pública do IBGE. ocupado_10 já filtrava por idade; freq_escolar de < 5 anos e o
+--     deslocamento pendular de estudo de < 10 anos deixam de existir nesta edição.
 --   - v604 (peso) é BIGINT e NÃO tem divisor (diferente de 1e2/1e8/1e13 de outras edições).
 --   - v606 (idade) = 999 é "idade ignorada" (28.697 registros), não 999 anos -- vira NULL.
 --   - CORRIGIDO EM F9.3(a) (achado do auditor): df_local força '1' (não migrante) quando
@@ -54,33 +63,18 @@
 -- df_mun/df_uf (origem da migração) e o par trab_mun/trab_uf (destino do deslocamento
 -- pendular, antes de ser roteado para trab_*/estudo_* em 02_classify.sql) são resolvidos
 -- AQUI, via JOIN com `muni_lookup` -- mesmo padrão de pipeline/sql/1991/01_extract.sql.
+-- `muni_lookup` é data/interim/1980/mun6_lookup.parquet (build_ref.py, a partir de
+-- pipeline/norte_goias_1980.mun6_lookup): as 3.991 entradas de MUN6_1980 chaveadas pelo prefixo
+-- de 6 dígitos DE 1980 (é assim que as origens chegam na fonte), com os 52 do norte de Goiás e
+-- Fernando de Noronha já apontando para o código publicado e a UF publicada. Com isso, uma
+-- origem ou um destino pendular em qualquer dos 52 resolve para o município de 2022 em todos
+-- os lugares, sem CASE especial -- e a UF de origem (`m1.uf`) sai '17', coerente com
+-- fluxos_uf.parquet, que lê a UF de municipios_ref.
 --
--- A UNIDADE AGREGADA 'NORTEGO' (F9.9). `muni_lookup` é a união de duas tabelas:
---   1. data/interim/1980/municipios_ref.parquet (build_ref.py, a partir de
---      pipeline/labels_1980.MUNICIPIOS_1980, com Fernando de Noronha reapontado para
---      '2605459'), pelo prefixo de 6 dígitos do próprio código; e
---   2. data/interim/1980/unidades_agregadas.parquet (build_ref.py, a partir de
---      pipeline/unidades_agregadas_1980.py): os 52 prefixos de 6 dígitos do norte de Goiás ->
---      'NORTEGO'. O código sintético não tem prefixo de 6 dígitos próprio ('NORTEG' não é
---      chave de nada), então essa metade do dicionário tem de vir de fora de municipios_ref.
--- Com isso, os 52 códigos de 1980 resolvem para a unidade em TODOS os lugares que consultam o
--- dicionário municipal -- origem da migração (v518) e destino do deslocamento pendular (v527)
--- --, sem nenhum CASE especial. Do lado da residência, os 178.338 registros de sigla_uf='GO'
--- sem id_municipio recebem cd_mun = 'NORTEGO' pelo mesmo CASE que trata Fernando de Noronha.
---
--- Consequência boa: mudar de município DENTRO do norte de Goiás vira `m1.cd_mun = c.cd_mun`,
--- e o CASE de df_local trata isso como NÃO MIGRAÇÃO -- do mesmo jeito que o questionário de
--- 1980 trata uma mudança dentro de um mesmo município (v518 = '0000000'). É a única leitura
--- honesta: a origem não é "não informada" (a fonte informa), nem pode virar um autoloop
--- origem=destino. O preço é uma perda de granularidade declarada, a mesma de qualquer
--- agregação -- ver MAPEAMENTO_norte_goias.md e docs/METODOLOGIA.md, item 4 da seção de 1980.
--- (No resto da edição essa condição é vacuamente falsa: nenhum registro de 1980 tem origem
--- igual ao município de residência -- conferido, 0 de 29,4 milhões.)
---
--- A UF da unidade é '17' (Tocantins) por DECISÃO declarada, não por SUBSTR do código: ela vem
--- de `municipios_ref.uf` do lado da residência e da coluna `uf` de unidades_agregadas.parquet
--- do lado da origem/pendular. Ver a justificativa (e a comparação com publicar sob '52') em
--- pipeline/unidades_agregadas_1980.py.
+-- Migrar entre dois dos 52 municípios voltou a ser o que é: migração intermunicipal (11.586
+-- registros, Sigma peso 47.598, intraestadual sob a UF '17'). A condição `m1.cd_mun = c.cd_mun`
+-- do CASE de df_local fica como rede de segurança: nenhum registro de 1980 tem origem igual ao
+-- município de residência (0 de 29,4 milhões), então se ela disparar é erro de recodificação.
 PRAGMA threads = 10;
 PRAGMA memory_limit = '16GB';
 
@@ -130,27 +124,31 @@ CREATE OR REPLACE TEMP VIEW pessoas_raw AS
     UNION ALL SELECT * FROM read_parquet('data/raw1980/pessoa_sp.parquet');
 
 -- ---------- dicionário de unidades (chave: prefixo de 6 dígitos do código de 1980) ----------
--- Duas metades (ver cabeçalho): os 3.939 municípios, pelo prefixo do próprio código; e os 52
--- prefixos do norte de Goiás, que apontam todos para a unidade agregada 'NORTEGO' -- cujo
--- código sintético não tem prefixo de 6 dígitos próprio e por isso precisa desta segunda
--- tabela. `uf` acompanha porque a UF de 'NORTEGO' ('17') é uma decisão declarada e não pode
--- ser derivada de SUBSTR(codigo, 1, 2).
+-- Ver cabeçalho: mun6_lookup.parquet (build_ref.py) já traz os 52 do norte de Goiás e Fernando
+-- de Noronha recodificados para o código publicado, com a UF publicada.
 CREATE OR REPLACE TEMP VIEW muni_lookup AS
-    SELECT cd_mun, uf, SUBSTR(cd_mun, 1, 6) AS prefixo6
-    FROM read_parquet('data/interim/1980/municipios_ref.parquet')
-    WHERE cd_mun NOT IN (SELECT DISTINCT cd_unidade
-                         FROM read_parquet('data/interim/1980/unidades_agregadas.parquet'))
-    UNION ALL
-    SELECT cd_unidade AS cd_mun, uf, prefixo6
-    FROM read_parquet('data/interim/1980/unidades_agregadas.parquet');
+    SELECT prefixo6, cd_mun, uf
+    FROM read_parquet('data/interim/1980/mun6_lookup.parquet');
 
--- ---------- uma linha por unidade agregada (código -> UF publicada) ----------
--- Usada só do lado da RESIDÊNCIA, para dar UF a quem mora na unidade. Não dá para reusar
--- muni_lookup aqui: lá a unidade aparece 52 vezes (uma por prefixo componente), e um JOIN por
--- cd_mun multiplicaria os registros.
-CREATE OR REPLACE TEMP VIEW unidade_ref AS
-    SELECT DISTINCT cd_unidade AS cd_mun, uf
-    FROM read_parquet('data/interim/1980/unidades_agregadas.parquet');
+-- ---------- código de 1980 -> código publicado, do lado da RESIDÊNCIA ----------
+-- As 53 entradas em que o código muda (52 do norte de Goiás -> 17xxxxx; 2000107 -> 2605459),
+-- derivadas do mesmo dicionário: só as linhas cujo código publicado não é o próprio prefixo.
+CREATE OR REPLACE TEMP VIEW recodificacao AS
+    SELECT prefixo6 || dv AS cd_1980, cd_mun AS cd_publicado
+    FROM (
+        SELECT prefixo6, cd_mun,
+               -- dígito verificador do IBGE (mesmo algoritmo de norte_goias_1980.py)
+               CAST((10 - ((
+                   CAST(SUBSTR(prefixo6,1,1) AS INTEGER)
+                 + (CASE WHEN CAST(SUBSTR(prefixo6,2,1) AS INTEGER)*2 >= 10 THEN CAST(SUBSTR(prefixo6,2,1) AS INTEGER)*2 - 9 ELSE CAST(SUBSTR(prefixo6,2,1) AS INTEGER)*2 END)
+                 + CAST(SUBSTR(prefixo6,3,1) AS INTEGER)
+                 + (CASE WHEN CAST(SUBSTR(prefixo6,4,1) AS INTEGER)*2 >= 10 THEN CAST(SUBSTR(prefixo6,4,1) AS INTEGER)*2 - 9 ELSE CAST(SUBSTR(prefixo6,4,1) AS INTEGER)*2 END)
+                 + CAST(SUBSTR(prefixo6,5,1) AS INTEGER)
+                 + (CASE WHEN CAST(SUBSTR(prefixo6,6,1) AS INTEGER)*2 >= 10 THEN CAST(SUBSTR(prefixo6,6,1) AS INTEGER)*2 - 9 ELSE CAST(SUBSTR(prefixo6,6,1) AS INTEGER)*2 END)
+               ) % 10)) % 10 AS VARCHAR) AS dv
+        FROM muni_lookup
+        WHERE SUBSTR(cd_mun, 1, 6) <> prefixo6
+    );
 
 -- ---------- campos brutos + colunas derivadas de município (uma vez, referenciadas por nome
 -- a seguir -- DuckDB resolve aliases do próprio SELECT list em ordem) ----------
@@ -161,43 +159,41 @@ CREATE OR REPLACE TEMP VIEW pessoas_campos AS
         v598, v501, v511, v512, v513, v517, v518, v520, v521, v522, v523, v524,
         v527, v528, v529, v530, v532, v604, v606,
 
-        -- cd_mun: id_municipio direto, com duas atribuições explícitas por sigla de UF, nos
-        -- dois casos em que a Base dos Dados não geocodifica o residente:
-        --   'FN' -> '2605459'  Fernando de Noronha/PE (MAPEAMENTO §4);
-        --   'GO' com id_municipio NULL -> 'NORTEGO'  os 52 municípios do norte de Goiás, hoje
-        --      Tocantins, publicados como UMA unidade agregada (ver cabeçalho). O predicado é
-        --      exato: em 'GO' o id_municipio só é nulo nesses 178.338 registros, e em nenhuma
-        --      outra UF ele é nulo (conferido em F9.2/F9.9).
+        -- cd_mun: o código publicado -- id_municipio (código de 1980 = código de 2022 para
+        -- 3.938 municípios) ou a recodificação dos 53 em que a UF mudou (52 do norte de Goiás e
+        -- Fernando de Noronha, ver cabeçalho). id_municipio NULL é erro de preparação (a fonte
+        -- tem código para todos os 29.378.753 registros): abortar, nunca inventar.
         CASE
-            WHEN sigla_uf = 'FN'                            THEN '2605459'
-            WHEN sigla_uf = 'GO' AND id_municipio IS NULL   THEN 'NORTEGO'
-            ELSE id_municipio
+            WHEN id_municipio IS NULL
+                THEN error('1980: id_municipio NULL -- a fonte é o censobr, rode scripts/prep_1980_censobr.py')
+            ELSE COALESCE(r.cd_publicado, id_municipio)
         END                                                                   AS cd_mun,
 
         -- org6: código de 6 dígitos (UF||MUNIC) da residência anterior, sem o dígito
-        -- verificador. NULL = "não migrou" (mesma leitura de '0000000') OU, só no Ceará,
-        -- "não migrante" mesmo (v518 vem NULL ali, não '0000000' -- ver MAPEAMENTO §0.2).
-        -- Regra do Ceará (§2.3): só ali v518 chega com 6 dígitos e um zero à esquerda
-        -- (SUBSTR(v518,1,1)='0'); nas outras 26 UFs v518 sempre tem 7 dígitos legítimos.
+        -- verificador. NULL = "não migrou" (mesma leitura de '0000000'). A regra do zero à
+        -- esquerda era a anomalia do Ceará na Base dos Dados (§2.3); com o censobr ela não
+        -- ocorre mais e fica só como tolerância.
         CASE
             WHEN v518 IS NULL OR v518 = '0000000'  THEN NULL
             WHEN SUBSTR(v518, 1, 1) = '0'            THEN SUBSTR(v518, 2, 6)
             ELSE SUBSTR(v518, 1, 6)
         END                                                                   AS org6,
 
-        -- trab6: mesma regra, aplicada a v527 (município de trabalho/estudo). Mesma anomalia
-        -- do Ceará (13.090 casos, todos em CE -- MAPEAMENTO §2.3).
+        -- trab6: mesma regra, aplicada a v527 (município de trabalho/estudo). O ramo do zero à
+        -- esquerda existia para a anomalia do Ceará na Base dos Dados (13.090 casos em CE,
+        -- MAPEAMENTO §2.3); na fonte censobr (1.1.0-1980) v527 já vem com 7 dígitos em toda UF
+        -- e o ramo não dispara -- fica como guarda, sem efeito.
         CASE
             WHEN v527 IS NULL OR v527 = '0000000'  THEN NULL
             WHEN SUBSTR(v527, 1, 1) = '0'            THEN SUBSTR(v527, 2, 6)
             ELSE SUBSTR(v527, 1, 6)
         END                                                                   AS trab6
-    FROM pessoas_raw;
-    -- Não há mais nenhuma exclusão de registro aqui. Até 1.0.1-1980 havia uma
-    -- (`WHERE NOT (sigla_uf = 'GO' AND id_municipio IS NULL)`), que tirava da edição os
-    -- 178.338 residentes do norte de Goiás; desde 1.0.2-1980 eles entram sob a unidade
-    -- agregada 'NORTEGO' (ver o CASE de cd_mun acima). A edição passou a cobrir 100% dos
-    -- recenseados de 1980.
+    FROM pessoas_raw p
+    LEFT JOIN recodificacao r ON r.cd_1980 = p.id_municipio;
+    -- Não há nenhuma exclusão de registro aqui: a edição cobre 100% dos recenseados de 1980
+    -- (até 1.0.1-1980 os 178.338 residentes do norte de Goiás ficavam de fora; de 1.0.2 a
+    -- 1.0.7-1980 entravam sob a unidade agregada 'NORTEGO'; desde 1.1.0-1980 entram cada um no
+    -- seu município, recodificado para 17xxxxx -- ver o CASE de cd_mun acima).
 
 -- ---------- pessoas.parquet ----------
 COPY (
@@ -211,12 +207,10 @@ COPY (
     FROM (
         SELECT
             c.*,
-            -- uf: prefixo do código, EXCETO na unidade agregada, cujo código é sintético e
-            -- não numérico -- SUBSTR('NORTEGO',1,2) daria 'NO'. A UF dela é '17' (Tocantins),
-            -- por decisão declarada (ver cabeçalho e pipeline/unidades_agregadas_1980.py);
-            -- `ur.uf` vem de unidade_ref, de modo que o valor tem uma fonte só -- o mesmo
-            -- módulo Python que alimenta a linha da unidade em municipios_ref.
-            COALESCE(ur.uf, SUBSTR(c.cd_mun, 1, 2))                           AS uf,
+            -- uf: prefixo do código PUBLICADO -- '17' para os 52 do norte de Goiás e '26'
+            -- para Fernando de Noronha, por decisão declarada (ver cabeçalho e
+            -- pipeline/norte_goias_1980.py), '52' para o restante de Goiás.
+            SUBSTR(c.cd_mun, 1, 2)                                            AS uf,
             c.cd_mun || CASE WHEN c.v598 = '0' THEN 'U' ELSE 'R' END          AS cd_apond,
             CAST(NULL AS VARCHAR)                                             AS controle,
             CAST(c.v604 AS DOUBLE)                                            AS peso,  -- §0.10: sem divisor
@@ -238,16 +232,12 @@ COPY (
             -- quinquenal adotada -- v517='5' fica de fora por decisão, ver MAPEAMENTO §2.2); '2'
             -- migrante interno (origem conhecida OU não informada); '3' internacional (org6
             -- prefixo '80').
-            -- F9.9: a terceira condição ("a origem resolve para a MESMA unidade em que a
-            -- pessoa mora") é o tratamento da migração interna a uma unidade agregada -- em
-            -- 1980, mudar entre dois dos 52 municípios do norte de Goiás (11.586 registros,
-            -- Sigma peso 47.598). Não é migração desta edição, porque não há mudança de
-            -- unidade: é exatamente o que o questionário de 1980 já faz com uma mudança dentro
-            -- de um mesmo município (v518 = '0000000'). As alternativas eram piores: deixar em
-            -- df_local='2' com df_mun NULL jogaria origem CONHECIDA em "origem não informada"
-            -- (a única parcela dessa categoria, em todo o atlas, cuja origem a fonte informa),
-            -- e resolver df_mun para a própria unidade criaria um autoloop origem=destino.
-            -- Nos 3.939 municípios reais a condição é vacuamente falsa (0 registros).
+            -- A terceira condição ("a origem resolve para o MESMO município em que a pessoa
+            -- mora") é uma rede de segurança: nenhum registro de 1980 tem origem igual ao
+            -- município de residência (0 de 29,4 milhões), e o questionário já trata uma
+            -- mudança dentro do município como v518 = '0000000'. Entre 1.0.2 e 1.0.7-1980 ela
+            -- absorvia a migração interna à unidade agregada 'NORTEGO' (11.586 registros);
+            -- desde 1.1.0-1980 esses registros são migração intermunicipal comum.
             CASE
                 WHEN idade IS NULL OR idade < 5                THEN '1'
                 WHEN c.v517 NOT IN ('0', '1', '2', '3', '4')  THEN '1'
@@ -261,13 +251,12 @@ COPY (
             -- mantém `interestadual` correto para os 253.578 registros desse tipo, MAPEAMENTO
             -- §2.5). '20' = Fernando de Noronha -> '26' (§4). NULL para org6 NULL e sentinelas
             -- '54'/'80'/'99'.
-            -- F9.9: `m1.uf` primeiro. Quando a origem é um dos 52 códigos do norte de Goiás,
-            -- a UF de origem publicada é a da UNIDADE ('17'), não o prefixo do código de 1980
+            -- `m1.uf` primeiro. Quando a origem é um dos 52 códigos do norte de Goiás, a UF de
+            -- origem publicada é a do código PUBLICADO ('17'), não o prefixo do código de 1980
             -- ('52'). Sem isso, `interestadual` diria "intraestadual" para quem saiu do norte
             -- de Goiás para o resto de Goiás, enquanto fluxos_uf.parquet -- que lê a UF de
             -- municipios_ref -- publicaria o mesmo fluxo como TO->GO. Os dois têm de dizer a
-            -- mesma coisa, e a coisa que eles dizem é a decisão declarada sobre a UF da
-            -- unidade (ver cabeçalho).
+            -- mesma coisa (ver cabeçalho).
             CASE
                 WHEN df_local <> '2' OR c.org6 IS NULL          THEN NULL
                 WHEN m1.uf IS NOT NULL                          THEN m1.uf
@@ -278,10 +267,8 @@ COPY (
 
             -- df_mun: Fernando de Noronha primeiro (org6 '200010'/'200000' -> '2605459', §4);
             -- depois as sentinelas conhecidas (exterior '80', Brasil s/especificação '54',
-            -- ignorado '99', UF||'0000'); só então o JOIN com muni_lookup -- que desde F9.9
-            -- resolve os 52 códigos do norte de Goiás para a unidade agregada 'NORTEGO', do
-            -- mesmo jeito que resolve um município real. Quem mora na própria unidade já foi
-            -- desviado para df_local='1' acima, então aqui df_mun nunca é igual a cd_mun.
+            -- ignorado '99', UF||'0000'); só então o JOIN com muni_lookup, que já devolve o
+            -- código publicado (os 52 do norte de Goiás como 17xxxxx).
             CASE
                 WHEN df_local <> '2'                             THEN NULL
                 WHEN c.org6 IN ('200010', '200000')              THEN '2605459'
@@ -300,8 +287,8 @@ COPY (
                 WHEN SUBSTR(c.trab6, 3, 4) = '0000'               THEN NULL
                 ELSE m2.cd_mun
             END                                                                AS desloc_mun,
-            -- mesma regra de df_uf: a UF do destino pendular é a da UNIDADE quando o destino
-            -- é um dos 52 códigos do norte de Goiás (F9.9).
+            -- mesma regra de df_uf: a UF do destino pendular é a do código publicado quando o
+            -- destino é um dos 52 códigos do norte de Goiás.
             CASE
                 WHEN c.trab6 IS NULL                              THEN NULL
                 WHEN m2.uf IS NOT NULL                            THEN m2.uf
@@ -323,18 +310,16 @@ COPY (
             -- quando v513='8' e v512 em 1..27 (inclui '14'->Fernando de Noronha->'26', §0.6/§4);
             -- NULL quando v512=29 (Brasil s/especificação) ou >=30 (exterior) -- a macro já
             -- devolve NULL nesses casos por não ter essas chaves.
-            -- F9.9: `uf` (o alias acima), não SUBSTR(cd_mun,1,2) -- que daria 'NO' para a
-            -- unidade agregada. Quem mora em 'NORTEGO' e nasceu no próprio município fica com
+            -- Quem mora num dos 52 do norte de Goiás e nasceu no próprio município fica com
             -- nasc_uf = '17'. RESSALVA DECLARADA: quem nasceu no território e mora fora dele
             -- traz v512 = Goiás, porque era isso que o Censo de 1980 registrava -- a UF de
             -- nascimento do norte de Goiás é irrecuperável na fonte. O efeito é que
-            -- `retorno_uf_natal` e o status 'retorno_natal' ficam SUBESTIMADOS para a unidade
-            -- (quem volta ao território vindo de fora não é reconhecido como natural dele).
-            -- Ver docs/METODOLOGIA.md, item 4 da seção de 1980.
+            -- `retorno_uf_natal` fica SUBESTIMADO no Tocantins e superestimado no restante de
+            -- Goiás (o status 'retorno_natal' não é afetado: vem de v513, por município). Ver docs/METODOLOGIA.md, seção de 1980.
             -- (a expressão de `uf` é repetida em vez de referenciada pelo alias: `uf` é nome
-            -- de coluna em m1/m2/ur, e o alias do SELECT list fica ambíguo para o binder.)
+            -- de coluna em m1/m2, e o alias do SELECT list fica ambíguo para o binder.)
             CASE
-                WHEN c.v513 = '1'                       THEN COALESCE(ur.uf, SUBSTR(c.cd_mun, 1, 2))
+                WHEN c.v513 = '1'                       THEN SUBSTR(c.cd_mun, 1, 2)
                 WHEN c.v513 = '8' AND c.v512 BETWEEN 1 AND 27
                     THEN uf_seq_1980(LPAD(CAST(c.v512 AS VARCHAR), 2, '0'))
             END                                                                AS nasc_uf,
@@ -386,7 +371,6 @@ COPY (
         FROM pessoas_campos c
         LEFT JOIN muni_lookup m1 ON m1.prefixo6 = c.org6    -- origem da migração (v518)
         LEFT JOIN muni_lookup m2 ON m2.prefixo6 = c.trab6   -- destino pendular (v527)
-        LEFT JOIN unidade_ref ur  ON ur.cd_mun  = c.cd_mun  -- UF da unidade agregada de residência
     ) x
 ) TO 'data/interim/1980/pessoas.parquet' (FORMAT PARQUET);
 

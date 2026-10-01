@@ -227,7 +227,10 @@ def test_gate_ok_existe_e_e_valido():
         # 1.0.2-2000: Fase 2 (mapa/arcos) -- centroides municipais via ST_PointOnSurface, ver
     # nota em test_edicao_1980.py. Só geo/centroides*.parquet mudou.
     # 1.0.3-2000: Fase 4 (projeção Albers) -- ver nota equivalente em test_edicao_1991.py.
-    assert carimbo["versao_dados"] == "1.0.3-2000"
+    # 1.0.4-2000: 30/09/2026 -- simplificação das malhas por tolerância em metros (geo/build.sh,
+    # SIMP_MUN/SIMP_AGREG; ver nota em docs/METODOLOGIA.md). Só geo/*.topojson e o meta.json
+    # (bounds) mudaram; nenhum agregado estatístico foi tocado.
+    assert carimbo["versao_dados"] == "1.0.4-2000"
     assert "2000/municipios.parquet" not in carimbo["arquivos"], "caminhos no carimbo são relativos à própria PROCESSED"
 
 

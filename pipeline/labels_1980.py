@@ -7,6 +7,10 @@ inconsistências reais de dígito verificador em pelo menos uma UF (RN) e cobre 
 municípios; a malha, validada por centroide contra 2022 (ver docs/qa/malha_1980.md), cobre os
 3.991 municípios do Censo 1980 sem colisão de código. Não editar à mão.
 
+Os 52 códigos do norte de Goiás (hoje Tocantins) presentes em MUN6_1980 e ausentes de
+MUNICIPIOS_1980 são recodificados para 17xxxxx por pipeline/norte_goias_1980.py, em
+build_ref.py -- não aqui (desde 1.1.0-1980).
+
 Estrutura:
   MUNICIPIOS_1980: dict[str, dict]
     Chave: código 7-dígitos; valor: {nome, uf, uf_cod, cod_meso, nome_meso, cod_micro, nome_micro}

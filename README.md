@@ -60,6 +60,10 @@ versão atual dos dados: `docs/relatorio_revelacao_<versão>.md` (o nome exato e
 
 ## Arquitetura
 
+Documentação detalhada de todo o percurso do dado — leitura dos microdados, etapas SQL,
+estimador de variância, gate de revelação, cartografia, série entre censos e publicação,
+com fluxogramas: [`docs/PIPELINE.md`](docs/PIPELINE.md).
+
 ```
 microdados do IBGE (acesso controlado, local)
         │  pipeline/*.sql via DuckDB (pipeline/run.py)
@@ -170,7 +174,7 @@ data/
   interim/          (gitignored) Parquet intermediário, nunca sai da máquina
   processed/        (VERSIONADO) agregados já aprovados pelo gate de revelação
   geo/raw/          (gitignored) shapefile original do IBGE
-docs/               metodologia, SEO, checklist de publicação, relatórios de QA e de revelação
+docs/               pipeline, metodologia, SEO, checklist de publicação, relatórios de QA e de revelação
 .github/workflows/  CI: verificação, build e publicação em GitHub Pages
 ```
 

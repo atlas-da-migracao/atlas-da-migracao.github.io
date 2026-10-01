@@ -154,9 +154,18 @@ Repetir sempre que os microdados forem reprocessados (nova extração, correçã
 metodológica, nova versão do IBGE etc.):
 
 1. Rodar o pipeline completo na máquina com acesso aos microdados:
-   `python pipeline/run.py` (ou as etapas relevantes).
+   `python pipeline/run.py` (ou as etapas relevantes; nas edições antigas, com `--edicao <ano>`
+   e na ordem de `docs/PIPELINE.md`, seção 10).
+   **Edições antigas: preparar a entrada antes do pipeline.** 1991 e 2000 convertem o formato de
+   origem (`scripts/prep_1991.py`, `scripts/prep_2000.sh`). **1980** lê o Parquet do censobr/IPEA
+   v1.0.0 (fonte da edição desde `1.1.0-1980`): rodar `python scripts/prep_1980_censobr.py` antes de
+   `build_ref.py`/`run.py`, conferir que ele terminou sem "REPROVADO", que o SHA-256 da entrada é
+   o registrado (`0bb8cdf0…`, ver `pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md` §6) e que
+   `docs/qa/censobr_1980.md` foi regenerado com todas as UFs em "sim". Sem esse passo o pipeline
+   de 1980 lê partições antigas, ou aborta por `id_municipio` nulo.
 2. Rodar o gate de revelação com a nova versão:
-   `python pipeline/disclosure_check.py --versao <AAAA-MM-DD ou vN>`.
+   `python pipeline/disclosure_check.py --versao <AAAA-MM-DD ou vN>` (edições antigas:
+   `--edicao <ano> --versao <x.y.z-ano>`, por exemplo `--edicao 1980 --versao 1.1.0-1980`).
    Conferir que terminou em "GATE APROVADO" e que
    `docs/relatorio_revelacao_<versão>.md` foi gerado.
 3. Rodar a verificação independente: `python pipeline/verify_gate.py`. Só prosseguir se

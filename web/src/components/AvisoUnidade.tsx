@@ -1,20 +1,22 @@
 /** Selo/aviso "esta unidade não é um município": mostrado no painel sempre que a unidade
  *  selecionada for uma UNIDADE AGREGADA da edição ativa -- um conjunto de municípios do censo
- *  publicado como uma unidade só, porque a fonte não distingue os municípios que o compõem.
+ *  publicado como uma unidade só, com um código não numérico.
  *
- *  Hoje existe exatamente um caso em todo o atlas: 'NORTEGO' no Censo 1980, os 52 municípios
- *  do norte de Goiás que em 1988 formaram o Tocantins e que a Base dos Dados não geocodifica
- *  (ver pipeline/unidades_agregadas_1980.py e docs/METODOLOGIA.md, item 4 da seção de 1980).
+ *  Nenhuma edição declara unidade agregada desde 1.1.0-1980: o norte de Goiás (hoje Tocantins),
+ *  que era o único caso, passou a ser publicado município a município (ver
+ *  pipeline/norte_goias_1980.py). O mecanismo continua aqui, INATIVO -- sem a chave
+ *  `meta.unidades_agregadas`, nada aparece -- para que uma edição futura que precise agregar
+ *  um território só tenha de declará-lo.
  *
  *  Mesmo padrão de AvisoProxy.tsx, e pelo mesmo motivo: o componente é genérico e não conhece
  *  nenhum código nem nenhuma edição -- a lista de unidades e o texto de cada uma vêm de
  *  `meta.unidades_agregadas` (pipeline/build_meta.py), para que a explicação metodológica
- *  tenha uma fonte só. Se uma edição futura agregar outro território, basta declará-lo lá.
+ *  tenha uma fonte só.
  *
  *  O aviso é deliberadamente forte (não é um `<details>` fechado como o selo proxy): quem
  *  clica nessa forma no mapa precisa saber, ANTES de ler os números, que está olhando uma
- *  unidade do tamanho de um estado e não um município. */
-import type { Meta, UnidadeAgregadaMeta } from "../lib/types";
+ *  unidade que reúne vários municípios e não um município. */
+import type { Meta, UfForaDaEpocaMeta, UnidadeAgregadaMeta } from "../lib/types";
 
 /** A unidade agregada de `codigo`, ou null se ele for um município normal. */
 export function unidadeAgregada(meta: Meta | null, codigo: string | null | undefined):
@@ -35,46 +37,26 @@ export function AvisoUnidade({ meta, codigo }: { meta: Meta | null; codigo: stri
   );
 }
 
-/** Sigla das 27 UFs pelo código IBGE de 2 dígitos -- só para nomear a UF da ÉPOCA do censo
- *  em `AvisoUnidadeUf` (ex.: "52" -> "GO"), quando ela difere da UF publicada hoje
- *  (`unidade.uf`). Não depende de nenhum dado de acesso controlado -- é a mesma tabela
- *  pública de código de UF usada em `pipeline/labels.py`. */
-const SIGLA_DA_UF: Record<string, string> = {
-  "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO",
-  "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL",
-  "28": "SE", "29": "BA",
-  "31": "MG", "32": "ES", "33": "RJ", "35": "SP",
-  "41": "PR", "42": "SC", "43": "RS",
-  "50": "MS", "51": "MT", "52": "GO", "53": "DF",
-};
-
-/** A unidade agregada cujo campo `uf` (o código PUBLICADO hoje) é `codigoUf` -- o caso em que
- *  uma UF inteira, no nível agregado "uf" do mapa, é (ou inclui) uma unidade agregada. Hoje só
- *  o Tocantins em 1980: 'NORTEGO' é publicada sob `uf: "17"` (precedente de Fernando de
- *  Noronha, ver docs/METODOLOGIA.md), mas o Tocantins só foi criado em 1988 -- o "TO/17" que
- *  aparece no nível UF de 1980 não é o estado histórico, é a agregação de 52 municípios do
- *  norte de Goiás publicada sob o código de hoje. `null` se `codigoUf` for uma UF de verdade
- *  na época (`uf_censo` ausente ou igual a `uf` -- ver `pipeline/build_meta.py`), inclusive
- *  quando ela também tem uma unidade agregada normal dentro dela mas não É a unidade agregada
- *  inteira (não é o caso hoje, mas a checagem `uf_censo` cobre isso corretamente). */
-export function unidadeAgregadaPorUf(meta: Meta | null, codigoUf: string | null | undefined):
-  UnidadeAgregadaMeta | null {
-  if (!meta?.unidades_agregadas || !codigoUf) return null;
-  return meta.unidades_agregadas.find((u) => u.uf === codigoUf && u.uf_censo && u.uf_censo !== u.uf) ?? null;
+/** A UF publicada `codigoUf` quando, na época do censo, ela não existia como UF (ou tinha outro
+ *  território) -- hoje só o Tocantins em 1980: os 52 municípios do norte de Goiás são publicados
+ *  sob `17` (precedente de Fernando de Noronha, ver docs/METODOLOGIA.md) para que a série de UF
+ *  compare o mesmo território nas cinco edições, mas o Tocantins só foi criado em 1988. Lê
+ *  `meta.ufs_fora_da_epoca` (pipeline/build_meta.py), que já traz a sigla da UF da época e o
+ *  texto pronto. `null` se `codigoUf` for uma UF de verdade na época -- a imensa maioria dos
+ *  casos -- ou se a edição não declara nenhuma (chave ausente). */
+export function ufForaDaEpoca(meta: Meta | null, codigoUf: string | null | undefined):
+  UfForaDaEpocaMeta | null {
+  if (!meta?.ufs_fora_da_epoca || !codigoUf) return null;
+  return meta.ufs_fora_da_epoca.find((u) => u.uf === codigoUf) ?? null;
 }
 
 export function AvisoUnidadeUf({ meta, codigoUf }: { meta: Meta | null; codigoUf: string | null }) {
-  const u = unidadeAgregadaPorUf(meta, codigoUf);
+  const u = ufForaDaEpoca(meta, codigoUf);
   if (!u) return null;
-  const siglaEpoca = u.uf_censo ? SIGLA_DA_UF[u.uf_censo] ?? u.uf_censo : null;
   return (
     <div className="aviso aviso-unidade" role="note">
       <p>
-        <strong>Esta UF não existia na época do censo.</strong> O território mostrado é
-        inteiramente a unidade agregada {u.nome_curto} ({u.n_municipios} municípios),
-        publicada sob o código de UF de hoje porque a fonte não distingue os municípios que a
-        compõem.{siglaEpoca && <> No censo, esse território pertencia a <strong>{siglaEpoca}</strong>.</>}
-        {" "}Mudanças de município dentro dela não aparecem como migração.
+        <strong>Esta UF não existia na época do censo.</strong> {u.nota}
       </p>
     </div>
   );

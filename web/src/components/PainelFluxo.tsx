@@ -111,7 +111,8 @@ export function PainelFluxo({ origem, destino, escuro, aoFechar, aoAbrirMunicipi
 
   const saldoPar = ida.total - (volta?.total ?? 0);
   // "os dois municípios" só vale quando as duas pontas SÃO municípios: uma unidade agregada da
-  // edição (meta.unidades_agregadas, hoje 'NORTEGO' em 1980) cobre vários e não é um município
+  // edição (meta.unidades_agregadas; nenhuma edição a usa desde 1.1.0-1980) cobre vários e não
+  // é um município
   const algumaAgregada = unidadeAgregada(meta, ida.origem) != null || unidadeAgregada(meta, ida.destino) != null;
   const parDeTerritorios = algumaAgregada ? "as duas unidades" : "os dois municípios";
 

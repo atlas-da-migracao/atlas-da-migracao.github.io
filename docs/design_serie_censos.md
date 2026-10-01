@@ -126,10 +126,10 @@ Os quatro blocos são `<section>` com `aria-labelledby` e um índice fixo no top
 ### 1.3 Município truncado — exemplo: Palmas/TO (criado em 1989)
 
 ```
-Frase:  Palmas foi criado em 1989; em 1980 seu território fazia parte de Norte de Goiás
-        (atual Tocantins), unidade agregada. De 1991 a 2022, Palmas manteve-se em absorção
-        forte (IEM +0,52 → +0,36): recebe o dobro do que perde, mas a vantagem encolheu.
-        [Abrir a série de Norte de Goiás (atual Tocantins) ↗]
+Frase:  Palmas foi criado em 1989; em 1980 seu território fazia parte de Porto Nacional.
+        De 1991 a 2022, Palmas manteve-se em absorção forte (IEM +0,52 → +0,36): recebe o
+        dobro do que perde, mas a vantagem encolheu.
+        [Abrir a série de Porto Nacional ↗]
 
 Números:  Saldo 2017–22  +14.300     Eficácia 2022  +0,36 absorção forte    Rotatividade 51.000
           ░▂▅▇▆                      ░▇▇▆▅                                  ░▁▃▅▇
@@ -137,11 +137,15 @@ Números:  Saldo 2017–22  +14.300     Eficácia 2022  +0,36 absorção forte  
 ```
 
 - A posição 1980 de **todo** sparkline/tabela/gráfico do município leva a trama "não existia" e
-  o tooltip "Não existia em 1980: território de Norte de Goiás (atual Tocantins)".
+  o tooltip "Não existia em 1980: território de Porto Nacional".
 - O botão "Abrir a série de …" chama `selecionarMunicipio(cd_mae)` e reabre `?pagina=serie`;
   a série do mãe abre com o aviso `municipio_mae` no topo e **nunca** no mesmo gráfico.
-- Se o mãe for `NORTEGO`, o botão leva à unidade agregada de 1980 e o aviso `unidade_agregada_1980`
-  substitui o texto padrão de mãe.
+- O mãe de Palmas (`1718204`, Porto Nacional) é um município comum em 1980, como o de qualquer
+  outro município criado depois: desde 1.1.0-1980 não há unidade agregada no norte de Goiás. Os 52
+  municípios do atual Tocantins que já existiam em 1980 têm série própria, com o código de 2022;
+  os outros 87 apontam para a mãe por sobreposição de área (`docs/genealogia.md`, "Tocantins em
+  1980"). O caso "mãe é unidade agregada" (`mae.agregada`) fica como ramo genérico do desenho,
+  inativo.
 
 ### 1.4 Município-mãe — exemplo: Santarém/PA (cedeu Mojuí dos Campos em 2013)
 
@@ -185,9 +189,15 @@ Idêntico a 1.5. Diferença de conteúdo: a figura de Courgeau destaca o ponto d
 - Frase-síntese igual; o Bloco 3 (fluxos) usa `fluxos_uf` e o **diagrama de acordes** já
   existente, um por edição (5 small multiples de acordes, ou um acordes com seletor de edição em
   tela estreita).
-- Tocantins é o caso especial de UF: 1980 com número e nota `unidade_agregada_1980` (a UF `17` é
-  coberta por `NORTEGO`); Bloco 3 e qualquer medida `composicao_interna` em 1980 com "cobertura
-  insuficiente".
+- Tocantins é o caso especial de UF: em 1980 só 52 dos 139 municípios de 2022 existem (55,5% da
+  população de 2022 -- `cobertura_cod`), mas os 87 restantes têm mãe dentro da UF, então
+  `cobertura_pop` = 1,0 e a UF publica número, com estado `parcial`; a explicação (os 52 eram
+  municípios de Goiás, publicados com o código de 2022) chega à interface pelo aviso
+  `meta.ufs_fora_da_epoca` da edição 1980 (`AvisoUnidadeUf`), não por uma nota da matriz de
+  comparabilidade — a nota `fonte_1980` existe em `comparabilidade_regras.py` só como texto
+  `fora_da_matriz`, de referência. Medidas que dependem da partição
+  municipal interna (`composicao_interna`) ficam em "cobertura insuficiente" em 1980
+  (`cobertura_cod` 0,555 < 0,90); o Bloco 3 entre UFs segue a regra geral, por `cobertura_pop`.
 
 ### 1.8 Região metropolitana — exemplo: RM de Fortaleza
 
@@ -301,7 +311,8 @@ para +0,36): chega mais gente e sai mais também.*
 
 **T3 — truncado (município criado depois de uma edição)** — prefixo antes de T1/T2:
 > {nome} foi criado depois de {última edição sem existir}; até então seu território fazia parte
-> de {mae.nome}{", unidade agregada" se agregada}. {T1 ou T2 sobre a série curta}
+> de {mae.nome}{", unidade agregada" se agregada -- ramo genérico, inativo desde 1.1.0-1980}.
+> {T1 ou T2 sobre a série curta}
 
 Ex.: *Mojuí dos Campos foi criado depois de 2010; até então seu território fazia parte de
 Santarém. Só há dado para Mojuí dos Campos em 2022: evasão (IEM −0,21), com 480 pessoas chegando
@@ -339,7 +350,8 @@ classe)** — o proxy pode explicar toda a diferença; a frase não deve afirmar
 
 - T1 gerada para (absorção → rotatividade), (evasão forte → evasão), (rotatividade → absorção).
 - T2 com e sem a variante "mais perto/longe do equilíbrio".
-- T3 com mãe comum e com `NORTEGO`.
+- T3 com mãe comum (ex.: Palmas → Porto Nacional). O ramo `agregada` do template é genérico e
+  fica inativo: nenhuma edição publica unidade agregada desde 1.1.0-1980.
 - T4 quando `iem = 0,20` e `se = 0,15` (indefinido).
 - T5/T6 para município criado em 2013 e para RGI vazia em 1980.
 - Ressalva de proxy presente sempre que `ini = 1980`; ausente quando `ini = 1991`.
@@ -764,19 +776,20 @@ Roteiro no navegador (Chrome, claro e escuro, 1280 px e 400 px), com **um caso p
 
 **Truncamento e território**
 - [ ] Palmas/TO (`?n=mun&mun=1721000&pagina=serie`): 1980 com hachura diagonal em **todos** os
-      sparklines, gráficos e tabelas; frase T3 nomeia "Norte de Goiás (atual Tocantins)"; botão
-      abre a série de `NORTEGO` com o aviso de unidade agregada; nenhum "0" em 1980.
+      sparklines, gráficos e tabelas; frase T3 nomeia "Porto Nacional"; botão abre a série de
+      Porto Nacional (`1718204`) com o aviso `municipio_mae`; nenhum "0" em 1980.
 - [ ] Mojuí dos Campos/PA: só 2022 com número; frase T5; mãe = Santarém; botão abre Santarém.
 - [ ] Santarém/PA: aviso `municipio_mae` no topo; linha "fronteira mudou" em 2010→2022 nos gráficos
       de volume e **não** nos de taxa/IEM.
 - [ ] Sobral/CE (1:1): série completa, sem aviso de mãe, frase T1 ou T2 com ressalva de proxy.
-- [ ] RGI vazia em 1980 (uma das 21): célula 1980 "sem cobertura" com hachura diagonal; mapa
+- [ ] RGI vazia em 1980 (uma das 10): célula 1980 "sem cobertura" com hachura diagonal; mapa
       comparativo pinta a região com hachura no painel 1980 e com cor nos outros quatro.
 - [ ] RM com cobertura < 90% em 1980: "cobertura insuficiente" + percentual no tooltip; 2022–1991
       com número e selo "cobertura x%" quando parcial.
 - [ ] RM de Porto Velho em 1991 e 1980: indicadores intra-RM "cobertura insuficiente — um só
       município"; total da RM publicado.
-- [ ] Tocantins (UF) em 1980: número com nota `unidade_agregada_1980`; nada de composição interna.
+- [ ] Tocantins (UF) em 1980: número com estado `parcial` e o aviso "Esta UF não existia na época
+      do censo" (`meta.ufs_fora_da_epoca`); nada de composição interna.
 
 **Ausências e comparabilidade**
 - [ ] Deslocamento pendular em 1991: painel/cartão pontilhado "não medido", nota `sem_pendular_1991`;

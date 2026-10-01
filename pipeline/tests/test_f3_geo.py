@@ -4,7 +4,9 @@ Parametrizado por edição (ver pipeline/edicoes.py): os valores esperados para 
 originais, inalterados; "2010" usa os números confirmados na F1 da edição Censo 2010 (ver
 plano) -- 5.565 municípios (5.570 de 2022 menos os 5 criados em 2013), RGI/RGInt aplicadas
 retroativamente por código de município (510/133, idênticos a 2022 -- nenhuma RGI/RGInt é
-composta só por município criado depois de 2010).
+composta só por município criado depois de 2010). "1980" segue o mesmo princípio: 3.991
+municípios (a malha de 1980), 500 RGIs e 133 RGInts (as de 2022 que têm ao menos um município
+existente em 1980; as 10 RGIs que somem são compostas só por municípios criados depois).
 """
 import json
 import pathlib
@@ -14,6 +16,7 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
+import norte_goias_1980  # noqa: E402
 from edicoes import edicao as get_edicao  # noqa: E402
 
 EDICOES_TESTADAS = [
@@ -21,18 +24,34 @@ EDICOES_TESTADAS = [
     pytest.param("2010", 5565, 510, 133, 27, id="2010"),
     pytest.param("2000", 5507, 510, 133, 27, id="2000"),
     pytest.param("1991", 4491, 510, 133, 27, id="1991"),
-    # 1980: 3.939 municípios + 1 UNIDADE AGREGADA ('NORTEGO', os 52 municípios do norte de
-    # Goiás dissolvidos numa feição só) = 3.940 unidades no nível municipal; 27 UFs, com
-    # Tocantins, que é a UF publicada dessa unidade. RGI/RGInt não mudam (489/130): a unidade
-    # não pertence a nenhuma -- ver pipeline/unidades_agregadas_1980.py.
-    pytest.param("1980", 3940, 489, 130, 27, id="1980"),
+    # 1980: 3.991 municípios = os 3.939 que a Base dos Dados identificava + os 52 do norte de
+    # Goiás (hoje Tocantins), recodificados para 17xxxxx (pipeline/norte_goias_1980.py) e
+    # publicados cada um na sua feição -- desde 1.1.0-1980; até 1.0.7-1980 eram uma unidade
+    # agregada, 'NORTEGO' (3.940 unidades, 489 RGIs, 130 RGInts). Os 52 trazem RGI/RGInt de 2022
+    # (11 e 3): 500 RGIs e 133 RGInts, a mesma contagem de 2022 nas RGInts; 27 UFs, com
+    # Tocantins.
+    pytest.param("1980", 3991, 500, 133, 27, id="1980"),
 ]
 
 
 def _paths(edicao_nome: str):
     ed = get_edicao(edicao_nome)
     proc = ROOT / ed.processed
+    _pula_se_publicado_anterior_a_1_1_0(edicao_nome, proc)
     return proc, proc / "geo"
+
+
+def _pula_se_publicado_anterior_a_1_1_0(edicao_nome: str, proc: pathlib.Path) -> None:
+    """Os números de 1980 acima valem para o publicado de 1.1.0-1980 em diante (52 municípios do
+    norte de Goiás recodificados, sem unidade agregada). Enquanto data/processed/1980 ainda for
+    uma 1.0.x-1980 -- por exemplo no meio da regeneração -- os testes da edição são pulados, não
+    reprovados por um motivo que não é bug. Sem carimbo, nada a decidir aqui: _req pula."""
+    gate = proc / ".gate_ok"
+    if edicao_nome != "1980" or not gate.exists():
+        return
+    versao = json.loads(gate.read_text(encoding="utf-8"))["versao_dados"]
+    if versao.startswith("1.0."):
+        pytest.skip(f"{proc} ainda em {versao}; regenerar a edição 1980 (1.1.0-1980 ou posterior)")
 
 
 def _req(*paths):
@@ -78,7 +97,20 @@ def test_nenhum_corpo_dagua_ou_placeholder_no_topojson(con, edicao_nome, n_mun, 
     PROC, GEO = _paths(edicao_nome)
     _req(GEO / "municipios.topojson")
     ids = _topojson_ids(GEO / "municipios.topojson")
-    assert not (ids & {"8888888", "9999999", "4300001", "4300002"})
+    assert not (ids & {"8888888", "9999999", "4300001", "4300002", "NORTEGO"})
+
+
+def test_1980_topojson_tem_os_52_municipios_do_norte_de_goias_e_nenhum_codigo_de_1980():
+    """Cada um dos 52 tem a sua feição, pelo código de 2022 (17xxxxx). Nem a unidade agregada
+    'NORTEGO' (até 1.0.7-1980), nem um 52xxxxx deles, nem o 2000107 de Fernando de Noronha
+    (publicado como 2605459) sobram na malha."""
+    PROC, GEO = _paths("1980")
+    _req(GEO / "municipios.topojson")
+    ids = _topojson_ids(GEO / "municipios.topojson")
+    assert set(norte_goias_1980.RECODIFICACAO_1980.values()) <= ids
+    assert "2605459" in ids
+    assert not ids & (set(norte_goias_1980.RECODIFICACAO_1980) | {"NORTEGO", "2000107"})
+    assert sum(1 for i in ids if i.startswith("17")) == 52, "a UF '17' tem só os 52"
 
 
 @pytest.mark.parametrize("edicao_nome, n_mun, n_rgi, n_rgint, n_uf", EDICOES_TESTADAS)
@@ -142,9 +174,11 @@ def test_rgi_ids_batem_com_municipios_ref(con, edicao_nome, n_mun, n_rgi, n_rgin
     PROC, GEO = _paths(edicao_nome)
     _req(GEO / "rgi.topojson", PROC / "municipios_ref.parquet")
     ids_geo = _topojson_ids(GEO / "rgi.topojson", id_field="cd_rgi")
-    # `IS NOT NULL`: uma unidade agregada sai de municipios_ref sem RGI (ver
-    # pipeline/unidades_agregadas_1980.py) e, por isso, também não tem feição em rgi.topojson
-    # (geo/build.sh filtra antes do -dissolve). Os dois lados excluem a mesma coisa.
+    # `IS NOT NULL` é invariante genérico: um município sem RGI não tem feição em rgi.topojson
+    # (geo/build.sh filtra antes do -dissolve), e os dois lados têm de excluir a mesma coisa.
+    # Em nenhuma edição vigente ele exclui alguém: até 1.0.7-1980 a unidade agregada 'NORTEGO'
+    # (a única sem RGI) era a exceção; desde 1.1.0-1980 os 52 municípios do norte de Goiás têm
+    # RGI e RGInt de 2022 e nenhuma unidade de 1980 sai sem recorte.
     ids_dados, = [set(r[0] for r in con.execute(
         f"SELECT DISTINCT cd_rgi FROM read_parquet('{PROC}/municipios_ref.parquet') "
         "WHERE cd_rgi IS NOT NULL").fetchall())]

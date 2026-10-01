@@ -1,5 +1,13 @@
 """F9.1 — Extração da tabela basedosdados.br_ibge_censo_demografico.microdados_pessoa_1980
-(BigQuery) para data/raw1980/pessoa_<uf>.parquet, uma consulta por sigla_uf (partição).
+(BigQuery) para data/raw1980/bd/pessoa_<uf>.parquet, uma consulta por sigla_uf (partição).
+
+SUBSTITUÍDO desde 1.1.0-1980: a fonte da edição passou a ser o Parquet do censobr/IPEA v1.0.0,
+convertido por scripts/prep_1980_censobr.py para data/raw1980/pessoa_<uf>.parquet (a BD perdia o
+município de residência dos 52 municípios do norte de Goiás e de Fernando de Noronha -- ver
+pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md). Este script fica como registro histórico e como
+forma de recriar a cópia da BD que serve de REFERÊNCIA aos gates de identidade do prep: por isso a
+saída agora é data/raw1980/bd/, nunca mais o caminho que o pipeline lê. Não rode para alimentar a
+edição.
 
 Regra de sigilo: este script só grava Parquet em data/raw1980/ (acesso controlado por convenção
 de pipeline, gitignored) e só imprime/loga CONTAGENS agregadas por UF (linhas gravadas, Σ v604,
@@ -36,7 +44,9 @@ import pyarrow.parquet as pq
 from google.cloud import bigquery
 
 TABELA = "basedosdados.br_ibge_censo_demografico.microdados_pessoa_1980"
-RAW_DIR = pathlib.Path("data/raw1980")
+# Cópia de referência da BD (gates de scripts/prep_1980_censobr.py) -- NÃO é a entrada do pipeline,
+# que lê data/raw1980/pessoa_<uf>.parquet gerado a partir do censobr.
+RAW_DIR = pathlib.Path("data/raw1980/bd")
 
 GIB = 1024**3
 LIMITE_POR_CONSULTA_GIB = 2.0

@@ -33,7 +33,7 @@ from enum import Enum
 #: Edições da série, da mais nova para a mais antiga (ordem de exibição do atlas).
 EDICOES: tuple[str, ...] = ("2022", "2010", "2000", "1991", "1980")
 
-#: Níveis territoriais da série. `mun` inclui a unidade agregada `NORTEGO` em 1980.
+#: Níveis territoriais da série.
 NIVEIS: tuple[str, ...] = ("mun", "rgi", "rgint", "uf", "rm")
 
 #: Níveis de agregação, os únicos em que a cobertura territorial é uma questão (o nível
@@ -291,11 +291,13 @@ MEDIDAS: tuple[Medida, ...] = (
         "pend_estudo_saida", "Saída pendular para estudo", 1,
         "Σ pessoas que estudam em outro município", "IBGE, quesito de deslocamento",
         requer=("pendular", "estudo"),
+        excecoes={"1980": _r(_COM, "pend_estudo_universo_1980")},
     ),
     Medida(
         "pend_estudo_entrada", "Entrada pendular para estudo", 1,
         "Σ pessoas que vêm estudar na unidade", "IBGE, quesito de deslocamento",
         requer=("pendular", "estudo"),
+        excecoes={"1980": _r(_COM, "pend_estudo_universo_1980")},
     ),
     Medida(
         "pct_pendular", "% de ocupados com deslocamento pendular", 1,
@@ -551,10 +553,8 @@ def estado_cobertura(
     - `cobertura_pop` — cobertura **territorial**: fração da população de 2022 da unidade cujo
       território está representado, naquela edição, por alguma unidade **da mesma unidade de
       2022** (o próprio município, se existir na edição; senão o município-mãe, quando ele
-      pertence à mesma unidade; em 1980, a unidade agregada `NORTEGO` cobre o território dos
-      52 municípios no nível de UF e não cobre em RGI/RGInt/RM, onde ela é `NULL`). É o que
-      gate as medidas que atravessam a fronteira da unidade — imigração, emigração, saldo,
-      taxas, IEM, distância, conectividade, Gini.
+      pertence à mesma unidade). É o que gate as medidas que atravessam a fronteira da
+      unidade — imigração, emigração, saldo, taxas, IEM, distância, conectividade, Gini.
     - `cobertura_cod` — cobertura de **observação direta**: fração da população de 2022 em
       municípios que existem individualmente na edição. É o que gate as medidas que dependem
       da partição interna (`intra_unidade=True`): migração e pendularidade intra-RM, tipologia
@@ -564,11 +564,11 @@ def estado_cobertura(
     intrametropolitanos, incondicionalmente e independentemente do limiar geral.
     """
     # A guarda de topo depende só de `cobertura_pop` (cobertura TERRITORIAL), não de
-    # `n_mun_edicao` (município individualmente codificado): uma unidade agregada como
-    # NORTEGO (1980) cobre 100% do território de uma UF sem NENHUM município codificado
-    # individualmente (`n_mun_edicao=0`) -- e ainda assim tem `imig`/`emig`/`iem` publicáveis
-    # nessa UF, porque essas medidas atravessam a fronteira da unidade e não dependem da
-    # partição interna. `n_mun_edicao` só entra como critério dentro de `intra_unidade`
+    # `n_mun_edicao` (município individualmente codificado): uma UF pode ter cobertura
+    # territorial plena com `n_mun_edicao` baixo (os municípios criados depois estavam dentro
+    # de mães que existiam) -- e ainda assim tem `imig`/`emig`/`iem` publicáveis, porque essas
+    # medidas atravessam a fronteira da unidade e não dependem da partição interna.
+    # `n_mun_edicao` só entra como critério dentro de `intra_unidade`
     # (medidas que dependem de município individual, como migração intra-RM), logo abaixo.
     if not cobertura_pop:
         return Cobertura.SEM_COBERTURA
@@ -832,12 +832,22 @@ NOTAS: dict[str, str] = {
         "a migração. A ressalva aqui é outra: 1980 publica quatro dimensões do pendular (sem "
         "posição na ocupação e sem renda) e o fluxo de estudo é um piso.",
     "status_retorno_1980":
-        "Em 1980, `retorno_natal` é subestimado no território do atual Tocantins: quem nasceu "
-        "lá declarava 'Goiás' como naturalidade, e a unidade agregada `NORTEGO` não é "
-        "reconhecível como município natal.",
+        "Em 1980 o retorno ao município natal (`retorno_natal`) vem do quesito 'nasceu neste "
+        "município' e vale para todos os municípios, inclusive os 52 do norte de Goiás (hoje "
+        "Tocantins). O que a UF de nascimento distorce é só a leitura por UF: quem nasceu no "
+        "território do atual Tocantins declarava 'Goiás', então o retorno à UF natal (indicador "
+        "auxiliar, não publicado) fica "
+        "subestimado no Tocantins e superestimado no restante de Goiás.",
     "sem_renda_1980":
-        "A edição 1980 não publica nenhuma variável de renda: na fonte, os rendimentos estão "
-        "preenchidos só na partição do Ceará e vazios nas outras 26 unidades da federação.",
+        "A edição 1980 não publica nenhuma variável de renda: a fonte atual (censobr/IPEA, desde "
+        "1.1.0-1980) traz as variáveis de rendimento nas 27 unidades da federação, mas elas ainda "
+        "não foram mapeadas nem validadas para publicação (a fonte anterior, a Base dos Dados, só "
+        "as tinha preenchidas no Ceará).",
+    "pend_estudo_universo_1980":
+        "Em 1980 o quesito de município de trabalho/estudo só é aplicado a quem tem 10 anos ou "
+        "mais (universo econômico do censo): o fluxo pendular de estudo exclui as crianças de 5 a "
+        "9 anos que as outras edições incluem. Comparável em composição e direção, com este aviso "
+        "de universo; nunca em nível.",
     "sem_estimativa_1980":
         "A edição 1980 não publica erro amostral: a fonte não traz chave de domicílio e os "
         "domicílios não são reconstruíveis, então não há unidade primária de amostragem. "
@@ -849,21 +859,22 @@ NOTAS: dict[str, str] = {
         "parceiros de 1980 não é comparável com a das outras edições.",
     "gini_limiar_1980":
         "Concentração calculada sobre os pares publicados, com o limiar próprio de 1980 "
-        "(n ≥ 20). A cobertura de volume é equivalente à das demais edições (70,7%, contra "
+        "(n ≥ 20). A cobertura de volume é equivalente à das demais edições (70,5%, contra "
         "67,6%–71,6%), então a concentração da massa publicada é comparável; a contagem de "
         "pares não é.",
     "posto_supressao_1980":
         "O ranking de 1980 é montado sobre menos pares publicados (limiar n ≥ 20): parceiros "
         "pequenos podem estar ausentes do ranking por supressão, não por não existirem.",
     "duncan_matriz_comum_1980":
-        "Duncan D calculado sobre a matriz comum às duas edições. Entre 1980 e 1991 a "
-        "interseção é a menor da série (1.634 municípios de 2022 não existem em 1980, e o "
-        "território do atual Tocantins entra como uma unidade agregada), e o índice mede "
-        "mudança de estrutura apenas nessa interseção.",
+        "Duncan D calculado sobre a união dos pares publicados nas duas edições (par ausente "
+        "numa delas vale 0). Entre 1980 e 1991 é a comparação mais afetada da série: 1.579 "
+        "municípios de 2022 não existem em 1980 (os 52 do norte de Goiás, hoje Tocantins, "
+        "entram com o código de 2022), então a parcela do índice que é fronteira e supressão, "
+        "não mudança de padrão, é a maior de todas; leia-o como limite superior.",
     "loglinear_matriz_comum_1980":
-        "Decomposição ajustada sobre a matriz comum às duas edições, a menor da série. Os "
-        "parâmetros O, D e OD são livres de escala, mas o conjunto de unidades sobre o qual "
-        "foram ajustados é menor que o de 2022.",
+        "Decomposição ajustada sobre a matriz publicada de 1980, a de menor conjunto de "
+        "unidades da série. Os parâmetros O, D e OD são livres de escala, mas o conjunto sobre "
+        "o qual foram ajustados é menor que o de 2022 e o volume vem do proxy de data fixa.",
     "iem_sem_guarda_1980":
         "A tipologia de 1980 é publicada sem guarda estatística: a edição não estima erro "
         "amostral, então não há como distinguir eficácia pequena de ruído.",
@@ -876,10 +887,10 @@ NOTAS: dict[str, str] = {
         "Razão de chances entre migrantes e residentes em 1980: além da ressalva geral (a "
         "característica é medida no fim do período), a escolaridade da edição é reconstruída "
         "e a migração é um proxy.",
-    "unidade_agregada_1980":
-        "Em 1980, os 52 municípios do norte de Goiás (hoje Tocantins) são publicados como uma "
-        "única unidade, `NORTEGO`. No nível de UF ela cobre o território; em RGI, RGInt e RM "
-        "ela não participa, e as regiões correspondentes ficam sem cobertura.",
+    "fonte_1980":
+        "Em 1980 os 52 municípios do norte de Goiás (hoje Tocantins) são publicados como "
+        "municípios, com o código de 2022, a partir do Parquet do censobr/IPEA (fonte da "
+        "edição desde 1.1.0-1980); a Base dos Dados não trazia o código de município deles.",
     # 1991
     "sem_pendular_1991":
         "O questionário da amostra de 1991 não pergunta em que município a pessoa trabalha ou "
@@ -941,13 +952,17 @@ NOTAS: dict[str, str] = {
         "Concentração calculada sobre os fluxos publicados; a cauda suprimida (cerca de 30% do "
         "volume, em todas as edições) não entra na conta.",
     "duncan_matriz_comum":
-        "Calculado sobre a matriz comum às duas edições comparadas, com as duas matrizes "
-        "renormalizadas nesse conjunto: sem isso, o índice mediria criação de município como "
-        "se fosse mudança de padrão migratório.",
+        "Calculado sobre a união dos pares publicados nas duas edições comparadas, com o par "
+        "ausente numa delas valendo 0 e cada matriz normalizada pelo próprio total. Por isso o "
+        "índice é um limite superior da mudança de padrão: ele soma à mudança migratória a "
+        "criação de município e a supressão de revelação entre as duas edições. A versão sobre "
+        "a matriz comum (só pares existentes nas duas), com `n_pares_comuns` publicado, fica "
+        "como pendência declarada.",
     "loglinear_matriz_comum":
-        "Ajustado sobre a matriz comum às duas edições. Todos os parâmetros exceto T são "
-        "livres de escala, de modo que a razão entre dois censos mede mudança de estrutura, "
-        "não de volume.",
+        "Ajustado por edição, sobre a matriz publicada daquela edição (não sobre uma matriz "
+        "comum). Todos os parâmetros exceto T são livres de escala, de modo que a razão entre "
+        "dois censos mede mudança de estrutura, não de volume -- mas o conjunto de unidades "
+        "ajustado difere entre edições, e isso entra na comparação.",
     "edu_anos_estudo":
         "Nesta edição o nível de instrução é derivado de 'anos de estudo': uma graduação de "
         "três anos soma 14 anos e cai em 'médio completo/superior incompleto', o que "
@@ -1169,7 +1184,7 @@ def validar() -> None:
     fora_da_matriz = {
         "escala_cmi", "mei_estavel", "n_unidades_variavel", "cobertura_insuficiente",
         "rm_unitaria", "nucleo_divergente", "municipio_nao_existia", "municipio_mae",
-        "unidade_agregada_1980", "iem_sem_guarda_1980", "ocup_elementares",
+        "fonte_1980", "iem_sem_guarda_1980", "ocup_elementares",
     }
     orfas = set(NOTAS) - usadas - fora_da_matriz
     assert not orfas, f"notas declaradas e nunca usadas: {sorted(orfas)}"

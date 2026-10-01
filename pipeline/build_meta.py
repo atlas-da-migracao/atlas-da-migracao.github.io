@@ -147,34 +147,21 @@ def _bounds_albers(ed) -> dict | None:
     return {"x_min": min(xs), "x_max": max(xs), "y_min": min(ys), "y_max": max(ys)}
 
 
-def _unidades_agregadas(ed) -> list[dict] | None:
-    """Rótulos das unidades agregadas da edição (ver `meta["unidades_agregadas"]`).
+def _ufs_fora_da_epoca(ed) -> list[dict] | None:
+    """`meta["ufs_fora_da_epoca"]`: UFs publicadas que não existiam na data do censo.
 
-    Uma unidade agregada é um conjunto de municípios do censo publicado como UMA unidade,
-    porque a fonte não distingue os municípios que o compõem. Só o Censo 1980 tem uma (o norte
-    de Goiás, 52 municípios). O import é tardio para que a ausência do módulo nunca afete as
-    demais edições.
-
-    Isto é o que o front precisa para dizer, no painel da unidade, que ela NÃO é um município
-    -- mesmo padrão do selo `aviso_proxy`: o texto vem daqui, nunca hardcoded no componente,
-    para que a explicação tenha uma fonte só (ver web/src/components/AvisoUnidade.tsx).
+    Só o Censo 1980 tem uma: o Tocantins (criado em 1988), cujos 52 municípios de 1980 a
+    edição publica sob a UF de hoje. O front mostra a nota no painel do nível UF
+    (web/src/components/AvisoUnidade.tsx, `AvisoUnidadeUf`) -- o texto vem daqui, nunca
+    hardcoded no componente, mesmo padrão do selo `aviso_proxy`. O import é tardio para que a
+    ausência do módulo nunca afete as demais edições. Até 1.0.7-1980 este bloco emitia
+    `unidades_agregadas` (a unidade 'NORTEGO'); a chave continua aceita pelo front, inativa.
     """
     if ed.nome != "1980":
         return None
-    import unidades_agregadas_1980 as U
+    import norte_goias_1980 as N
 
-    return [
-        {
-            "codigo": cd,
-            "nome": info["nome"],
-            "nome_curto": info["nome_curto"],
-            "n_municipios": info["n_municipios"],
-            "uf": info["uf"],
-            "uf_censo": info["uf_1980"],
-            "nota": info["observacao"],
-        }
-        for cd, info in U.UNIDADES_AGREGADAS_1980.items()
-    ]
+    return N.uf_fora_da_epoca()
 
 
 def main() -> None:
@@ -207,7 +194,11 @@ def main() -> None:
         "edicao": ed.nome,
         "versao_dados": dt.date.today().isoformat(),
         "gerado_em": dt.datetime.now().isoformat(timespec="seconds"),
-        "fonte": f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra ({acesso_desc})",
+        # 1980 é a única edição que não vem da cópia do IBGE: a fonte secundária tem de aparecer
+        # onde a interface e o relatório de revelação nomeiam a fonte (docs/METODOLOGIA.md, 1980 item 1).
+        "fonte": (f"IBGE, Censo Demográfico {ed.nome}, microdados da amostra ({acesso_desc})"
+                  + (", via censobr/IPEA v1.0.0 (Parquet público derivado dos mesmos microdados; "
+                     "ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)" if ed.nome == "1980" else "")),
         "periodo_referencia": dict(ed.periodo_referencia),
         "salario_minimo_referencia": ed.salario_minimo,
         # F3 (mapa-representação): maior fluxo municipal publicado desta edição -- base da
@@ -284,21 +275,26 @@ def main() -> None:
         # resumo sempre e abre o texto completo acima ("saiba mais") sob demanda -- a
         # ressalva de calibração (piso, não erro desta edição) fica só no texto completo,
         # de propósito: o resumo é a "o quê", o completo é o "por que confiar quanto".
+        # Universo do pendular de estudo em 1980 (1.1.0-1980): na fonte censobr, como na cópia
+        # pública do IBGE, o município de trabalho/estudo (v527) só é preenchido para 10 anos ou
+        # mais; o fluxo pendular de estudo exclui as crianças de 5 a 9 anos que as outras edições
+        # incluem (-27% nas saídas frente à 1.0.7, que vinha da BD sem essa edição de universo).
+        # Consumido por web/src/components/PainelPendular.tsx; mesma nota na série
+        # (comparabilidade_regras.py, `pend_estudo_universo_1980`). `null` nas outras edições.
+        "aviso_pendular_estudo": (
+            "Em 1980 o quesito de município de estudo só foi aplicado a quem tinha 10 anos ou "
+            "mais: o deslocamento pendular para estudo desta edição não inclui as crianças de 5 "
+            "a 9 anos, ao contrário das outras edições. Compare composição e direção, não o "
+            "volume."
+        ) if ed.nome == "1980" else None,
         "aviso_proxy_resumo": (
             "O Censo 1980 não perguntou onde a pessoa morava 5 anos antes: a migração aqui é "
             "estimada por um proxy, com volume cerca de 7% acima do real e saldos mais fracos "
             "do que seriam. Compare direção e composição entre municípios — não o volume total."
         ) if ed.proxy_data_fixa else None,
-        # Unidades agregadas (F9.9): conjuntos de municípios do censo publicados como UMA
-        # unidade, porque a fonte não distingue os municípios que os compõem. Hoje só 1980 tem
-        # um caso, o norte de Goiás ('NORTEGO'). Diferente da chave `origens_agregadas` de
-        # 1.0.1-1980, que descrevia uma origem SEM unidade, esta descreve uma unidade de
-        # verdade: ela está em municipios.parquet, nos dois lados de fluxos.parquet e na malha,
-        # e o front a trata como qualquer município -- o que este bloco existe para dizer é o
-        # que ela tem de diferente (não é um município; 52 municípios agregados; mudanças
-        # internas não aparecem como migração). Ver pipeline/unidades_agregadas_1980.py e
-        # docs/METODOLOGIA.md, item 4 da seção do Censo 1980.
-        **({"unidades_agregadas": unids_ag} if (unids_ag := _unidades_agregadas(ed)) else {}),
+        # UFs fora da época (1.1.0-1980): o Tocantins não existia em 1980; os 52 municípios do
+        # norte de Goiás são publicados sob '17' (ver pipeline/norte_goias_1980.py).
+        **({"ufs_fora_da_epoca": ufs} if (ufs := _ufs_fora_da_epoca(ed)) else {}),
     }
     dest = ROOT / ed.processed / "meta.json"
     dest.parent.mkdir(parents=True, exist_ok=True)

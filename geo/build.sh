@@ -61,7 +61,7 @@ fi
 # filtro nas demais edições, já que "0" nunca aparece nelas.
 FILTRO='CD_MUN != "8888888" && CD_MUN != "9999999" && CD_MUN != "4300001" && CD_MUN != "4300002" && CD_MUN != "0"'
 # Cônica equivalente de Albers, parâmetros fixados em docs/METODOLOGIA.md (F10) -- os mesmos
-# para as 5 edições e os 4 produtos, inclusive NORTEGO (1980).
+# para as 5 edições e os 4 produtos.
 PROJ4="+proj=aea +lat_1=-2 +lat_2=-22 +lat_0=-12 +lon_0=-54 +x_0=0 +y_0=0 +ellps=GRS80 +units=m +no_defs"
 # Tolerância de simplificação em METROS, a mesma nas 5 edições (auditoria de 30/09/2026).
 # Antes era uma porcentagem fixa ("-simplify 1%"), que significa coisas muito diferentes
@@ -220,13 +220,11 @@ npx --yes mapshaper "$RAW" \
 limpa_e_publica "$OUT/uf_albers.topojson" 1e5 cd_uf "$STAGE1_ALBERS"
 
 echo "== regiões imediatas (RGI, dissolvidas a partir dos municípios) =="
-# `cd_rgi != null`: uma UNIDADE AGREGADA (hoje só 'NORTEGO', o norte de Goiás em 1980 --
-# ver pipeline/unidades_agregadas_1980.py) cobre 11 RGIs e 3 RGInts de 2022 e não é de
-# nenhuma, então sai de municipios_ref com cd_rgi/cd_rgint NULL. Sem este filtro, -dissolve
-# criaria uma 490ª "RGI" sem código com a forma do território -- uma unidade fantasma no
-# seletor e no mapa. O filtro é inofensivo nas demais edições (onde nenhum município fica sem
-# recorte) e a mesma regra vale do lado do dado: queries.ts filtra `IS NOT NULL` ao montar a
-# lista de unidades de RGI/RGInt. UF NÃO leva filtro: a unidade agregada TEM UF publicada.
+# `cd_rgi != null`: guarda genérica -- uma unidade sem recorte de 2022 (cd_rgi/cd_rgint NULL em
+# municipios_ref) faria o -dissolve criar uma "RGI" sem código, uma unidade fantasma no seletor e
+# no mapa. Desde 1.1.0-1980 nenhuma edição tem unidade assim (de 1.0.2 a 1.0.7-1980 a unidade
+# agregada 'NORTEGO' era o caso); o filtro fica inócuo, e a mesma regra vale do lado do dado:
+# queries.ts filtra `IS NOT NULL` ao montar a lista de unidades de RGI/RGInt. UF NÃO leva filtro.
 STAGE1="$TMP/rgi.geojson"
 npx --yes mapshaper "$RAW" \
     -filter "$FILTRO" \

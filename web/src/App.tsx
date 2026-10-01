@@ -316,12 +316,12 @@ export default function App() {
         // arquivo enxuto -- edição já visitada, com a conexão aberta): a decisão é tomada sobre o
         // estado mais recente, dentro do setState, não sobre uma cópia velha capturada aqui.
         const stub = mapa.linhas.map(([cd, nm, uf, pop, imig, emig, saldo, tlm, iem, cv]) => ({
-          // uf: prefixo do código, que vale para todo município do IBGE. Uma UNIDADE AGREGADA
-          // (código sintético não numérico, ex.: 'NORTEGO' no Censo 1980) não tem prefixo de
-          // UF -- aqui ela fica com o lixo do slice até o DuckDB substituir a linha inteira
-          // pelos dados de municipios.parquet, que traz a UF publicada da unidade. Nenhum
-          // componente lê `uf` nesta janela (o painel usa uf_sigla, que vem correto do
-          // arquivo), mas o CASE fica explícito para não parecer que o prefixo é confiável.
+          // uf: prefixo do código, que vale para todo município do IBGE. Um código que não é de
+          // município (uma unidade agregada sintética, não numérica -- mecanismo genérico, hoje
+          // inativo) não tem prefixo de UF: fica "" até o DuckDB substituir a linha inteira pelos
+          // dados de municipios.parquet, que traz a UF publicada da unidade. Nenhum componente
+          // lê `uf` nesta janela (o painel usa uf_sigla, que vem correto do arquivo), mas a
+          // guarda `/^\d{7}$/` fica explícita para não parecer que o prefixo é confiável.
           cd_mun: cd, nm_mun: nm, uf_sigla: uf,
           uf: /^\d{7}$/.test(cd) ? cd.slice(0, 2) : "",
           cd_rgi: null, nm_rgi: null, cd_rgint: null, nm_rgint: null, cd_rm: null, nm_rm: null,
@@ -386,7 +386,7 @@ export default function App() {
 
   // F2 (mapa-representacao): contorno "normal" por malha de arestas -- topojson.mesh com o
   // filtro (a, b) => a !== b mantém só arestas na fronteira entre DUAS feições distintas
-  // (some tanto a aresta interna de um MultiPolygon da mesma feição -- caso do NORTEGO --
+  // (some tanto a aresta interna de uma feição MultiPolygon, entre as partes da mesma feição,
   // quanto a duplicação de desenhar a mesma fronteira compartilhada duas vezes, uma por
   // município). O contorno de seleção/núcleo de RM continua por feição (ver MapaAtlas).
   const contornosMalha = useMemo<Feature | null>(() => {

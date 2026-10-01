@@ -165,7 +165,8 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
   const entradas = fluxos.filter((f) => f.direcao === "entrada");
   const saidas = fluxos.filter((f) => f.direcao === "saida");
   // null em todo município normal; preenchido só nas unidades agregadas declaradas em
-  // meta.unidades_agregadas (hoje só 'NORTEGO' no Censo 1980) -- ver AvisoUnidade.tsx.
+  // meta.unidades_agregadas -- mecanismo genérico, hoje inativo (nenhuma edição declara uma
+  // desde 1.1.0-1980). Ver AvisoUnidade.tsx.
   const agregada = unidadeAgregada(meta, m.cd_mun);
 
   return (

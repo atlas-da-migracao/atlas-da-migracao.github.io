@@ -6,6 +6,7 @@ e consistência de dados publicados.
 import json
 import pathlib
 import hashlib
+import re
 
 import pytest
 import duckdb
@@ -16,6 +17,9 @@ SYS = __import__("sys")
 SYS.path.insert(0, str(ROOT / "pipeline"))
 
 from edicoes import EDICOES
+from norte_goias_1980 import RECODIFICACAO_1980
+
+GENEALOGIA_CSV = ROOT / "pipeline" / "genealogia_municipios.csv"
 
 
 def _skip_se_ausente(*paths):
@@ -23,6 +27,22 @@ def _skip_se_ausente(*paths):
     for p in paths:
         if not pathlib.Path(p).exists():
             pytest.skip(f"{p} ainda não gerado")
+
+
+def _skip_se_serie_anterior_a_1_1_0_1980():
+    """Pula o teste enquanto a série publicada ainda carregar a edição 1980 anterior a 1.1.0.
+
+    Até 1.0.7-1980 o norte de Goiás (hoje Tocantins) era a unidade agregada `NORTEGO`; desde
+    1.1.0-1980 são 52 municípios comuns com o código de 2022. O `versao_dados` do `.gate_ok` da
+    série concatena a versão de cada edição (`...+1.1.0-1980`); compara-se a versão de 1980 como
+    tupla, não como substring, para que 1.1.1, 1.2.0... também valham.
+    """
+    gate = SERIES_DIR / ".gate_ok"
+    _skip_se_ausente(gate, SERIES_DIR / "unidades_serie.parquet", SERIES_DIR / "pares_serie.parquet")
+    versao = json.loads(gate.read_text(encoding="utf-8")).get("versao_dados", "")
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)-1980", versao)
+    if m is None or tuple(int(g) for g in m.groups()) < (1, 1, 0):
+        pytest.skip(f"série ainda gerada com a edição 1980 anterior a 1.1.0-1980 ({versao})")
 
 
 def _ler_serie(con, tabela: str) -> str:
@@ -220,6 +240,144 @@ class TestCoberturaTerritorial:
             ).fetchall()
             assert len(gen) > 0, f"Nenhuma genealogia para {codigo} em {edicao}"
             assert gen[0][0] is not None, f"{codigo} em {edicao} sem cd_mun_mae"
+
+
+class TestTocantins1980:
+    """O norte de Goiás (atual Tocantins) em 1980 desde 1.1.0-1980: 52 municípios comuns com o
+    código de 2022, sem a unidade agregada `NORTEGO`; os 87 municípios de 2022 do Tocantins
+    criados depois recebem a mãe por sobreposição de área, pelo caminho genérico."""
+
+    TOTAL_TO = 139
+    N_DE_1980 = 52
+
+    def test_constantes_do_teste_batem_com_a_recodificacao(self):
+        """Sanidade do próprio teste: 52 códigos distintos, todos de UF 17."""
+        codigos = set(RECODIFICACAO_1980.values())
+        assert len(codigos) == self.N_DE_1980
+        assert all(c.startswith("17") and len(c) == 7 and c.isdigit() for c in codigos)
+
+    def test_genealogia_sem_unidade_agregada(self, con):
+        """genealogia_municipios.csv: nenhuma mãe `NORTEGO`/método `unidade_agregada`; os 52 existem
+        em 1980 e os 87 restantes do Tocantins têm mãe real (código de 7 dígitos)."""
+        _skip_se_ausente(GENEALOGIA_CSV)
+        caminho = GENEALOGIA_CSV.as_posix()
+        antigo = con.execute(
+            f"SELECT COUNT(*) FROM read_csv('{caminho}', all_varchar=true) "
+            "WHERE cd_mun_mae = 'NORTEGO' OR metodo = 'unidade_agregada'"
+        ).fetchone()[0]
+        if antigo:
+            pytest.skip("genealogia ainda não regenerada para 1.1.0-1980 (traz NORTEGO)")
+
+        cods = ", ".join(f"'{c}'" for c in sorted(set(RECODIFICACAO_1980.values())))
+        existem = con.execute(
+            f"SELECT COUNT(*) FROM read_csv('{caminho}', all_varchar=true) "
+            f"WHERE edicao = '1980' AND cd_mun_2022 IN ({cods}) AND existia = 'true' "
+            "AND metodo = 'existia' AND cd_mun_mae IS NULL"
+        ).fetchone()[0]
+        assert existem == self.N_DE_1980
+
+        outros = con.execute(
+            f"SELECT cd_mun_mae, metodo FROM read_csv('{caminho}', all_varchar=true) "
+            f"WHERE edicao = '1980' AND cd_mun_2022 LIKE '17%' AND cd_mun_2022 NOT IN ({cods})"
+        ).fetchall()
+        assert len(outros) == self.TOTAL_TO - self.N_DE_1980
+        for mae, metodo in outros:
+            assert mae is not None and re.fullmatch(r"\d{7}", str(mae)), f"mãe inválida: {mae}"
+            assert metodo in ("unico_pai", "multiplos_pais"), f"método inesperado: {metodo}"
+
+    def test_nenhuma_linha_nortego_em_unidades_serie(self, con):
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        n = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') "
+            "WHERE codigo = 'NORTEGO' OR cd_mun_mae = 'NORTEGO'"
+        ).fetchone()[0]
+        assert n == 0, f"{n} linhas ainda referenciam NORTEGO em unidades_serie"
+
+    def test_todo_codigo_mun_e_numerico_de_7_digitos(self, con):
+        """Sem código-sentinela (como o antigo `NORTEGO`, também de 7 caracteres): todo `mun` é
+        um código de município de 2022, e cada edição tem exatamente 5.570 deles."""
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        ruins = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') "
+            "WHERE nivel = 'mun' AND NOT regexp_full_match(codigo, '[0-9]{7}')"
+        ).fetchone()[0]
+        assert ruins == 0
+        por_edicao = con.execute(
+            f"SELECT edicao, COUNT(DISTINCT codigo) FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') "
+            "WHERE nivel = 'mun' GROUP BY edicao"
+        ).fetchall()
+        assert {e: n for e, n in por_edicao} == {e: 5570 for e in EDICOES}
+
+    def test_os_52_municipios_existem_em_1980(self, con):
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        cods = ", ".join(f"'{c}'" for c in sorted(set(RECODIFICACAO_1980.values())))
+        linhas = con.execute(
+            f"SELECT codigo, existia, n_mun_edicao, n_mun_2022, cobertura_cod, cobertura_pop "
+            f"FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') "
+            f"WHERE nivel = 'mun' AND edicao = '1980' AND codigo IN ({cods})"
+        ).fetchall()
+        assert len(linhas) == self.N_DE_1980
+        assert all(ex is True and ne == 1 and n22 == 1 and cc == 1.0 and cp == 1.0
+                   for _, ex, ne, n22, cc, cp in linhas)
+
+    def test_os_87_criados_depois_tem_mae_real_em_1980(self, con):
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        cods = ", ".join(f"'{c}'" for c in sorted(set(RECODIFICACAO_1980.values())))
+        linhas = con.execute(
+            f"SELECT codigo, existia, cd_mun_mae FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') "
+            f"WHERE nivel = 'mun' AND edicao = '1980' AND codigo LIKE '17%' AND codigo NOT IN ({cods})"
+        ).fetchall()
+        assert len(linhas) == self.TOTAL_TO - self.N_DE_1980
+        for codigo, existia, mae in linhas:
+            assert existia is False, codigo
+            assert mae is not None and re.fullmatch(r"\d{7}", str(mae)), f"{codigo}: mãe {mae}"
+
+    def test_cobertura_da_uf_17_em_1980(self, con):
+        """`cobertura_cod` é ponderada pela população de 2022 (não é a razão de códigos 52/139 =
+        0,374): os 52 municípios de 1980 são ~55,5% da população do Tocantins em 2022. A
+        `cobertura_pop` credita a mãe dentro da UF e vai a ~1,0; o estado é `parcial`."""
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        _skip_se_ausente(_ler_processado(con, "2022", "municipios"))
+        cods = ", ".join(f"'{c}'" for c in sorted(set(RECODIFICACAO_1980.values())))
+        esperado = con.execute(
+            f"SELECT SUM(pop) FILTER (WHERE cd_mun IN ({cods})) / SUM(pop) "
+            f"FROM read_parquet('{_ler_processado(con, '2022', 'municipios')}') WHERE uf = '17'"
+        ).fetchone()[0]
+        assert esperado == pytest.approx(0.555, abs=0.01)
+
+        n_ed, n_22, cob_cod, cob_pop, estado = con.execute(
+            f"SELECT n_mun_edicao, n_mun_2022, cobertura_cod, cobertura_pop, estado_cobertura "
+            f"FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') "
+            "WHERE nivel = 'uf' AND codigo = '17' AND edicao = '1980'"
+        ).fetchone()
+        assert (n_ed, n_22) == (self.N_DE_1980, self.TOTAL_TO)
+        assert cob_cod == pytest.approx(esperado, abs=1e-6)
+        assert cob_pop == pytest.approx(1.0, abs=0.01)
+        assert estado == "parcial"
+
+    def test_nenhum_par_com_nortego_em_pares_serie(self, con):
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        n = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{_ler_serie(con, 'pares_serie')}') "
+            "WHERE origem = 'NORTEGO' OR destino = 'NORTEGO'"
+        ).fetchone()[0]
+        assert n == 0
+
+    def test_par_ausente_de_municipio_inexistente_e_nao_existia_nao_suprimido(self, con):
+        """Regressão do default `or origem == 'NORTEGO'`: um par `mun` cuja origem ou destino
+        não existia na edição é `nao_existia` (ou `nao_medido`), nunca `suprimido`."""
+        _skip_se_serie_anterior_a_1_1_0_1980()
+        n = con.execute(f"""
+            SELECT COUNT(*)
+            FROM read_parquet('{_ler_serie(con, 'pares_serie')}') p
+            WHERE p.nivel = 'mun' AND p.motivo_ausencia = 'suprimido' AND EXISTS (
+                SELECT 1 FROM read_parquet('{_ler_serie(con, 'unidades_serie')}') u
+                WHERE u.nivel = 'mun' AND u.edicao = p.edicao AND u.existia = false
+                  AND u.codigo IN (p.origem, p.destino)
+            )
+        """).fetchone()[0]
+        assert n == 0, f"{n} pares 'suprimido' com extremo que não existia na edição"
+
 
 
 # ==============================================================================================
@@ -455,7 +613,8 @@ class TestFormatoTipos:
         ).fetchall()
 
         for (cod,) in codigos:
-            # NORTEGO tem 7 caracteres, códigos de município têm 7 dígitos
+            # (a checagem de que TODO código `mun` é numérico, sem a unidade agregada
+            # `NORTEGO` de 7 caracteres, está em `TestTocantins1980`, que pula em série antiga)
             assert len(str(cod)) in (7,), f"Código com comprimento inesperado: {cod}"
 
     def test_colunas_n_sao_inteiras(self, con):

@@ -176,12 +176,14 @@ EDICOES: dict[str, Edicao] = {
         # 1980 (3.939,60 / 3.734,64 / 3.458,00), o de novembro/1979 (3.300,00) e o de
         # novembro/1980 (5.788,80) reproduzem 2/13 cada. Diferente de 1991 -- onde o SM implícito
         # nas faixas NÃO era o legal --, aqui o valor reconciliado coincide com o mínimo legal da
-        # região I vigente em maio/1980. RESSALVA: a reconciliação só pôde ser feita no Ceará, a
-        # única partição da Base dos Dados em que as variáveis de renda estão preenchidas (0,0%
-        # nas outras 26 UFs) -- e é por isso que a edição 1980 NÃO PUBLICA NENHUMA COLUNA DE
-        # RENDA (renda_trab, renda_pc, renda_classe, renda_trab_classe são NULL/'nao_aplicavel').
-        # Este valor fica declarado em meta.json para documentar a unidade monetária da época e
-        # para uma eventual reextração que traga a renda das demais UFs. Ver
+        # região I vigente em maio/1980. RESSALVA: a reconciliação foi feita no Ceará, a única
+        # partição da fonte anterior (Base dos Dados, até 1.0.7-1980) em que as variáveis de
+        # renda estavam preenchidas. A fonte atual (censobr/IPEA, desde 1.1.0-1980) traz
+        # rendimento nas 27 UFs, mas a renda de 1980 ainda não foi mapeada nem validada para
+        # publicação -- por isso a edição NÃO PUBLICA NENHUMA COLUNA DE RENDA (renda_trab,
+        # renda_pc, renda_classe, renda_trab_classe são NULL/'nao_aplicavel'). Este valor fica
+        # declarado em meta.json para documentar a unidade monetária da época e para a versão
+        # futura que abrir a renda. Ver
         # pipeline/sql/1980/MAPEAMENTO_02_classify.md §7 e docs/METODOLOGIA.md, seção
         # "Edição Censo 1980 e comparabilidade", item 7.
         salario_minimo=4149.60,

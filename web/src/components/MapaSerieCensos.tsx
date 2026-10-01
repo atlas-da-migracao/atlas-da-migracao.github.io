@@ -411,8 +411,8 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
   const bbox = useMemo<Bbox>(() => {
     if (nivel === "uf") return LIMITES_BRASIL;
     if (!malha2022) return LIMITES_BRASIL;
-    // A unidade selecionada pode não existir em 2022 (unidade agregada de uma edição antiga,
-    // ex.: `NORTEGO`): cai para a primeira malha carregada que a tenha.
+    // A unidade selecionada pode não existir em 2022 (código só de uma edição antiga): cai
+    // para a primeira malha carregada que a tenha.
     const candidatas = [malha2022, ...edicoesComMalha.map((e) => malhas[e]).filter(
       (m): m is FeatureCollection => m != null && m !== malha2022)];
     let f: Feature | undefined;

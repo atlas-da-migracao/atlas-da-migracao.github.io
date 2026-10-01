@@ -49,8 +49,9 @@ function pontoNoPoligono(pt, poligono) {
 // flutuante do próprio earcut (vértices quase coincidentes, tipicamente numa costura de
 // -dissolve) -- invisíveis em qualquer zoom e não a "faixa/triângulo cortando o mapa" que
 // esta checagem existe para pegar. Achado por inspeção: o falso positivo mais comum tem
-// fração ~1e-18; um triângulo espúrio real (ver docstring de pipeline/gridsplit_geom.py)
-// cobre uma fração substancial (>50%) da área. 1e-6 dá bastante margem entre os dois.
+// fração ~1e-18; um triângulo espúrio real (anel que o earcut triangula mal, ver item 2 da
+// docstring de pipeline/validate_geo.py) cobre uma fração substancial (>50%) da área. 1e-6 dá
+// bastante margem entre os dois.
 const FRACAO_MINIMA_TRIANGULO = 1e-6;
 
 function checaFeicao(feature) {

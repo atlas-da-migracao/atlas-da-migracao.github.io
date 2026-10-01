@@ -48,43 +48,15 @@ echo "== normalizando campos (mapshaper) =="
 #   Goiás sem par na Base dos Dados, ver bloco abaixo) era, neste ponto, decisão pendente do
 #   agente metodologo -- decidido em F9.2/F9.3 e implementado logo abaixo.
 #
-# - CORREÇÃO F9.6 (pós-decisão do metodologo, pipeline/sql/1980/MAPEAMENTO_02_classify.md
-#   §3-§4): a malha bruta do IBGE tem 3.991 feições, mas pipeline/labels_1980.MUNICIPIOS_1980
-#   (a lista já corrigida para bater com o extrato tabular) tem só 3.939. A diferença de 52 é
-#   coberta pelos dois ajustes abaixo, que deixam a malha e municipios_ref.parquet 1:1:
-#
-#   1. Fernando de Noronha: a Base dos Dados não geocodifica os 298 registros de residentes
-#      de Fernando de Noronha em 1980 (sigla_uf='FN', id_municipio NULL); a decisão foi
-#      publicá-los sob '2605459' (Fernando de Noronha/PE, código de 2022), atribuído por
-#      sigla_uf no lado tabular (01_extract.sql). Remapeado aqui: CD_MUN '2000107' -> '2605459'
-#      (única feição com prefixo "20" na malha -- confirmado por contagem). SIGLA_UF sai 'PE'
-#      de graça no bloco de UF_POR_COD abaixo, já que o remap roda antes dele (prefixo "26").
-#
-#   2. 52 municípios do norte de Goiás (hoje Tocantins): a Base dos Dados não traz
-#      id_municipio para 178.338 registros de sigla_uf='GO' -- são exatamente os municípios
-#      cujo código de 1980 (prefixo "52") não tem par em id_municipio. Os 52 códigos abaixo
-#      são o conjunto exato presente na malha e ausente de MUNICIPIOS_1980 (conferido por
-#      diferença de conjuntos entre ST_Read da malha bruta e pipeline.labels_1980.
-#      MUNICIPIOS_1980; nenhum outro código de prefixo "52" falta).
-#
-#      ATÉ 1.0.1-1980 eles eram REMOVIDOS aqui (-filter), porque a edição não publicava o
-#      território como unidade: o Tocantins era um buraco branco na malha de 1980.
-#      DESDE 1.0.2-1980 eles são DISSOLVIDOS numa feição só, com o código sintético
-#      'NORTEGO' -- a unidade agregada que a edição passou a publicar (população, imigração,
-#      emigração, saldo, pendular e painel próprios; ver pipeline/unidades_agregadas_1980.py
-#      e pipeline/sql/1980/MAPEAMENTO_norte_goias.md). Quem não distingue os 52 municípios é
-#      a FONTE TABULAR, não a malha: o polígono dissolvido é a fronteira externa exata dos 52,
-#      sem aproximação nenhuma.
-#
-#      Como o dissolve é feito: as 52 feições vão para uma camada própria (-filter + name=),
-#      onde -dissolve2 (união topológica de verdade, que resolve as fronteiras internas) as
-#      funde; as outras 3.939 seguem na camada `base` SEM PASSAR POR NENHUMA OPERAÇÃO DE
-#      GEOMETRIA, e só no fim as duas camadas são unidas (-merge-layers). É de propósito:
-#      -dissolve2 aplicado à malha inteira teria de reprocessar 3.991 polígonos, e nesta malha
-#      operações de limpeza são sabidamente destrutivas (o -clean comeu 6 municípios, ver
-#      docs/qa/malha_1980.md). Assim, o risco topológico fica confinado às 52, e a fronteira
-#      com Goiás, Pará, Maranhão, Bahia e Mato Grosso é a mesma de antes -- essas feições nem
-#      foram tocadas.
+# - RECODIFICAÇÃO (1.1.0-1980; até 1.0.7 os 52 do norte de Goiás eram dissolvidos numa
+#   unidade 'NORTEGO'): a malha bruta tem 3.991 feições com o código DE 1980; a edição publica
+#   todo município pelo código de 2022, e 53 códigos mudaram de UF desde então -- Fernando de
+#   Noronha (2000107 -> 2605459, Território Federal em 1980) e os 52 municípios do norte de
+#   Goiás que em 1988 formaram o Tocantins (52xxxxx -> 17xxxxx, mesmo serial, novo dígito
+#   verificador). A tabela vem de pipeline/norte_goias_1980.CODIGO_PUBLICADO (fonte única, a
+#   mesma que build_ref.py e 01_extract.sql usam); nenhuma feição é dissolvida, filtrada ou
+#   tocada em geometria -- só o campo CD_MUN muda, e SIGLA_UF sai do prefixo do código novo.
+#   Resultado: 3.991 feições, 1:1 com municipios_ref.parquet (3.939 + 52), 27 UFs.
 #
 # - -snap -clean: testado isoladamente e DESCARTADO aqui -- diferente de 1991 (0 mudança) e
 #   de 2000/2010 (corrige overlaps da fusão de UFs), em 1980 o -clean com o limiar padrão do
@@ -96,70 +68,29 @@ echo "== normalizando campos (mapshaper) =="
 #   (SIRGAS 2000 / GRS80, meridiano central -54, confirmado no .prj original), não em SIRGAS
 #   2000 geográfico (graus) como 2022/2010/2000. Reprojetado aqui para EPSG:4674 (mesmo datum
 #   de origem, sem transformação de datum) para que ST_Centroid/bounding box fiquem em graus.
-# Os 52 códigos do norte de Goiás, em JS, usados nos DOIS filtros abaixo (um seleciona a
-# camada a dissolver, o outro remove as mesmas feições da camada base). Uma só definição para
-# não haver como as duas listas divergirem.
-GO_TO_1980="['5200407','5200704','5201009','5201900','5202007','5202106','5202205','5202304',\
-'5202403','5202700','5202908','5203005','5203708','5205505','5205604','5206008',\
-'5206107','5207006','5207204','5207303','5207709','5208202','5209002','5209309',\
-'5209507','5210505','5210703','5211107','5212402','5213202','5213301','5213608',\
-'5214200','5214309','5215108','5216106','5216205','5216502','5216601','5216700',\
-'5217005','5217500','5217807','5217906','5218201','5218409','5220306','5220801',\
-'5220900','5221106','5221205','5222104']"
+# código de 1980 -> código publicado (53 entradas), em JSON, a partir do módulo Python -- uma
+# só definição para não haver como as duas listas divergirem.
+REMAP_JS=$(.venv/bin/python -c "import json, sys; sys.path.insert(0, 'pipeline'); import norte_goias_1980 as N; print(json.dumps(N.CODIGO_PUBLICADO))")
 
-# Código, nome e UF da unidade agregada. TÊM de bater com
-# pipeline/unidades_agregadas_1980.UNIDADES_AGREGADAS_1980 -- conferido por
-# pipeline/tests/test_edicao_1980.py (malha x municipios_ref 1:1).
-NORTEGO_CD=NORTEGO
-NORTEGO_NM="Norte de Goiás (atual Tocantins)"
-NORTEGO_UF=TO
-
-# HISTÓRICO (pós-1.0.2-1980, achado em produção; revertido em F9.10): o polígono de NORTEGO,
-# dissolvido por -dissolve2, é válido no sentido OGC (GEOS ST_IsValid confirma) mas era
-# complexo/côncavo demais para o earcut que o deck.gl usa para preencher polígonos na GPU --
-# produzia um triângulo espúrio enorme, visível como uma faixa/triângulo cortando o mapa em
-# vez do contorno do Tocantins. A causa raiz, descoberta depois, não era a concavidade em si:
-# era a autointerseção residual que geo/build.sh publicava sem passar por -clean depois de
-# -simplify (mapshaper materializa a simplificação só na escrita -- -clean na MESMA invocação
-# do -simplify desfazia o efeito). geo/build.sh agora roda em duas invocações (simplifica ->
-# grava intermediário -> -clean com snap-interval -> publica), o que resolve NORTEGO junto com
-# o resto da malha sem precisar de tratamento especial aqui -- ver pipeline/validate_geo.py e
-# docs/METODOLOGIA.md. pipeline/gridsplit_geom.py (o recorte em grade que este bloco usava) foi
-# removido.
-npx --yes mapshaper -i "$SHP" -rename-layers base \
+npx --yes mapshaper -i "$SHP" \
     -each "CD_MUN = String(codigo)" \
     -rename-fields NM_MUN=nome \
     -each "
-      // Fernando de Noronha: '2000107' (Território Federal, código que não existe no sistema
-      // atual) -> '2605459' (Fernando de Noronha/PE, código de 2022). Ver nota acima.
-      if (CD_MUN == '2000107') CD_MUN = '2605459';
-    " \
-    -filter "$GO_TO_1980.indexOf(CD_MUN) > -1" + name=nortego \
-    -dissolve2 target=nortego \
-    -each "CD_MUN = '$NORTEGO_CD'; NM_MUN = '$NORTEGO_NM'; SIGLA_UF = '$NORTEGO_UF'" target=nortego \
-    -filter "$GO_TO_1980.indexOf(CD_MUN) === -1" target=base \
-    -each "
+      // código de 1980 -> código publicado (Fernando de Noronha e os 52 do norte de Goiás);
+      // ver nota acima. Quem não está na tabela mantém o código (é o mesmo de 2022).
+      var REMAP = $REMAP_JS;
+      if (REMAP[CD_MUN]) CD_MUN = REMAP[CD_MUN];
       var UF_POR_COD = {
-        '11':'RO','12':'AC','13':'AM','14':'RR','15':'PA','16':'AP',
+        '11':'RO','12':'AC','13':'AM','14':'RR','15':'PA','16':'AP','17':'TO',
         '21':'MA','22':'PI','23':'CE','24':'RN','25':'PB','26':'PE','27':'AL','28':'SE','29':'BA',
         '31':'MG','32':'ES','33':'RJ','35':'SP',
         '41':'PR','42':'SC','43':'RS',
         '50':'MS','51':'MT','52':'GO','53':'DF'
       };
       SIGLA_UF = UF_POR_COD[CD_MUN.slice(0,2)]
-    " target=base \
+    " \
     -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
     -proj EPSG:4674 \
-    -o target=base format=geojson "$TMP/base.geojson" \
-    -o target=nortego format=geojson "$TMP/nortego.geojson"
-
-# GeoJSON não carrega CRS de origem (já reprojetado acima, para EPSG:4674, antes de exportar) --
-# mapshaper não precisa (nem pode) reprojetar de novo aqui.
-npx --yes mapshaper \
-    -i "$TMP/base.geojson" name=base \
-    -i "$TMP/nortego.geojson" name=nortego \
-    -merge-layers target=base,nortego force name=municipios \
-    -filter-fields CD_MUN,NM_MUN,SIGLA_UF \
     -o format=shapefile encoding=utf8 "$OUT/BR_Municipios_1980.shp"
 
 rm -rf "$TMP"

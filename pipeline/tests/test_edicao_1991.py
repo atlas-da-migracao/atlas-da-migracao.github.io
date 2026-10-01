@@ -257,7 +257,10 @@ def test_gate_ok_existe_e_e_valido():
     # TopoJSON por produto (municipios/uf/rgi/rgint _albers.topojson, metros) e
     # centroides*.parquet ganhou x_albers/y_albers; meta.json ganhou bounds_albers. Ver
     # docs/METODOLOGIA.md, "Cartografia: projeção cônica equivalente de Albers (F10)".
-    assert carimbo["versao_dados"] == "1.0.3-1991"
+    # 1.0.4-1991: 30/09/2026 -- simplificação das malhas por tolerância em metros (geo/build.sh,
+    # SIMP_MUN/SIMP_AGREG; ver nota em docs/METODOLOGIA.md). Só geo/*.topojson e o meta.json
+    # (bounds) mudaram; nenhum agregado estatístico foi tocado.
+    assert carimbo["versao_dados"] == "1.0.4-1991"
     assert "1991/municipios.parquet" not in carimbo["arquivos"], "caminhos no carimbo são relativos à própria PROCESSED"
 
 
