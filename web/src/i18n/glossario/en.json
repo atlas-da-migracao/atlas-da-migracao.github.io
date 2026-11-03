@@ -1,0 +1,222 @@
+{
+  "saldo": {
+    "termo": "Net migration",
+    "definicao": "The difference between those who arrived in and those who left the unit during the census period: net migration = in-migrants − out-migrants.",
+    "interpretacao": "Positive net migration means the unit gained more people than it lost during the period; negative, that it lost more than it gained. Net migration close to zero does not mean little migration — it may be many arrivals offset by many departures (see turnover).",
+    "limitacoes": "At the aggregate levels (immediate region, intermediate region, state (UF) and metropolitan region), the published net migration is calculated from the flows that cross the unit's boundary, and it is not the sum of the net migration of its municipalities: migration between municipalities within the same unit is left out of the count."
+  },
+  "taxa_liquida": {
+    "termo": "Net migration rate (TLM)",
+    "definicao": "Net migration expressed per 1,000 population: TLM = (net migration ÷ population aged 5 and over) × 1,000. It is the version of net migration that does not depend on the size of the unit.",
+    "interpretacao": "Zero is balance. Positive values indicate population gain through migration, negative values indicate loss, and the magnitude reads as “so many more (or fewer) people per 1,000 population”. Because it is relative to population, it allows a small municipality to be compared with a state capital.",
+    "limitacoes": "It inherits the caveat on net migration at aggregate levels: it measures only exchanges that cross the unit's boundary. The denominator is the population aged 5 and over, which is the universe of the migration question, not the total population."
+  },
+  "imigrantes": {
+    "termo": "In-migrants (arrivals)",
+    "definicao": "People who lived in another Brazilian municipality at the start of the census reference period and lived in this unit at its end. The period is the five-year period of each edition (for example, July 31, 2017, to July 31, 2022, in the 2022 Census).",
+    "interpretacao": "It is a count of people (a weighted estimate from the census sample): the higher it is, the more people arrived in the unit during the period. Always compare it with out-migration and with the size of the population before concluding that the unit “attracts” people.",
+    "limitacoes": "A fraction of the migrants who arrived did not report their municipality of origin. These cases are published separately: they count toward the destination's total in-migration, but they are left out of the origin–destination matrix and, consequently, out of the out-migration computed for the origin municipalities."
+  },
+  "emigrantes": {
+    "termo": "Out-migrants (departures)",
+    "definicao": "People who lived in this unit at the start of the census reference period and lived in another Brazilian municipality at its end.",
+    "interpretacao": "It is a count of people (a weighted estimate from the sample): the higher it is, the more people left the unit during the period.",
+    "limitacoes": "Out-migration is reconstructed from the origin reported by those who arrived in another municipality. Migrants who could not report their municipality of origin are not assigned to any origin, so out-migration is slightly underestimated."
+  },
+  "eficacia_iem": {
+    "termo": "IEM — migration effectiveness index (MEI in the English-language literature)",
+    "definicao": "Compares net migration with the unit's total movement: IEM = (in-migrants − out-migrants) ÷ (in-migrants + out-migrants). The result always lies between −1 and +1.",
+    "interpretacao": "Near zero, exchanges are balanced — many people come in and go out, with little net effect (turnover). Near +1, the flow is almost entirely inward (absorption); near −1, almost entirely outward (depletion). The Baeninger typology used in the atlas classifies |IEM| below 0.15 as turnover, from 0.15 to 0.33 as absorption or depletion, and 0.33 or more as strong absorption or depletion (0.15 corresponds to the larger flow exceeding the smaller one by a third; 1/3 corresponds to the larger flow being twice the smaller one). The comparative map in the series also separates, for visual reading only, a band of 0.60 or more (“very strong”); it is not a class of the typology. When the difference between arrivals and departures falls within the sample's margin of error, the unit is shown as “undetermined” instead of being given a class — uncertainty is not evidence of balance.",
+    "limitacoes": "Unlike crude migration intensity (CMI) and aggregate net migration rate (ANMR), the IEM is scale-free: it is a ratio between net migration and volume, and can therefore be compared across different territorial levels (municipality, region, state) and across censuses. That is why the atlas treats this measure differently from the intensity measures. In the 1980 edition the classification is published without the statistical guard, because that edition does not estimate sampling error."
+  },
+  "rotatividade": {
+    "termo": "Turnover",
+    "definicao": "The unit's total movement, adding both directions: turnover = in-migrants + out-migrants. It measures how many people moved, regardless of where to.",
+    "interpretacao": "It grows even when net migration is zero. Read together with net migration, it gives the full picture: high turnover with net migration close to zero indicates an intense, balanced exchange of population; low turnover with net migration close to zero indicates little migration in either direction."
+  },
+  "distancia_media": {
+    "termo": "Mean migration distance",
+    "definicao": "Mean distance of the unit's inflows and outflows, weighted by the volume of each flow, measured in a straight line between the geographic centers of the municipalities in the Albers equal-area conic projection.",
+    "interpretacao": "The higher it is, the farther away are the places the unit's migrants come from and go to: long distances indicate long-range migration, short distances indicate exchange with the immediate surroundings.",
+    "limitacoes": "The Albers projection preserves area, not shape, and the distance measured on it has a small geometric distortion relative to the true distance (up to about 6.6% in the far south of the country) — acceptable for a comparative summary measure, not for precise metric use. It counts only the origin and destination pairs actually published (very small pairs are suppressed for confidentiality). It is not calculated at the metropolitan region level, because there is no published matrix of the metropolitan region against the rest of the country."
+  },
+  "pct_interestadual": {
+    "termo": "% of migration crossing state lines",
+    "definicao": "Share of the unit's migration volume in which the state of origin differs from the state of destination.",
+    "interpretacao": "It is a measure of geographic reach: the higher the percentage, the greater the weight of long-distance migration between states; the lower it is, the more the unit's migration takes place within its own state.",
+    "limitacoes": "Calculated on the published origin and destination pairs; the tail of small pairs suppressed for confidentiality is left out of the count. In the 1980 edition migration is measured by approximation (the last step of the migration path), which shifts long flows into short flows and underestimates the interstate percentage by about 2 percentage points."
+  },
+  "gini": {
+    "termo": "Flow concentration (Gini index)",
+    "definicao": "Measures how far the unit's migration volume is concentrated in a few partners. The atlas publishes two versions: one over the municipalities that arrivals come from and another over the municipalities that departures go to. It ranges from 0 (all partners with equal volume) to 1 (all the volume in a single partner).",
+    "interpretacao": "High values indicate dependence on a few partners — a municipality that exchanges population almost only with the neighboring state capital. Low values indicate a dispersed range of origins or destinations.",
+    "limitacoes": "It is a simplified application of Plane and Mulligan (1997): the index is calculated with the Gini formula on the unit's vector of volumes by partner, and not in the full matrix form of the original article, which measures the spatial focus of the whole system. In addition, only what is published enters the count: the tail of small pairs suppressed for confidentiality (about 30% of the volume, in all editions) is left out."
+  },
+  "tipo_fluxo_predominante": {
+    "termo": "Predominant migration flow type",
+    "definicao": "A simplified reading that combines the two measures of geographic reach above -- mean distance and % crossing state lines -- into a single label: short or long distance, crossed with intrastate or interstate (e.g., “long-distance, intrastate”, typical of a state with a large territory).",
+    "interpretacao": "It is not a new measure: it is a way of reading both at once, without opening the two numbers separately. “Long-distance” means a mean distance equal to or greater than 200 km; “interstate” means that at least half of the migration volume crosses the state boundary (simple majority). All four combinations occur in practice: “short-distance, interstate” is common near state borders; “long-distance, intrastate” is common in states with a large territory.",
+    "limitacoes": "The two cut-offs (200 km and 50%) are editorial, chosen for the readability of the label, not statistically calibrated against the distribution of municipalities -- a unit with a mean distance of 199 km and another with 201 km fall into different classes by a small margin. It inherits all the caveats of mean distance and of % crossing state lines, including the suppression of the tail of small pairs and the 1980 approximation."
+  },
+  "cmi": {
+    "termo": "CMI — crude migration intensity",
+    "definicao": "A SYSTEM measure, not a measure of one unit: CMI = 100 × migrants ÷ population, that is, the percentage of the population of the whole level that changed unit during the period.",
+    "interpretacao": "The higher it is, the more intense migration was across the territory as a whole in that census. It answers “how many people moved”, never “where to” — that is what the system-level migration effectiveness (aggregate MEI) is for.",
+    "limitacoes": "Note that this is the most important caveat of the measure: migration intensity grows with the number of units in the territorial grid (the Courgeau effect, a case of the modifiable areal unit problem). Changing municipality is more likely than changing state simply because there are more municipalities. That is why the CMI CANNOT be compared across different levels — the municipal value and the state value are not the same quantity —, and even between censuses at the same level it must be read alongside the number of units in that edition. This is the dividing line that separates, in the interface, the unit-level measures (Part 1) from the system-level measures (Part 2)."
+  },
+  "smi": {
+    "termo": "SMI — age-standardized migration intensity",
+    "definicao": "Migration intensity (CMI) recalculated as if all editions had the same age composition, using a common reference population. Migrating is much more frequent between ages 20 and 35, so part of the crude variation between censuses is simply population aging.",
+    "interpretacao": "It reads like migration intensity, but free of the effect of age structure: if the CMI falls between two censuses and the SMI does not, the drop was age composition, not a change in migration behavior.",
+    "limitacoes": "It is calculated only at the municipal level, because it depends on the profile of migrants by age group, published only at that level. At the aggregate levels it is shown empty instead of as an approximate sum. It inherits from the CMI the dependence on the number of units: do not compare across different territorial levels."
+  },
+  "mei_agregado": {
+    "termo": "Aggregate MEI — system-level migration effectiveness",
+    "definicao": "The same idea as the migration effectiveness index of a unit, but for the whole system: aggregate MEI = 100 × 0.5 × (sum of the absolute values of net migration) ÷ total migrants. It measures how much of the movement results in redistribution of population rather than in balanced exchange.",
+    "interpretacao": "Near zero, migration in the system is cross-exchange — many people move and the population map barely changes. High values indicate that movement is unbalanced and effectively redistributes population among the units.",
+    "limitacoes": "Because it is a ratio between net migration and volume, it is scale-free and stable in delineations with 20 units or more: it can be read across different territorial levels, unlike crude migration intensity (CMI) and the aggregate net migration rate (ANMR)."
+  },
+  "anmr": {
+    "termo": "ANMR — aggregate net migration rate",
+    "definicao": "Breaks the redistribution of population down into two parts: ANMR = migration intensity (CMI) × system effectiveness (aggregate MEI) ÷ 100. It is how many people move multiplied by how unbalanced that movement is.",
+    "interpretacao": "It measures the net effect of migration on the distribution of the population during the period. It can be low for two opposite reasons: few people moving, or many people moving in balanced exchanges — only by looking at the two components separately can one case be told from the other.",
+    "limitacoes": "Because it contains migration intensity, it inherits the dependence on the number of units in the grid (the Courgeau effect): do not compare across different territorial levels, and read the series of a given level alongside the number of units in each edition."
+  },
+  "beta_fielding": {
+    "termo": "Fielding's β — concentration or deconcentration",
+    "definicao": "Slope of the line relating each unit's net migration rate to the logarithm of its population density, estimated by ordinary least squares with weights proportional to population.",
+    "interpretacao": "A positive β indicates a system undergoing concentration: the densest units are the ones gaining population through migration (metropolitanization). A negative β indicates deconcentration: the ones gaining are the least dense units (counterurbanization). Values within plus or minus two standard errors of zero should be read as the absence of a pattern, not as weak deconcentration.",
+    "limitacoes": "It is calculated over the units that EXISTED in each edition, and the territorial base changes between censuses (municipalities created later are not in the older edition). Part of the variation in the series is therefore a change in territorial delineation."
+  },
+  "duncan_d": {
+    "termo": "Duncan's D — change in the structure of flows",
+    "definicao": "Dissimilarity index between the origin–destination matrices of two consecutive censuses: the share of the volume that would have to switch origin→destination pair for the structure of one census to match the other. It ranges from 0 to 1.",
+    "interpretacao": "Zero means that the pattern of flows did not change between the two censuses (even if the total volume changed, because both matrices are normalized before the comparison). Near 1 means a complete reorganization of migration routes.",
+    "limitacoes": "Calculated on the matrix common to the two editions being compared, renormalized within that set — otherwise, creating a new municipality would appear as a change in migration pattern. Even so, the measure is best read together with the number of units and the territorial grid of each edition: between 1980 and 1991 the intersection is the smallest in the series, and the index measures change in structure only within it."
+  },
+  "n_unidades": {
+    "termo": "Number of units in the edition",
+    "definicao": "How many units of the selected level (municipalities, immediate regions, intermediate regions or states) existed in that census, and over which the system-level measures were calculated.",
+    "interpretacao": "It is essential context for the system-level measures. Municipalities are created over time: in 2022 there are 5,570, against 5,507 in 2000, so the same population can produce more “migration between municipalities” simply because the internal boundaries increased.",
+    "limitacoes": "It is because of this variation that crude migration intensity (CMI), standardized intensity (SMI) and the aggregate net migration rate (ANMR) are not directly comparable across editions without looking at this number alongside — this is the Courgeau effect, shown explicitly in the figure that accompanies the system part."
+  },
+  "ic95": {
+    "termo": "95% CI — 95% confidence interval",
+    "definicao": "Range of values within which the true number probably lies. The atlas's numbers come from the census sample, not from the full count of the population: each estimate has a margin of error, and the interval is the estimate plus or minus 1.96 standard errors.",
+    "interpretacao": "Read the interval, not just the central point: the narrower the range, the more precise the estimate. If the intervals of two units (or of two censuses) overlap widely, the difference between them may be merely an effect of the sample.",
+    "limitacoes": "No interval is published where there is no estimated sampling error: the 1980 edition has no household identifier in the source and therefore does not estimate sampling error, and at the aggregate levels of some editions the standard error is not published. In the 1991 edition the standard error is approximate and conservative (the stratum used in the calculation is a substitute for the weighting area, which that census does not have)."
+  },
+  "cv": {
+    "termo": "CV — coefficient of variation",
+    "definicao": "Standard error of the estimate divided by the estimate itself, as a percentage. It measures relative precision: the size of the margin of error compared with the size of the estimated number.",
+    "interpretacao": "The lower, the better. Following IBGE's guidance, the atlas considers precision good up to 15%, asks for caution between 15% and 30%, and classifies as low precision above 30%. A high coefficient of variation almost always means that few sample cases support that pair or that unit — the value indicates an order of magnitude, not a digit.",
+    "limitacoes": "It is not comparable point by point across all editions: in 1991 the coefficient of variation is calculated with a substitute stratum and is 5% to 20% higher than in 2000 for pairs with the same sample size (read it as conservative), and in 1980 it simply does not exist."
+  },
+  "precisao": {
+    "termo": "Estimate precision",
+    "definicao": "A label that summarizes the coefficient of variation of each published estimate in four classes: good (coefficient of variation up to 15%), use with caution (from 15% to 30%), low precision (above 30%) and no estimate (when the edition does not publish sampling error).",
+    "interpretacao": "“Good” allows the number to be read as a value; “use with caution” allows the direction and the order of magnitude to be read; “low precision” means that the estimate is fragile and could change considerably in another sample; “no estimate” does not mean imprecise — it means there is no way to measure precision in that edition.",
+    "limitacoes": "“No estimate” is the class of the entire 1980 edition (the source has no household identifier, so there is no sampling unit for variance estimation) and of the aggregate levels that do not publish a standard error."
+  },
+  "n_faixa": {
+    "termo": "Sample size band",
+    "definicao": "How many census sample records support that estimate, reported as a band (5-19, 20-49, 50-99, 100-499, 500 or more) and never as an exact value.",
+    "interpretacao": "It is a measure of robustness, not of population: “20-49” means that between 20 and 49 sample persons were observed in that cell, whose sample weight expands them to a much larger number of people in the population. Low bands call for the same caution as a high coefficient of variation.",
+    "limitacoes": "Using a band instead of the exact value is a requirement of the atlas's disclosure control rules (statistical confidentiality of IBGE's controlled-access microdata), not a loss of information in the calculation. Cells below the edition's disclosure floor are not published in any form — the floor is 5 records and 3 distinct households in the editions with a household identifier, and 20 records in the 1980 edition, which does not have that identifier."
+  },
+  "posto": {
+    "termo": "Rank",
+    "definicao": "Position of a partner (municipality of origin or destination) in the unit's list of flows sorted from largest to smallest volume: rank 1 is the main partner.",
+    "interpretacao": "Comparing ranks across censuses shows whether a partner rose, fell or kept its relative importance. Because it is a measure of order, not of quantity, it is scale-free: it works even when the total volume of migration changes a lot between editions.",
+    "limitacoes": "The ranking sees only published pairs. A small partner may be missing from the ranking because of confidentiality suppression, not because it does not exist — an effect that is stronger in the 1980 edition, whose publication floor is higher (20 sample records instead of 5)."
+  },
+  "rm_migracao_intra": {
+    "termo": "Intra-metropolitan migration",
+    "definicao": "Migration between municipalities of the SAME metropolitan region: people who changed address without leaving the region.",
+    "interpretacao": "It measures the internal rearrangement of the region — typically the spread of population from the central municipality to the neighboring municipalities. It is a large number in consolidated metropolitan regions even when the region's net migration with the rest of the country is small.",
+    "limitacoes": "It does not include those who entered the region from outside or those who left it for outside — that is the region's net migration with the rest of the country, measured separately. It depends on the region's municipalities existing individually in the edition: when part of the metropolitan territory was not yet subdivided as it is today, the indicator is not comparable and the atlas leaves it empty instead of publishing an incomplete value."
+  },
+  "rm_saldo_externo": {
+    "termo": "Net migration of the metropolitan region with the rest of the country",
+    "definicao": "Net migration of the metropolitan region taken as a single unit: all arrivals from outside it minus all departures to outside it. Migration between municipalities of the region itself is not included.",
+    "interpretacao": "Positive indicates that the region as a whole gained population through migration; negative, that it lost population. It is the right reading for answering “is this metropolis attracting or losing people?”, whereas intra-metropolitan migration answers “how is the population being redistributed within it?”.",
+    "limitacoes": "The metropolitan delineation used is that of 2022, applied retroactively to the earlier editions. Municipalities of the region created after an older edition do not exist in it (they appear within the municipality they split from), so territorial coverage varies and the number is not directly comparable across censuses without checking that coverage — which the interface states in each cell."
+  },
+  "rm_nucleo_periferia": {
+    "termo": "Core and periphery",
+    "definicao": "Classification of each migration flow within the metropolitan region according to the position of the two municipalities: core→periphery (leaving the center), periphery→core (moving toward the center) and periphery→periphery (between peripheral municipalities). The core is the member municipality whose name appears in the name of the region; if no member shares the name, it is the most populous one.",
+    "interpretacao": "A predominance of core→periphery indicates residential deconcentration — the population of the center moves to the neighboring municipalities, often without changing jobs. A predominance of periphery→core indicates the classic movement of densification of the center. High periphery→periphery suggests a region with several poles rather than a single center.",
+    "limitacoes": "It depends on the region's internal municipal partition existing in the edition: regions reduced to a single municipality in the edition, or with incomplete municipal coverage, lack this indicator by construction, not by measurement."
+  },
+  "pendular_conceito": {
+    "termo": "Commuting",
+    "definicao": "The situation of someone who LIVES in one municipality and WORKS or STUDIES in another, going back and forth on a daily or almost daily routine. It is different from migration: in migration the person changes residence; in commuting, they do not.",
+    "interpretacao": "High commuting volumes indicate functional integration between municipalities — labor markets and school networks that cross municipal boundaries, typical of metropolitan regions. Migration and commuting are separate modules of the atlas and are not added together: they are people counted by different criteria.",
+    "limitacoes": "The 1991 census does not ask where the person works or studies, so that edition has no commuting module — the absence comes from the questionnaire, and the cell is “not measured”, not zero. In 2000 there is a single work-or-study question, with work taking precedence, so the study flow in that edition is a lower bound: comparable in composition and direction, never in level."
+  },
+  "pendular_taxa_saida": {
+    "termo": "Out-commuting rate",
+    "definicao": "Percentage of the municipality's employed residents who work in another municipality. There is an analogous indicator for study, over those who attend school or daycare.",
+    "interpretacao": "The higher it is, the more the municipality functions as the residential area of a labor market located outside it — the pattern of a commuter (dormitory) town. Low values indicate a labor market contained within its own boundaries.",
+    "limitacoes": "The universe of the work indicator is the employed population aged 10 and over; those who work in more than one municipality or abroad are counted as a separate category and do not enter the commuting flow matrix."
+  },
+  "pendular_indice_atracao": {
+    "termo": "Commuting attraction index",
+    "definicao": "Ratio between the people who work in the municipality (the residents who work there plus those who come from outside to work there) and the municipality's total employed residents.",
+    "interpretacao": "Above 1, the municipality concentrates more jobs than resident workers: it is a pole that attracts labor from its neighbors. Below 1, it exports workers — more people leave to work outside than come in to work."
+  },
+  "pendular_tempo_mediano": {
+    "termo": "Median commuting time",
+    "definicao": "Time, in minutes, that splits commuters into two halves: half spend less than this value on the usual trip between home and work or school, half spend more.",
+    "interpretacao": "It measures the everyday cost of the separation between home and job. Because it is a median, it is not pulled by extreme trips, as a mean would be.",
+    "limitacoes": "It exists only in the 2022 edition, the only one that records time in minutes. The 2010 Census asks about time only in five categorical bands that do not fit those of 2022 (the second 2010 band spans two 2022 bands), so there the atlas publishes the distribution in its own bands and leaves the median empty; 2000, 1991 and 1980 do not have the question."
+  },
+  "pendular_pct_coletivo": {
+    "termo": "% using public transport",
+    "definicao": "Share of commuters who use public transport (bus, van, train or subway), among the reported modes of transport.",
+    "interpretacao": "It indicates the dependence on public transport in the link between municipalities: high percentages reveal a commuting corridor served by a public transport network; low ones, predominantly individual travel.",
+    "limitacoes": "Only the 2022 edition asks about the mode of transport. In the other editions the dimension does not exist and the cell is published empty — “this edition does not measure it” is not the same as “the value is zero”."
+  },
+  "pendular_retorno_diario": {
+    "termo": "% returning home daily",
+    "definicao": "Share of commuters who return home daily, or almost daily.",
+    "interpretacao": "It separates everyday commuting from the arrangement of spending the week away and returning at the weekend. High percentages indicate a pair of municipalities that is in fact integrated day to day.",
+    "limitacoes": "The definition of the question changes between editions: 2022 asks whether the person returns three or more days a week, and 2010 asks whether they return daily. The codes coincide, the definitions do not — the values are comparable in order of magnitude, never as a series. The 2000, 1991 and 1980 editions have no return-frequency question."
+  },
+  "ride": {
+    "termo": "RIDE — Integrated Economic Development Region",
+    "definicao": "An institutional arrangement similar to a metropolitan region, but created by federal law instead of state law, precisely because it brings together municipalities from more than one state — the best-known case is the RIDE of the Federal District and Surrounding Area (Distrito Federal e Entorno).",
+    "interpretacao": "In the atlas, RIDEs and metropolitan regions receive exactly the same measures and appear in the same selector: core and periphery, migration within the region, net migration with the rest of the country and commuting.",
+    "limitacoes": "In a RIDE, much of the migration “within the region” is at the same time interstate, because the municipalities are in different states: the two indicators are not independent and should not be read as separate dimensions of the same phenomenon."
+  },
+  "sidra": {
+    "termo": "SIDRA — IBGE Automatic Retrieval System",
+    "definicao": "IBGE's database of official tabulations, where census results are published. It is the official reference; the atlas is the author's own work based on the sample microdata.",
+    "interpretacao": "Use SIDRA as the reference when you need the official number. The atlas's values may differ from those published there, and the difference is expected: the atlas works with the sample (not with the full count), rounds the estimates, suppresses small cells for confidentiality and applies its own classifications of migration and commuting.",
+    "limitacoes": "The expansion of the sample itself may differ from the full count in some municipalities, a caveat that IBGE records in the documentation of each census. Where the atlas and SIDRA disagree, the atlas neither corrects nor calibrates: it publishes its own estimate and states the difference."
+  },
+  "status_migratorio": {
+    "termo": "Migrant type",
+    "definicao": "Classifies each migrant by their relationship with the municipality where they were born: “return to municipality of birth” (went back to where they were born), “not born in the destination” (migrated to a municipality that is not their birthplace) and “born abroad”. In the 2022 edition, the only one that collects the municipality of birth, the not-born-in-the-destination category is split into “first move from municipality of birth” and “multi-step” (had already lived in another municipality before this one).",
+    "interpretacao": "Many people in “return to municipality of birth” indicates return migration — typical of regions that exported population decades earlier. A predominance of “not born in the destination” indicates outbound migration, to new destinations. “Multi-step”, where it exists, reveals chained migration paths rather than a single move.",
+    "limitacoes": "The set of categories changes between editions: only 2022 separates “first move” from “multi-step”, because the others do not ask about the municipality of birth. In the comparison across censuses, the two 2022 categories are added together into “not born in the destination”, so that all editions use the same base; the finer detail remains available in the 2022 edition panel. In the 1980 edition, return to the municipality of birth comes from the question “born in this municipality” and applies to all municipalities, including the 52 in northern Goiás (now Tocantins); what is underestimated in Tocantins is return to the state of birth, because those born there and living elsewhere reported “Goiás” as their state of birth."
+  },
+  "escolaridade": {
+    "termo": "Educational attainment",
+    "definicao": "Level of education attained, measured only among people aged 25 and over — the age by which most people have completed the typical school path, which avoids confusing “still studying” with “did not study”. Four classes: no schooling or incomplete elementary; completed elementary; completed high school; completed higher education. (In Brazil, elementary school — ensino fundamental — lasts 9 years, ISCED 1–2; high school — ensino médio — lasts 3 years, ISCED 3.)",
+    "interpretacao": "Comparing the composition of migrants with that of non-migrant residents shows migration selectivity: when migrants have more schooling than those who stayed, migration is selecting the more educated population.",
+    "limitacoes": "The characteristic is measured at the END of the migration period, so it is not known whether education is a cause or a consequence of migration. In the 2000 and 1991 editions the level of education is derived from “years of schooling”, which slightly underestimates “completed higher education” (a three-year degree adds up to 14 years of schooling and falls into the class below). In the 1980 edition education is reconstructed from “last grade completed” crossed with “level”, a declared approximation that underestimates the level of those who were still studying. The “not declared” category is left out of the calculation of the shares, in all editions."
+  },
+  "renda_domiciliar": {
+    "termo": "Household income per capita",
+    "definicao": "Total household income divided by the number of residents, presented in minimum-wage bands (up to 1/4, 1/4 to 1/2, 1/2 to 1, 1 to 2, and more than 2 minimum wages). The minimum wage is the one in force on the reference date of each census, which makes the bands comparable across editions despite changes in currency and inflation. People living in a collective dwelling appear in the “collective dwelling” category, because household income per capita is not defined for them.",
+    "interpretacao": "As with education, the interest lies in the comparison between migrants and non-migrant residents: that is what reveals whether migration selects by income, and in which direction.",
+    "limitacoes": "It is not published in the 1980 edition: the current source (censobr/IPEA v1.0.0) contains the income variables, but they have not yet been mapped or validated for publication — the previous source (Base dos Dados) had them filled in for only one state. In 1991 the divisor is the minimum wage implicit in IBGE's own income bands, not the legal minimum of the time, which is what makes the cut-offs match the official tabulations of that census. Like education, income is measured at the end of the period: it is not known whether it is a cause or a consequence of migration."
+  },
+  "idade_sexo": {
+    "termo": "Age and sex profile",
+    "definicao": "Cross-classified composition by age group (5 to 14, 15 to 24, 25 to 39, 40 to 59, and 60 and over) and sex, for both migrants and residents, which allows the pyramid of each group to be built.",
+    "interpretacao": "Migration is strongly concentrated between ages 15 and 39; a migrant profile older than the norm suggests return or retirement migration, and the presence of the 5 to 14 age group indicates the movement of families with children, not of people on their own. The ratio between men and women reveals selectivity by sex, common in flows linked to specific occupations.",
+    "limitacoes": "The five age groups are wide: they do not allow the peak age of migration to be located more precisely than the width of the group, nor a detailed age profile to be fitted. The “undetermined” sex exists as a category only in the 2022 edition and weighs less than 0.03% of the total; it is included in the age-group total but left out of the denominator of the sex ratio, in all editions, so that the comparison uses the same base."
+  }
+}

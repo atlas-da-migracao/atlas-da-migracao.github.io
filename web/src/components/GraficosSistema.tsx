@@ -22,19 +22,23 @@
  *  `useEffect`, removendo o anterior antes de cada novo desenho (padrão recomendado pela
  *  própria documentação do Plot para uso fora de notebooks Observable).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import * as Plot from "@observablehq/plot";
 import { serieCourgeau } from "../db/queries";
 import { rotuloEdicao, rotuloIntervalo, slotEdicao, type EdicaoSerie, type NivelSerie } from "../lib/serie";
 import { AZUL, cor as corDaPaleta } from "../lib/paletas";
-import { num, num2 } from "../lib/format";
+import { localeNumeros, num, num2 } from "../lib/format";
 import { escolherLadosDosRotulos, type LadoRotulo } from "../lib/rotulos";
 import { usarModoEscuro } from "../state/store";
+import { useT } from "../i18n";
 import { Termo } from "./Termo";
 
-const ROTULO_NIVEL: Record<NivelSerie, string> = {
-  mun: "municípios", rgi: "regiões imediatas", rgint: "regiões intermediárias", uf: "UFs", rm: "regiões metropolitanas",
-};
+/** Formatador dos ticks dos eixos do Plot no idioma ativo (o padrão do Plot é sempre en-US).
+ *  Chamado dentro do desenho (que roda em efeito), então já pega o locale vigente. */
+function formatoEixo(): (v: number) => string {
+  const nf = new Intl.NumberFormat(localeNumeros(), { maximumFractionDigits: 6 });
+  return (v) => nf.format(v);
+}
 
 /** Renderiza uma figura do Plot dentro de uma <div>. */
 function useFigura(desenhar: () => (SVGSVGElement | HTMLElement) | null, deps: unknown[]) {
@@ -89,6 +93,7 @@ const DESLOCAMENTO_ROTULO: Record<LadoRotulo, {
 
 /** (a) Plano MEI×CMI com trajetória, seção 3.2-a. 420x320px. */
 function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: readonly EdicaoSerie[] }) {
+  const d = useT();
   const pontos = linhas.filter((l) => l.cmi != null && l.mei != null);
   const { containerRef } = useFigura(() => {
     if (pontos.length === 0) return null;
@@ -127,39 +132,40 @@ function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: rea
     const rotulos = (Object.keys(DESLOCAMENTO_ROTULO) as LadoRotulo[]).flatMap((lado) => {
       const doLado = pontos.filter((_, i) => lados[i] === lado);
       if (doLado.length === 0) return [];
-      const d = DESLOCAMENTO_ROTULO[lado];
+      const desl = DESLOCAMENTO_ROTULO[lado];
       return [
-        Plot.text(doLado, { x: "cmi", y: "mei", text: "edicao", dx: d.dx, dy: d.dyEdicao, textAnchor: d.ancora, fontSize: 10 }),
+        Plot.text(doLado, { x: "cmi", y: "mei", text: "edicao", dx: desl.dx, dy: desl.dyEdicao, textAnchor: desl.ancora, fontSize: 10 }),
         Plot.text(doLado, {
-          x: "cmi", y: "mei", dx: d.dx, dy: d.dyN, textAnchor: d.ancora, fontSize: 9, fill: "var(--ink-secondary)",
-          text: (p) => `n = ${num(p.n_unidades)}`,
+          x: "cmi", y: "mei", dx: desl.dx, dy: desl.dyN, textAnchor: desl.ancora, fontSize: 9, fill: "var(--ink-secondary)",
+          text: (p) => d.graficos.plano.marcaN(num(p.n_unidades)),
         }),
       ];
     });
+    const fmt = formatoEixo();
     return Plot.plot({
       width: PLANO.largura, height: PLANO.altura,
       marginTop: PLANO.topo, marginRight: PLANO.direita, marginBottom: PLANO.base, marginLeft: PLANO.esquerda,
-      x: { label: "CMI (%) →", domain: [0, cmiMax] },
-      y: { label: "↑ MEI agregado (%)", domain: [0, meiMax] },
+      x: { label: d.graficos.plano.eixoX, domain: [0, cmiMax], tickFormat: fmt },
+      y: { label: d.graficos.plano.eixoY, domain: [0, meiMax], tickFormat: fmt },
       marks: [
         Plot.line(contornos, {
           x: "cmi", y: "mei", z: "k", stroke: "#c3c2b7", strokeWidth: 1, curve: "basis",
         }),
         ...niveisAnmr.map((k) => Plot.text([{ cmi: cmiMax * 0.97, mei: (100 * k) / (cmiMax * 0.97) }], {
-          x: "cmi", y: "mei", text: () => `ANMR ${num2(k)}`, fill: "#898781", fontSize: 9, dx: -4,
+          x: "cmi", y: "mei", text: () => d.graficos.plano.marcaAnmr(num2(k)), fill: "#898781", fontSize: 9, dx: -4,
         })),
         Plot.line(segmentoProxy, { x: "cmi", y: "mei", stroke: "var(--ink-secondary)", strokeDasharray: "4,3" }),
         Plot.line(segmentoResto, { x: "cmi", y: "mei", stroke: "var(--ink)" }),
         Plot.dot(pontos, {
           x: "cmi", y: "mei", r: PLANO.raio,
-          symbol: (d) => (d.edicao === "1980" ? "diamond" : "circle"),
-          fill: (d) => (d.edicao === "1980" ? "none" : "var(--ink)"),
+          symbol: (p) => (p.edicao === "1980" ? "diamond" : "circle"),
+          fill: (p) => (p.edicao === "1980" ? "none" : "var(--ink)"),
           stroke: "var(--ink)",
         }),
         ...rotulos,
       ],
     });
-  }, [pontos.map((p) => `${p.edicao}:${p.cmi}:${p.mei}:${p.n_unidades}`).join("|")]);
+  }, [pontos.map((p) => `${p.edicao}:${p.cmi}:${p.mei}:${p.n_unidades}`).join("|"), d]);
 
   // Sentido da trajetória, lido dos DADOS (primeiro e último ponto marcados): o texto antigo
   // dizia "deslocamento para a direita" quando o CMI cai entre os censos (trajetória para a
@@ -173,18 +179,17 @@ function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: rea
   return (
     <figure className="serie-grafico">
       <figcaption>
-        Plano <Termo chave="mei_agregado">MEI</Termo>×<Termo chave="cmi">CMI</Termo>, com trajetória entre censos
+        {d.graficos.plano.titulo(<Termo chave="mei_agregado">MEI</Termo>, <Termo chave="cmi">CMI</Termo>)
+          .map((p, i) => <Fragment key={i}>{p}</Fragment>)}
       </figcaption>
       <div ref={containerRef} />
       <p className="muted-pequeno">
         {trajetoria && <>
-          Entre {rotuloIntervalo(edicoes)} a trajetória vai para a {trajetoria.cai ? "esquerda" : "direita"}:
-          o CMI {trajetoria.cai ? "cai" : "sobe"} de {num2(trajetoria.de.cmi)}% ({trajetoria.de.edicao}) para{" "}
-          {num2(trajetoria.para.cmi)}% ({trajetoria.para.edicao}).{" "}
+          {d.graficos.plano.trajetoria(
+            rotuloIntervalo(edicoes), trajetoria.cai, num2(trajetoria.de.cmi), trajetoria.de.edicao,
+            num2(trajetoria.para.cmi), trajetoria.para.edicao)}{" "}
         </>}
-        A intensidade (CMI) também depende do número de unidades do nível: uma malha mais fina
-        eleva o CMI sem que o comportamento mude, então parte da diferença entre edições pode ser
-        malha, não comportamento — ver figura de Courgeau.
+        {d.graficos.plano.nota}
       </p>
     </figure>
   );
@@ -193,31 +198,30 @@ function PlanoMeiCmi({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: rea
 /** (b) Dispersão de Fielding -- ver desvio documentado no cabeçalho do arquivo: sem nuvem de
  *  pontos por unidade (dado não publicado ao front), só β±erro-padrão e leitura em palavras. */
 function DispersaoFielding({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoes: readonly EdicaoSerie[] }) {
+  const d = useT();
   const leitura = (beta: number | null, ep: number | null): string => {
-    if (beta == null || ep == null) return "sem dado";
-    if (Math.abs(beta) < 2 * ep) return "equilíbrio";
-    return beta > 0 ? "concentração" : "desconcentração";
+    if (beta == null || ep == null) return d.graficos.fielding.semDado;
+    if (Math.abs(beta) < 2 * ep) return d.graficos.fielding.leitura.equilibrio;
+    return beta > 0 ? d.graficos.fielding.leitura.concentracao : d.graficos.fielding.leitura.desconcentracao;
   };
   return (
     <figure className="serie-grafico serie-fielding">
-      <figcaption>Dispersão de Fielding (<Termo chave="beta_fielding">β</Termo>), por edição</figcaption>
+      <figcaption>
+        {d.graficos.fielding.titulo(<Termo chave="beta_fielding">β</Termo>).map((p, i) => <Fragment key={i}>{p}</Fragment>)}
+      </figcaption>
       <div className="serie-fielding-paineis">
         {linhas.map((l) => (
           <div key={l.edicao} className="serie-fielding-painel">
-            <div className="muted-pequeno">{rotuloEdicao(l.edicao)}</div>
+            <div className="muted-pequeno">{rotuloEdicao(l.edicao, d)}</div>
             <div className="serie-fielding-beta">
-              {l.beta_fielding != null ? `β = ${num2(l.beta_fielding)} ± ${num2(l.ep_beta)}` : "sem dado"}
+              {l.beta_fielding != null ? d.graficos.fielding.beta(num2(l.beta_fielding), num2(l.ep_beta)) : d.graficos.fielding.semDado}
             </div>
             <div className="muted-pequeno">{leitura(l.beta_fielding, l.ep_beta)}</div>
           </div>
         ))}
       </div>
       <p className="muted-pequeno">
-        Reta ajustada por MQO ponderado por população sobre as unidades existentes em cada
-        edição.{edicoes.includes("1980") && " Em 1980 a taxa líquida é proxy."} A nuvem de
-        pontos por unidade não está publicada ao front nesta fase (depende de publicar
-        população/área por unidade em `data/processed/series` -- decisão de pipeline/
-        metodologia fora de escopo aqui).
+        {d.graficos.fielding.nota(edicoes.includes("1980"))}
       </p>
     </figure>
   );
@@ -226,6 +230,7 @@ function DispersaoFielding({ linhas, edicoes }: { linhas: LinhaSistema[]; edicoe
 /** (c) Figura de Courgeau -- CMI de todos os níveis, na mesma edição, 5 linhas (uma por
  *  edição). 360x240px. */
 function FiguraCourgeau({ nivelAtivo, edicoes }: { nivelAtivo: NivelSerie; edicoes: readonly EdicaoSerie[] }) {
+  const d = useT();
   const escuro = usarModoEscuro();
   const [porEdicao, setPorEdicao] = useState<Record<EdicaoSerie, { nivel: NivelSerie; n_unidades: number; cmi: number | null }[]>>(
     {} as Record<EdicaoSerie, { nivel: NivelSerie; n_unidades: number; cmi: number | null }[]>,
@@ -255,50 +260,51 @@ function FiguraCourgeau({ nivelAtivo, edicoes }: { nivelAtivo: NivelSerie; edico
     if (dados.length === 0) return null;
     // cores da paleta DO TEMA (antes: sempre `false` = paleta clara, também no tema escuro)
     const corDaEdicao = (e: EdicaoSerie) => corDaPaleta(AZUL(slotEdicao(e)), escuro);
-    const doNivel = dados.filter((d) => d.nivel === nivelAtivo);
+    const doNivel = dados.filter((l) => l.nivel === nivelAtivo);
+    const fmt = formatoEixo();
     return Plot.plot({
       width: 360, height: 240, marginRight: 60,
-      x: { label: "log10(nº de unidades do nível) →" },
-      y: { label: "↑ CMI (%)", domain: [0, Math.max(1, ...dados.map((d) => d.cmi!)) * 1.1] },
+      x: { label: d.graficos.courgeau.eixoX, tickFormat: fmt },
+      y: { label: d.graficos.courgeau.eixoY, domain: [0, Math.max(1, ...dados.map((l) => l.cmi!)) * 1.1], tickFormat: fmt },
       color: { legend: false },
       marks: [
         Plot.line(dados, {
           x: "log_n", y: "cmi", z: "edicao", curve: "linear", strokeWidth: 1.5,
-          stroke: (d) => corDaEdicao(d.edicao),
+          stroke: (l) => corDaEdicao(l.edicao),
         }),
         Plot.dot(dados, {
           x: "log_n", y: "cmi", r: 2.5,
-          fill: (d) => corDaEdicao(d.edicao),
+          fill: (l) => corDaEdicao(l.edicao),
         }),
         // destaque do nível ativo: anel de tinta por fora de um ponto maior (o raio 4 x 2,5 de
         // antes quase não se via)
         Plot.dot(doNivel, {
           x: "log_n", y: "cmi", r: 6.5, strokeWidth: 2, stroke: "var(--ink)",
-          fill: (d) => corDaEdicao(d.edicao),
+          fill: (l) => corDaEdicao(l.edicao),
         }),
         Plot.text(
-          edicoes.map((e) => dados.filter((d) => d.edicao === e).sort((a, b) => b.log_n - a.log_n)[0])
-            .filter((d): d is NonNullable<typeof d> => Boolean(d)),
+          edicoes.map((e) => dados.filter((l) => l.edicao === e).sort((a, b) => b.log_n - a.log_n)[0])
+            .filter((l): l is NonNullable<typeof l> => Boolean(l)),
           { x: "log_n", y: "cmi", text: "edicao", dx: 18, fontSize: 9 },
         ),
       ],
     });
-  }, [dados.map((d) => `${d.edicao}:${d.nivel}:${d.cmi}`).join("|"), nivelAtivo, escuro]);
+  }, [dados.map((l) => `${l.edicao}:${l.nivel}:${l.cmi}`).join("|"), nivelAtivo, escuro, d]);
 
   return (
     <figure className="serie-grafico">
       <figcaption>
-        Figura de Courgeau — <Termo chave="cmi">CMI</Termo> × número de unidades do nível ({ROTULO_NIVEL[nivelAtivo]} em destaque)
+        {d.graficos.courgeau.titulo(<Termo chave="cmi">CMI</Termo>, d.comum.niveis[nivelAtivo].plural)
+          .map((p, i) => <Fragment key={i}>{p}</Fragment>)}
       </figcaption>
       <div ref={containerRef} />
-      {estado === "carregando" && <p className="muted-pequeno" role="status">Carregando a figura…</p>}
-      {estado === "erro" && <p className="muted-pequeno" role="alert">Não foi possível carregar os dados desta figura.</p>}
+      {estado === "carregando" && <p className="muted-pequeno" role="status">{d.graficos.courgeau.carregando}</p>}
+      {estado === "erro" && <p className="muted-pequeno" role="alert">{d.graficos.courgeau.erro}</p>}
       {estado === "pronto" && dados.length === 0 && (
-        <p className="muted-pequeno">Sem dados de CMI por nível para as edições marcadas.</p>
+        <p className="muted-pequeno">{d.graficos.courgeau.semDados}</p>
       )}
       <p className="muted-pequeno">
-        Quanto mais unidades tem a malha, maior a intensidade medida. A inclinação de cada
-        linha é o tamanho desse efeito na edição.
+        {d.graficos.courgeau.nota}
       </p>
     </figure>
   );

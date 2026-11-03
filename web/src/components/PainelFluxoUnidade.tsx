@@ -5,19 +5,11 @@ import { useEffect, useState } from "react";
 import { detalheFluxoUnidade, type DetalheFluxoUnidade, type NivelAgregado } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { num, rotuloPrecisao, sinal } from "../lib/format";
+import { useT } from "../i18n";
 import { AvisoProxy } from "./AvisoProxy";
 import { AvisoUnidadeUf } from "./AvisoUnidade";
 import type { Meta } from "../lib/types";
 import { Termo } from "./Termo";
-
-const ROTULO_NIVEL: Record<NivelAgregado, string> = {
-  rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
-};
-
-/** "as duas ..." no plural do nível, para a frase de troca equilibrada: nunca "municípios". */
-const PAR_DO_NIVEL: Record<NivelAgregado, string> = {
-  rgi: "as duas regiões imediatas", rgint: "as duas regiões intermediárias", uf: "as duas UFs",
-};
 
 interface Props {
   nivel: NivelAgregado;
@@ -28,6 +20,7 @@ interface Props {
 }
 
 export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: Props) {
+  const d = useT();
   const [dados, setDados] = useState<{ ida: DetalheFluxoUnidade | null; volta: DetalheFluxoUnidade | null } | null>(null);
   const [carregando, setCarregando] = useState(true);
   const pronto = usarDuckDBPronto();
@@ -35,13 +28,13 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
   useEffect(() => {
     let vivo = true;
     setCarregando(true);
-    detalheFluxoUnidade(nivel, origem, destino).then((d) => { if (vivo) setDados(d); })
+    detalheFluxoUnidade(nivel, origem, destino).then((det) => { if (vivo) setDados(det); })
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
   }, [nivel, origem, destino]);
 
   if (carregando) {
-    return <aside className="painel" aria-label="Painel de detalhes"><p className="muted">{pronto ? "Carregando o fluxo…" : "preparando os dados…"}</p></aside>;
+    return <aside className="painel" aria-label={d.comum.ui.painelDetalhes}><p className="muted">{pronto ? d.comum.ui.carregandoFluxo : d.paineis.preparandoDados}</p></aside>;
   }
 
   const ida = dados?.ida ?? null;
@@ -49,21 +42,21 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
 
   if (!ida) {
     return (
-      <aside className="painel" aria-label="Painel de detalhes">
+      <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
         <header className="painel-topo">
-          <h2>Fluxo não publicado</h2>
-          <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
+          <h2>{d.paineis.fluxo.naoPublicado}</h2>
+          <button className="fechar" onClick={aoFechar} aria-label={d.comum.ui.fecharPainel}>×</button>
         </header>
-        <p className="muted">Este par ficou abaixo do limiar de divulgação e não é publicado individualmente.</p>
+        <p className="muted">{d.paineis.fluxoUnidade.naoPublicadoMotivo}</p>
       </aside>
     );
   }
 
   const saldo = ida.total - (volta?.total ?? 0);
-  const rotuloNivel = ROTULO_NIVEL[nivel];
+  const rotuloNivel = d.comum.niveis[nivel].titulo;
 
   return (
-    <aside className="painel" aria-label="Painel de detalhes">
+    <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">{rotuloNivel}</div>
@@ -73,7 +66,7 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
             {ida.nm_destino}{ida.uf_destino && ida.uf_destino !== ida.nm_destino && <span className="uf">/{ida.uf_destino}</span>}
           </h2>
         </div>
-        <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
+        <button className="fechar" onClick={aoFechar} aria-label={d.comum.ui.fecharPainel}>×</button>
       </header>
 
       <AvisoProxy meta={meta} />
@@ -86,31 +79,30 @@ export function PainelFluxoUnidade({ nivel, origem, destino, aoFechar, meta }: P
 
       <div className="kpis">
         <div className="kpi">
-          <div className="kpi-rotulo">Migrantes neste fluxo</div>
+          <div className="kpi-rotulo">{d.paineis.fluxoUnidade.migrantesNesteFluxo}</div>
           <div className="kpi-valor">{num(ida.total)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo">Fluxo inverso</div>
+          <div className="kpi-rotulo">{d.paineis.fluxoInverso}</div>
           <div className="kpi-valor">{volta ? num(volta.total) : "—"}</div>
-          <div className="kpi-detalhe">{volta ? `${ida.nm_destino} → ${ida.nm_origem}` : "abaixo do limiar"}</div>
+          <div className="kpi-detalhe">{volta ? `${ida.nm_destino} → ${ida.nm_origem}` : d.paineis.fluxoUnidade.abaixoLimiar}</div>
         </div>
         <div className="kpi kpi-largo">
-          <div className="kpi-rotulo">Saldo do par</div>
+          <div className="kpi-rotulo">{d.paineis.fluxoUnidade.saldoPar}</div>
           <div className="kpi-valor">{sinal(saldo)}</div>
           <div className="kpi-detalhe">
             {saldo > 0
-              ? `${ida.nm_destino} ganha ${num(Math.abs(saldo))} pessoas na troca com ${ida.nm_origem}`
+              ? d.paineis.ganhaNaTroca(ida.nm_destino, num(Math.abs(saldo)), Math.abs(saldo), ida.nm_origem)
               : saldo < 0
-              ? `${ida.nm_origem} ganha ${num(Math.abs(saldo))} pessoas na troca com ${ida.nm_destino}`
-              : `troca equilibrada entre ${PAR_DO_NIVEL[nivel]}`}
+              ? d.paineis.ganhaNaTroca(ida.nm_origem, num(Math.abs(saldo)), Math.abs(saldo), ida.nm_destino)
+              : d.paineis.trocaEquilibrada(d.comum.niveis[nivel].par)}
           </div>
         </div>
       </div>
 
       <div className="nota-precisao">
-        <Termo chave="precisao">Precisão</Termo>: <strong>{rotuloPrecisao[ida.precisao] ?? ida.precisao}</strong> ·{" "}
-        <Termo chave="n_faixa">{ida.n_faixa === "<5" ? "menos de 5" : ida.n_faixa} observações</Termo> na amostra.
-        Nível agregado: sem erro-padrão publicado.
+        <Termo chave="precisao">{d.paineis.termos.precisao}</Termo>{d.paineis.dp} <strong>{rotuloPrecisao(ida.precisao, d)}</strong> ·{" "}
+        <Termo chave="n_faixa">{d.paineis.observacoes(ida.n_faixa)}</Termo>{d.paineis.fluxoUnidade.naAmostraAgregado}
       </div>
 
     </aside>

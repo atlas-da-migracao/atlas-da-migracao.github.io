@@ -13,6 +13,7 @@ import {
   EDICOES_SERIE, MIN_EDICOES_SERIE, NIVEIS_SERIE, ordenarEdicoes,
   type EdicaoSerie, type NivelSerie,
 } from "../lib/serie";
+import { IDIOMA_PADRAO, lerLang, type Lang } from "../i18n/tipos";
 
 /** F13: modo binário -- ver plano F13, decisão arquitetural 1 (por que não um terceiro valor
  *  "rm": o modo RM continua sendo `rm != null` + `pedindoRM` local de App.tsx). */
@@ -80,6 +81,10 @@ export interface EstadoUrl {
   modo: Modo;
   unidadeSerie: UnidadeSerieSel | null;
   edicoesSerie: EdicaoSerie[];
+  /** idioma da interface; "pt-BR" (o padrão) não aparece na URL. Na carga, a store só usa o
+   *  valor da URL quando `?lang=` está presente -- senão cai no idioma salvo ou no do
+   *  navegador (ver `langInicial` em store.ts). */
+  lang: Lang;
 }
 
 /** "rgi:230010" -> {nivel:"rgi",codigo:"230010"}; null se o nível não é um dos 5 de
@@ -143,6 +148,7 @@ export function lerUrl(p: URLSearchParams): EstadoUrl {
     modo: modoUrl === "censos" ? "censos" : "mapa",
     unidadeSerie: lerUnidadeSerie(p.get("u")),
     edicoesSerie: lerEdicoesSerie(p.get("ed")),
+    lang: lerLang(p.get("lang")) ?? IDIOMA_PADRAO,
   };
 }
 
@@ -175,5 +181,6 @@ export function montarQuery(e: EstadoUrl): string {
     if (e.unidadeSerie) p.set("u", `${e.unidadeSerie.nivel}:${e.unidadeSerie.codigo}`);
     if (e.edicoesSerie.length < EDICOES_SERIE.length) p.set("ed", e.edicoesSerie.join(","));
   }
+  if (e.lang !== IDIOMA_PADRAO) p.set("lang", e.lang);
   return p.toString();
 }

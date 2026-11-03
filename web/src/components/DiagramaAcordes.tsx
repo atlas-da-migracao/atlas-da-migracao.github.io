@@ -7,7 +7,8 @@ import { chord, ribbon } from "d3-chord";
 import { arc as arcShape } from "d3-shape";
 import { prepararMatrizAcordes, type FluxoUF, type UnidadeUF } from "../lib/acordes";
 import { posicionarRotulosAngulares } from "../lib/rotulos";
-import { REGIAO_ORDEM } from "../lib/uf";
+import { REGIAO_ORDEM, rotuloRegiao } from "../lib/uf";
+import { useT } from "../i18n";
 import { CATEGORICO_8, cor as corDeCategoria } from "../lib/paletas";
 import { num, num1 } from "../lib/format";
 
@@ -43,6 +44,7 @@ const LINHAS_TABELA = 100;
 
 export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, selecionado = null,
                                   realceExterno = null, aoSelecionarUF, aoRealcar }: Props) {
+  const d = useT();
   const [hover, setHover] = useState<number | null>(null);
 
   const dados = useMemo(() => prepararMatrizAcordes(fluxos, unidades), [fluxos, unidades]);
@@ -97,7 +99,7 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
   }, [fluxos]);
 
   if (!layout || dados.codigos.length === 0) {
-    return <p className="muted">Sem dados suficientes para a matriz de acordes.</p>;
+    return <p className="muted">{d.graficos.acordes.semDados}</p>;
   }
 
   const { grupos, gerArc, gerRibbon, angulosArco, angulosRotulo } = layout;
@@ -107,8 +109,7 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
       {/* sem role="img" no <svg>: as cordas abaixo são controles interativos reais (clique/teclado),
           e um role de imagem não pode ter descendentes interativos (regra "nested-interactive" do axe) */}
       <svg viewBox={`0 0 ${TAMANHO} ${TAMANHO}`}
-           aria-label={`Diagrama de acordes com os fluxos migratórios entre as 27 unidades da federação; ` +
-             `os mesmos dados estão na tabela abaixo do diagrama.`}>
+           aria-label={d.graficos.acordes.ariaDiagrama}>
         <g transform={`translate(${TAMANHO / 2}, ${TAMANHO / 2})`}>
           {grupos.map((c, i) => {
             const emFoco = ativo == null || c.source.index === ativo || c.target.index === ativo;
@@ -123,8 +124,10 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
                     onClick={() => aoSelecionarPar(dados.codigos[c.source.index], dados.codigos[c.target.index])}
                     tabIndex={0}
                     role="button"
-                    aria-label={`${dados.siglas[c.source.index]} → ${dados.siglas[c.target.index]}: ${num(dados.matriz[c.source.index][c.target.index])} pessoas; ` +
-                      `${dados.siglas[c.target.index]} → ${dados.siglas[c.source.index]}: ${num(dados.matriz[c.target.index][c.source.index])} pessoas`}
+                    aria-label={d.graficos.acordes.ariaCorda(
+                      dados.siglas[c.source.index], dados.siglas[c.target.index],
+                      num(dados.matriz[c.source.index][c.target.index]),
+                      num(dados.matriz[c.target.index][c.source.index]))}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
@@ -153,7 +156,7 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
                       onMouseEnter={() => entrar(i)} onMouseLeave={sair}
                       {...(aoSelecionarUF ? {
                         role: "button", tabIndex: 0, "aria-pressed": i === iSelecionado,
-                        "aria-label": `${dados.siglas[i]}: ${i === iSelecionado ? "desmarcar" : "selecionar"} no mapa`,
+                        "aria-label": d.graficos.acordes.ariaArco(dados.siglas[i], i === iSelecionado),
                         onClick: () => alternarUF(i),
                         onFocus: () => entrar(i), onBlur: sair,
                         onKeyDown: (e: React.KeyboardEvent) => {
@@ -170,7 +173,7 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
                       className="acorde-rotulo" opacity={emFoco ? 1 : 0.4}>
                   {dados.siglas[i]}
                 </text>
-                <title>{`${dados.siglas[i]}: ${num(emigrantes)} pessoas saíram para outras UFs; ${num(imigrantes)} chegaram de outras UFs`}</title>
+                <title>{d.graficos.acordes.tituloArco(dados.siglas[i], num(emigrantes), num(imigrantes))}</title>
               </g>
             );
           })}
@@ -181,23 +184,22 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
         {REGIAO_ORDEM.map((r, i) => (
           <li key={r}>
             <span className="amostra pequena" style={{ background: corDeCategoria(CORES_REGIAO[i], escuro) }} />
-            {r}
+            {rotuloRegiao(r, d)}
           </li>
         ))}
       </ul>
 
       <p className="muted-pequeno">
-        A largura do arco de cada UF é proporcional ao total de quem saiu dela para outras UFs;
-        em cada ponta de uma corda, a largura é o fluxo que sai daquela UF para a outra.
+        {d.graficos.acordes.nota}
       </p>
 
       <details className="tabela-alternativa">
         <summary>
-          Ver a tabela dos {tabela.total > LINHAS_TABELA ? `${num(LINHAS_TABELA)} maiores ` : ""}fluxos entre UFs
+          {d.graficos.acordes.tabelaResumo(tabela.total > LINHAS_TABELA ? num(LINHAS_TABELA) : null)}
         </summary>
         <table className="tabela-fluxos">
           <thead>
-            <tr><th>Origem</th><th>Destino</th><th className="valor-cel">Total</th></tr>
+            <tr><th>{d.graficos.acordes.colOrigem}</th><th>{d.graficos.acordes.colDestino}</th><th className="valor-cel">{d.graficos.acordes.colTotal}</th></tr>
           </thead>
           <tbody>
             {tabela.mostrados.map((f, i) => (
@@ -211,10 +213,9 @@ export function DiagramaAcordes({ fluxos, unidades, escuro, aoSelecionarPar, sel
         </table>
         <p className="muted-pequeno">
           {tabela.total > LINHAS_TABELA
-            ? <>Mostrando os {num(LINHAS_TABELA)} maiores de {num(tabela.total)} pares publicados
-                ({num1(tabela.pctMostrado)}% do total de migrantes entre UFs); os outros{" "}
-                {num(tabela.total - LINHAS_TABELA)} não estão listados, mas estão no diagrama.</>
-            : <>Todos os {num(tabela.total)} pares publicados.</>}
+            ? d.graficos.acordes.rodapeParcial(
+                num(LINHAS_TABELA), num(tabela.total), num1(tabela.pctMostrado), num(tabela.total - LINHAS_TABELA))
+            : d.graficos.acordes.rodapeCompleto(num(tabela.total))}
         </p>
       </details>
     </div>

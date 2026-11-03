@@ -4,15 +4,17 @@
  *  data/processed (2022 na raiz, por compatibilidade; as demais em subpasta própria) e pode
  *  não ter certos recursos -- ver docs/METODOLOGIA.md, "Edição Censo 2010 e comparabilidade".
  */
+import { pt, type Dicionario } from "../i18n/pt";
+
 export type Censo = "2022" | "2010" | "2000" | "1991" | "1980";
 export const CENSOS: Censo[] = ["2022", "2010", "2000", "1991", "1980"];
 export const CENSO_PADRAO: Censo = "2022";
 
 export interface Edicao {
   nome: Censo;
-  /** rótulo curto (seletor do cabeçalho) */
+  /** rótulo curto (seletor do cabeçalho) -- em português; na interface use `rotuloCenso(censo, d)` */
   rotulo: string;
-  /** subtítulo completo (cabeçalho principal) */
+  /** subtítulo completo (cabeçalho principal) -- em português; na interface use `subtituloCenso(censo, d)` */
   subtitulo: string;
   periodo: { de: string; ate: string };
   /** recursos indisponíveis nesta edição (ver plano, decisão arquitetural 5) */
@@ -84,32 +86,32 @@ export interface Edicao {
 export const EDICOES: Record<Censo, Edicao> = {
   "2022": {
     nome: "2022",
-    rotulo: "Censo 2022",
-    subtitulo: "Censo 2022, data fixa 2017–2022",
+    rotulo: pt.comum.edicoes["2022"].rotulo,
+    subtitulo: pt.comum.edicoes["2022"].subtitulo,
     periodo: { de: "2017-07-31", ate: "2022-07-31" },
     recursos: { rm: true, pendular: true, modo: true, tempoMinutos: true, renda: true, posicao: true },
     vocabulario: { tempo: "tempo", frequencia: "frequencia" },
-    rotuloRetorno: "Retorna 3+ dias/semana",
+    rotuloRetorno: pt.comum.edicoes["2022"].rotuloRetorno,
     statusCategorias: ["retorno_natal", "primeira_saida", "etapas_multiplas", "nascido_exterior"],
     proxyDataFixa: false,
     pendularCampoUnico: false,
   },
   "2010": {
     nome: "2010",
-    rotulo: "Censo 2010",
-    subtitulo: "Censo 2010, data fixa 2005–2010",
+    rotulo: pt.comum.edicoes["2010"].rotulo,
+    subtitulo: pt.comum.edicoes["2010"].subtitulo,
     periodo: { de: "2005-07-31", ate: "2010-07-31" },
     recursos: { rm: true, pendular: true, modo: false, tempoMinutos: false, renda: true, posicao: true },
     vocabulario: { tempo: "tempo2010", frequencia: "frequencia2010" },
-    rotuloRetorno: "Retorna diariamente",
+    rotuloRetorno: pt.comum.edicoes["2010"].rotuloRetorno,
     statusCategorias: ["retorno_natal", "nao_natural", "nascido_exterior"],
     proxyDataFixa: false,
     pendularCampoUnico: false,
   },
   "2000": {
     nome: "2000",
-    rotulo: "Censo 2000",
-    subtitulo: "Censo 2000, data fixa 1995–2000",
+    rotulo: pt.comum.edicoes["2000"].rotulo,
+    subtitulo: pt.comum.edicoes["2000"].subtitulo,
     periodo: { de: "1995-07-31", ate: "2000-07-31" },
     // rm: o módulo metropolitano existe (08_metro.sql roda para 2000), só sem os
     // indicadores de deslocamento (pct_diario/pct_coletivo/tempo_mediano NULL, ver
@@ -128,8 +130,8 @@ export const EDICOES: Record<Censo, Edicao> = {
   },
   "1991": {
     nome: "1991",
-    rotulo: "Censo 1991",
-    subtitulo: "Censo 1991, data fixa 1986–1991",
+    rotulo: pt.comum.edicoes["1991"].rotulo,
+    subtitulo: pt.comum.edicoes["1991"].subtitulo,
     periodo: { de: "1986-09-01", ate: "1991-09-01" },
     // sem deslocamento pendular nesta edição (LOCTRAB é tipo de local, não município) -- ver
     // pipeline/edicoes.py `pendular=False` e `pula_scripts=["07"]`.
@@ -146,8 +148,8 @@ export const EDICOES: Record<Censo, Edicao> = {
   },
   "1980": {
     nome: "1980",
-    rotulo: "Censo 1980",
-    subtitulo: "Censo 1980, proxy de data fixa 1975–1980",
+    rotulo: pt.comum.edicoes["1980"].rotulo,
+    subtitulo: pt.comum.edicoes["1980"].subtitulo,
     // janela do proxy quinquenal (ver proxyDataFixa) -- não é uma data fixa real do
     // questionário de 1980, que não tem esse quesito.
     periodo: { de: "1975-09-01", ate: "1980-09-01" },
@@ -173,6 +175,16 @@ export const EDICOES: Record<Censo, Edicao> = {
 export function edicao(censo: Censo): Edicao {
   return EDICOES[censo];
 }
+
+/** Rótulo curto da edição ("Censo 2022") no idioma de `d`. */
+export const rotuloCenso = (censo: Censo, d: Dicionario = pt): string => d.comum.edicoes[censo].rotulo;
+
+/** Subtítulo completo da edição ("Censo 2022, data fixa 2017–2022") no idioma de `d`. */
+export const subtituloCenso = (censo: Censo, d: Dicionario = pt): string => d.comum.edicoes[censo].subtitulo;
+
+/** Rótulo da categoria "retorna" do pendular no idioma de `d` (`null` nas edições sem o quesito). */
+export const rotuloRetornoCenso = (censo: Censo, d: Dicionario = pt): string | null =>
+  d.comum.edicoes[censo].rotuloRetorno;
 
 /** Caminho base (com barra final) dos dados publicados de uma edição, para fetch()/DuckDB.
  *  2022 continua servida da raiz de "data/" (compatibilidade com o deploy atual); as demais

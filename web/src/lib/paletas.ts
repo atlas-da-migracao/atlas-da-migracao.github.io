@@ -12,11 +12,24 @@
  *    e o sexo vira linhas separadas, em vez de dez cores concorrentes.
  */
 
+import { pt, type Dicionario } from "../i18n/pt";
+
+/** Os TEXTOS (títulos, notas e rótulos de categoria) moram em `i18n/pt/comum.ts`; aqui ficam as
+ *  chaves, a ordem e as cores. O campo `rotulo` das constantes abaixo (DIMENSOES, DIMENSOES_PENDULAR,
+ *  FAIXAS_IDADE, CLASSE_TRAB, CLASSE_ESTUDO...) é só a REFERÊNCIA EM PORTUGUÊS, para testes e
+ *  código sem idioma: na interface use os helpers `dimensao`, `dimensaoPendular`, `tipologiaIntraRM`,
+ *  `rotuloCategoria`, `rotuloClasseTrab`... (no fim deste arquivo), que devolvem o texto no idioma
+ *  do dicionário `d`. */
 export interface Categoria {
   chave: string;
   rotulo: string;
   cor: { claro: string; escuro: string };
 }
+
+type Grupo = keyof typeof pt.comum.categorias;
+/** rótulo PT de uma categoria, lido do dicionário (o tipo só aceita chaves que existem) */
+const rot = <G extends Grupo>(grupo: G, chave: keyof (typeof pt.comum.categorias)[G]): string =>
+  (pt.comum.categorias[grupo] as Record<string, string>)[chave as string];
 
 const ordinal = (claro: string[], escuro: string[]) => (i: number) => ({ claro: claro[i], escuro: escuro[i] });
 
@@ -50,7 +63,7 @@ const SUPRIMIDO = { claro: "#8f8e85", escuro: "#7c7b75" };
 /** Categoria residual genérica, para barras cuja paleta não declara `outros` (BarraPerfil a
  *  acrescenta quando uma série traz valores fora da paleta, p.ex. uma categoria nova que o
  *  pipeline publicou e a paleta ainda não conhece) -- assim o denominador nunca perde massa. */
-export const CATEGORIA_OUTROS: Categoria = { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO };
+export const CATEGORIA_OUTROS: Categoria = { chave: "outros", rotulo: pt.comum.categoriaOutros, cor: SUPRIMIDO };
 
 /** Paleta categórica de 8 slots (módulo metropolitano), validada aos pares adjacentes
  *  com o validador da skill dataviz. Usada quando uma dimensão nominal precisa de mais
@@ -62,45 +75,45 @@ export const CATEGORICO_8 = CLARO_8.map((claro, i) => ({ claro, escuro: ESCURO_8
 /** Dimensões do perfil, na ordem em que aparecem no painel. */
 export const DIMENSOES = {
   status: {
-    titulo: "Status migratório",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.status.titulo,
+    nota: pt.comum.dimensoes.status.nota,
     categorias: [
-      { chave: "retorno_natal", rotulo: "Retorno ao município natal", cor: CATEGORICO[0] },
-      { chave: "primeira_saida", rotulo: "Primeira saída do natal", cor: CATEGORICO[1] },
-      { chave: "etapas_multiplas", rotulo: "Etapas múltiplas", cor: CATEGORICO[2] },
-      { chave: "nascido_exterior", rotulo: "Nascido no exterior", cor: CATEGORICO[3] },
+      { chave: "retorno_natal", rotulo: rot("status", "retorno_natal"), cor: CATEGORICO[0] },
+      { chave: "primeira_saida", rotulo: rot("status", "primeira_saida"), cor: CATEGORICO[1] },
+      { chave: "etapas_multiplas", rotulo: rot("status", "etapas_multiplas"), cor: CATEGORICO[2] },
+      { chave: "nascido_exterior", rotulo: rot("status", "nascido_exterior"), cor: CATEGORICO[3] },
       // só na edição 2010: sem código de município de nascimento, primeira_saida e
       // etapas_multiplas são indistinguíveis e colapsam nesta categoria (nunca aparece junto
       // com as duas acima -- reaproveita a cor de "primeira_saida", o mais próximo semântico --
       // fica depois de nascido_exterior de propósito, para não entrar nos 4 primeiros slots
       // categóricos que o teste de contraste valida como simultaneamente distintos)
-      { chave: "nao_natural", rotulo: "Não natural do destino", cor: CATEGORICO[1] },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "nao_natural", rotulo: rot("status", "nao_natural"), cor: CATEGORICO[1] },
+      { chave: "outros", rotulo: rot("status", "outros"), cor: SUPRIMIDO },
     ],
   },
   edu: {
-    titulo: "Escolaridade",
-    nota: "pessoas de 25 anos ou mais",
+    titulo: pt.comum.dimensoes.edu.titulo,
+    nota: pt.comum.dimensoes.edu.nota,
     categorias: [
-      { chave: "sem_instr_fund_incompleto", rotulo: "Sem instrução ou fundamental incompleto", cor: AZUL(0) },
-      { chave: "fund_completo_medio_incompleto", rotulo: "Fundamental completo", cor: AZUL(1) },
-      { chave: "medio_completo_superior_incompleto", rotulo: "Médio completo", cor: AZUL(2) },
-      { chave: "superior_completo", rotulo: "Superior completo", cor: AZUL(4) },
-      { chave: "nao_determinado", rotulo: "Não determinado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "sem_instr_fund_incompleto", rotulo: rot("edu", "sem_instr_fund_incompleto"), cor: AZUL(0) },
+      { chave: "fund_completo_medio_incompleto", rotulo: rot("edu", "fund_completo_medio_incompleto"), cor: AZUL(1) },
+      { chave: "medio_completo_superior_incompleto", rotulo: rot("edu", "medio_completo_superior_incompleto"), cor: AZUL(2) },
+      { chave: "superior_completo", rotulo: rot("edu", "superior_completo"), cor: AZUL(4) },
+      { chave: "nao_determinado", rotulo: rot("edu", "nao_determinado"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("edu", "outros"), cor: SUPRIMIDO },
     ],
   },
   renda: {
-    titulo: "Renda domiciliar per capita",
-    nota: "em salários mínimos" as string | null,
+    titulo: pt.comum.dimensoes.renda.titulo,
+    nota: pt.comum.dimensoes.renda.nota,
     categorias: [
-      { chave: "ate_1_4_sm", rotulo: "Até ¼", cor: LARANJA(0) },
-      { chave: "de_1_4_a_1_2_sm", rotulo: "De ¼ a ½", cor: LARANJA(1) },
-      { chave: "de_1_2_a_1_sm", rotulo: "De ½ a 1", cor: LARANJA(2) },
-      { chave: "de_1_a_2_sm", rotulo: "De 1 a 2", cor: LARANJA(3) },
-      { chave: "mais_de_2_sm", rotulo: "Mais de 2", cor: LARANJA(4) },
-      { chave: "nao_aplicavel", rotulo: "Domicílio coletivo", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "ate_1_4_sm", rotulo: rot("renda", "ate_1_4_sm"), cor: LARANJA(0) },
+      { chave: "de_1_4_a_1_2_sm", rotulo: rot("renda", "de_1_4_a_1_2_sm"), cor: LARANJA(1) },
+      { chave: "de_1_2_a_1_sm", rotulo: rot("renda", "de_1_2_a_1_sm"), cor: LARANJA(2) },
+      { chave: "de_1_a_2_sm", rotulo: rot("renda", "de_1_a_2_sm"), cor: LARANJA(3) },
+      { chave: "mais_de_2_sm", rotulo: rot("renda", "mais_de_2_sm"), cor: LARANJA(4) },
+      { chave: "nao_aplicavel", rotulo: rot("renda", "nao_aplicavel"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("renda", "outros"), cor: SUPRIMIDO },
     ],
   },
 } as const;
@@ -120,19 +133,19 @@ export function separarRecorte(chave: string): { dim: string; cat: string } {
   return i < 0 ? { dim: chave, cat: "" } : { dim: chave.slice(0, i), cat: chave.slice(i + 2) };
 }
 
-/** Nome legível de um recorte, a partir da chave "dimensao__categoria". */
-export function rotuloRecorte(chave: string): string {
+/** Nome legível de um recorte, a partir da chave "dimensao__categoria", no idioma de `d`. */
+export function rotuloRecorte(chave: string, d: Dicionario = pt): string {
   const [dim, cat] = chave.split("__") as [NomeDimensao, string];
-  return DIMENSOES[dim]?.categorias.find((c) => c.chave === cat)?.rotulo ?? chave;
+  return DIMENSOES[dim]?.categorias.some((c) => c.chave === cat) ? rotuloCategoria(dim, cat, d) : chave;
 }
 
 /** Faixas etárias como rampa ordinal; o sexo vira linha separada. */
 export const FAIXAS_IDADE = [
-  { chave: "05_14", rotulo: "5 a 14", cor: AZUL(0) },
-  { chave: "15_24", rotulo: "15 a 24", cor: AZUL(1) },
-  { chave: "25_39", rotulo: "25 a 39", cor: AZUL(2) },
-  { chave: "40_59", rotulo: "40 a 59", cor: AZUL(3) },
-  { chave: "60_mais", rotulo: "60 ou mais", cor: AZUL(4) },
+  { chave: "05_14", rotulo: rot("faixasIdade", "05_14"), cor: AZUL(0) },
+  { chave: "15_24", rotulo: rot("faixasIdade", "15_24"), cor: AZUL(1) },
+  { chave: "25_39", rotulo: rot("faixasIdade", "25_39"), cor: AZUL(2) },
+  { chave: "40_59", rotulo: rot("faixasIdade", "40_59"), cor: AZUL(3) },
+  { chave: "60_mais", rotulo: rot("faixasIdade", "60_mais"), cor: AZUL(4) },
 ];
 
 export const cor = (c: { claro: string; escuro: string }, escuro: boolean) => (escuro ? c.escuro : c.claro);
@@ -155,36 +168,36 @@ export function hexParaRgb(h: string): [number, number, number] {
 
 /** Tipologia dos fluxos intra-RM: nominal, 3 categorias fixas. */
 export const TIPOLOGIA_INTRA_RM = {
-  titulo: "Tipologia do fluxo",
-  nota: null as string | null,
+  titulo: pt.comum.dimensoes.tipologia.titulo,
+  nota: pt.comum.dimensoes.tipologia.nota,
   categorias: [
-    { chave: "nucleo_periferia", rotulo: "Núcleo → periferia", cor: CATEGORICO[0] },
-    { chave: "periferia_nucleo", rotulo: "Periferia → núcleo", cor: CATEGORICO[1] },
-    { chave: "periferia_periferia", rotulo: "Periferia → periferia", cor: CATEGORICO[2] },
+    { chave: "nucleo_periferia", rotulo: rot("tipologia", "nucleo_periferia"), cor: CATEGORICO[0] },
+    { chave: "periferia_nucleo", rotulo: rot("tipologia", "periferia_nucleo"), cor: CATEGORICO[1] },
+    { chave: "periferia_periferia", rotulo: rot("tipologia", "periferia_periferia"), cor: CATEGORICO[2] },
   ],
 } as const;
 
 /** Classe do local de trabalho dos migrantes intra-RM (sub-painel "Migrantes e trabalho"). */
 export const CLASSE_TRAB = {
-  origem: { rotulo: "Voltou a trabalhar na origem", cor: CATEGORICO[0] },
-  nucleo: { rotulo: "Passou a trabalhar no núcleo", cor: CATEGORICO[1] },
-  outro: { rotulo: "Trabalha em outro município da RM", cor: CATEGORICO[2] },
-  proprio: { rotulo: "Trabalha no próprio município", cor: NEUTRO },
-  varios: { rotulo: "Vários municípios", cor: NEUTRO },
-  nao_informado: { rotulo: "Não informado", cor: NEUTRO },
-  exterior: { rotulo: "Exterior", cor: NEUTRO },
-  outros: { rotulo: "Outros", cor: NEUTRO },
+  origem: { rotulo: rot("classeTrab", "origem"), cor: CATEGORICO[0] },
+  nucleo: { rotulo: rot("classeTrab", "nucleo"), cor: CATEGORICO[1] },
+  outro: { rotulo: rot("classeTrab", "outro"), cor: CATEGORICO[2] },
+  proprio: { rotulo: rot("classeTrab", "proprio"), cor: NEUTRO },
+  varios: { rotulo: rot("classeTrab", "varios"), cor: NEUTRO },
+  nao_informado: { rotulo: rot("classeTrab", "nao_informado"), cor: NEUTRO },
+  exterior: { rotulo: rot("classeTrab", "exterior"), cor: NEUTRO },
+  outros: { rotulo: rot("classeTrab", "outros"), cor: NEUTRO },
 } as const;
 
 /** Classe do local de estudo dos migrantes intra-RM (mesmas cores de CLASSE_TRAB,
  *  rótulos próprios para não confundir "trabalho" com "estudo" na aba de estudo). */
 export const CLASSE_ESTUDO = {
-  origem: { rotulo: "Voltou a estudar na origem", cor: CATEGORICO[0] },
-  nucleo: { rotulo: "Passou a estudar no núcleo", cor: CATEGORICO[1] },
-  outro: { rotulo: "Estuda em outro município da RM", cor: CATEGORICO[2] },
-  proprio: { rotulo: "Estuda no próprio município", cor: NEUTRO },
-  varios: { rotulo: "Vários municípios", cor: NEUTRO },
-  nao_informado: { rotulo: "Não informado", cor: NEUTRO },
+  origem: { rotulo: rot("classeEstudo", "origem"), cor: CATEGORICO[0] },
+  nucleo: { rotulo: rot("classeEstudo", "nucleo"), cor: CATEGORICO[1] },
+  outro: { rotulo: rot("classeEstudo", "outro"), cor: CATEGORICO[2] },
+  proprio: { rotulo: rot("classeEstudo", "proprio"), cor: NEUTRO },
+  varios: { rotulo: rot("classeEstudo", "varios"), cor: NEUTRO },
+  nao_informado: { rotulo: rot("classeEstudo", "nao_informado"), cor: NEUTRO },
 } as const;
 
 const FREQUENCIA_8 = (i: number) => CATEGORICO_8[i];
@@ -192,153 +205,199 @@ const FREQUENCIA_8 = (i: number) => CATEGORICO_8[i];
 /** Dimensões do perfil pendular (forma igual a DIMENSOES, para reutilizar BarraPerfil). */
 export const DIMENSOES_PENDULAR = {
   frequencia: {
-    titulo: "Frequência de retorno",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.frequencia.titulo,
+    nota: pt.comum.dimensoes.frequencia.nota,
     categorias: [
-      { chave: "retorno_diario", rotulo: "Retorna 3+ dias/semana", cor: FREQUENCIA_8(0) },
-      { chave: "semanal_longa", rotulo: "Retorno semanal ou mais longo", cor: FREQUENCIA_8(1) },
-      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "retorno_diario", rotulo: rot("frequencia", "retorno_diario"), cor: FREQUENCIA_8(0) },
+      { chave: "semanal_longa", rotulo: rot("frequencia", "semanal_longa"), cor: FREQUENCIA_8(1) },
+      { chave: "ignorado", rotulo: rot("frequencia", "ignorado"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("frequencia", "outros"), cor: SUPRIMIDO },
     ],
   },
   /** só na edição 2010: V0661 pergunta "retorna DIARIAMENTE" (sim/não), não "3+ dias por
    *  semana" -- definição diferente da de 2022, mesmo par de chaves (ver docs/METODOLOGIA.md) */
   frequencia2010: {
-    titulo: "Frequência de retorno",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.frequencia2010.titulo,
+    nota: pt.comum.dimensoes.frequencia2010.nota,
     categorias: [
-      { chave: "retorno_diario", rotulo: "Retorna diariamente", cor: FREQUENCIA_8(0) },
-      { chave: "semanal_longa", rotulo: "Não retorna diariamente", cor: FREQUENCIA_8(1) },
-      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "retorno_diario", rotulo: rot("frequencia2010", "retorno_diario"), cor: FREQUENCIA_8(0) },
+      { chave: "semanal_longa", rotulo: rot("frequencia2010", "semanal_longa"), cor: FREQUENCIA_8(1) },
+      { chave: "ignorado", rotulo: rot("frequencia2010", "ignorado"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("frequencia2010", "outros"), cor: SUPRIMIDO },
     ],
   },
   modo: {
-    titulo: "Modo de transporte",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.modo.titulo,
+    nota: pt.comum.dimensoes.modo.nota,
     categorias: [
-      { chave: "a_pe_bicicleta", rotulo: "A pé ou bicicleta", cor: FREQUENCIA_8(0) },
-      { chave: "motocicleta", rotulo: "Motocicleta ou mototáxi", cor: FREQUENCIA_8(1) },
-      { chave: "automovel_taxi", rotulo: "Automóvel ou táxi", cor: FREQUENCIA_8(2) },
-      { chave: "onibus_van_brt", rotulo: "Ônibus, van ou BRT", cor: FREQUENCIA_8(3) },
-      { chave: "trem_metro", rotulo: "Trem ou metrô", cor: FREQUENCIA_8(4) },
+      { chave: "a_pe_bicicleta", rotulo: rot("modo", "a_pe_bicicleta"), cor: FREQUENCIA_8(0) },
+      { chave: "motocicleta", rotulo: rot("modo", "motocicleta"), cor: FREQUENCIA_8(1) },
+      { chave: "automovel_taxi", rotulo: rot("modo", "automovel_taxi"), cor: FREQUENCIA_8(2) },
+      { chave: "onibus_van_brt", rotulo: rot("modo", "onibus_van_brt"), cor: FREQUENCIA_8(3) },
+      { chave: "trem_metro", rotulo: rot("modo", "trem_metro"), cor: FREQUENCIA_8(4) },
       // `outros` aqui mistura duas coisas que o dado publicado NÃO distingue: a categoria
       // "outros meios de transporte" do questionário (02_classify.sql: códigos 11-14 e 99) e o
       // residual de supressão (células com poucas observações, somadas a `outros` em
       // publish.py). As duas saem na mesma linha de `pendular_*_dim` (GROUP BY categoria), então
       // o rótulo diz as duas e a cor é a do residual, não a de um meio de transporte.
-      { chave: "outros", rotulo: "Outros meios ou suprimido", cor: SUPRIMIDO },
-      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
+      { chave: "outros", rotulo: rot("modo", "outros"), cor: SUPRIMIDO },
+      { chave: "ignorado", rotulo: rot("modo", "ignorado"), cor: NEUTRO },
     ],
   },
   /** tempo agrupado em 5 classes ordinais, a partir das 9 categorias publicadas */
   tempo: {
-    titulo: "Tempo de deslocamento",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.tempo.titulo,
+    nota: pt.comum.dimensoes.tempo.nota,
     categorias: [
-      { chave: "ate_15min", rotulo: "Até 15 min", cor: AZUL(0) },
-      { chave: "de_16_a_30min", rotulo: "16 a 30 min", cor: AZUL(1) },
-      { chave: "de_31min_a_1h", rotulo: "31 min a 1 h", cor: AZUL(2) },
-      { chave: "de_1_a_2h", rotulo: "1 a 2 h", cor: AZUL(3) },
-      { chave: "mais_de_2h", rotulo: "Mais de 2 h", cor: AZUL(4) },
+      { chave: "ate_15min", rotulo: rot("tempo", "ate_15min"), cor: AZUL(0) },
+      { chave: "de_16_a_30min", rotulo: rot("tempo", "de_16_a_30min"), cor: AZUL(1) },
+      { chave: "de_31min_a_1h", rotulo: rot("tempo", "de_31min_a_1h"), cor: AZUL(2) },
+      { chave: "de_1_a_2h", rotulo: rot("tempo", "de_1_a_2h"), cor: AZUL(3) },
+      { chave: "mais_de_2h", rotulo: rot("tempo", "mais_de_2h"), cor: AZUL(4) },
       // `outros` = "não se desloca" + "ignorado" (agruparTempo, lib/rm.ts) + o residual de
       // supressão, que o dado publicado também chama de `outros`
-      { chave: "outros", rotulo: "Não se desloca, ignorado ou suprimido", cor: SUPRIMIDO },
+      { chave: "outros", rotulo: rot("tempo", "outros"), cor: SUPRIMIDO },
     ],
   },
   /** só na edição 2010: V0662 tem 5 faixas próprias (ver 02_classify.sql), não aninhadas nas
    *  8 de 2022 -- por isso é um vocabulário à parte, não um reagrupamento de "tempo" acima. */
   tempo2010: {
-    titulo: "Tempo de deslocamento",
-    nota: "só quem retorna para casa diariamente" as string | null,
+    titulo: pt.comum.dimensoes.tempo2010.titulo,
+    nota: pt.comum.dimensoes.tempo2010.nota,
     categorias: [
-      { chave: "ate_5min", rotulo: "Até 5 min", cor: AZUL(0) },
-      { chave: "de_6_a_30min", rotulo: "6 a 30 min", cor: AZUL(1) },
-      { chave: "de_31min_a_1h", rotulo: "31 min a 1 h", cor: AZUL(2) },
-      { chave: "de_1_a_2h", rotulo: "1 a 2 h", cor: AZUL(3) },
-      { chave: "mais_de_2h", rotulo: "Mais de 2 h", cor: AZUL(4) },
-      { chave: "nao_se_aplica", rotulo: "Não retorna diariamente", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "ate_5min", rotulo: rot("tempo2010", "ate_5min"), cor: AZUL(0) },
+      { chave: "de_6_a_30min", rotulo: rot("tempo2010", "de_6_a_30min"), cor: AZUL(1) },
+      { chave: "de_31min_a_1h", rotulo: rot("tempo2010", "de_31min_a_1h"), cor: AZUL(2) },
+      { chave: "de_1_a_2h", rotulo: rot("tempo2010", "de_1_a_2h"), cor: AZUL(3) },
+      { chave: "mais_de_2h", rotulo: rot("tempo2010", "mais_de_2h"), cor: AZUL(4) },
+      { chave: "nao_se_aplica", rotulo: rot("tempo2010", "nao_se_aplica"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("tempo2010", "outros"), cor: SUPRIMIDO },
     ],
   },
   posicao: {
-    titulo: "Posição na ocupação",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.posicao.titulo,
+    nota: pt.comum.dimensoes.posicao.nota,
     categorias: [
-      { chave: "empregado_com_carteira", rotulo: "Empregado com carteira", cor: FREQUENCIA_8(0) },
-      { chave: "empregado_sem_carteira", rotulo: "Empregado sem carteira", cor: FREQUENCIA_8(1) },
-      { chave: "militar_estatutario", rotulo: "Militar ou estatutário", cor: FREQUENCIA_8(2) },
-      { chave: "empregador", rotulo: "Empregador", cor: FREQUENCIA_8(3) },
-      { chave: "conta_propria_familiar", rotulo: "Conta própria ou familiar", cor: FREQUENCIA_8(4) },
-      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "empregado_com_carteira", rotulo: rot("posicao", "empregado_com_carteira"), cor: FREQUENCIA_8(0) },
+      { chave: "empregado_sem_carteira", rotulo: rot("posicao", "empregado_sem_carteira"), cor: FREQUENCIA_8(1) },
+      { chave: "militar_estatutario", rotulo: rot("posicao", "militar_estatutario"), cor: FREQUENCIA_8(2) },
+      { chave: "empregador", rotulo: rot("posicao", "empregador"), cor: FREQUENCIA_8(3) },
+      { chave: "conta_propria_familiar", rotulo: rot("posicao", "conta_propria_familiar"), cor: FREQUENCIA_8(4) },
+      { chave: "ignorado", rotulo: rot("posicao", "ignorado"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("posicao", "outros"), cor: SUPRIMIDO },
     ],
   },
   setor: {
-    titulo: "Setor de atividade",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.setor.titulo,
+    nota: pt.comum.dimensoes.setor.nota,
     categorias: [
-      { chave: "agropecuaria", rotulo: "Agropecuária", cor: FREQUENCIA_8(0) },
-      { chave: "industria", rotulo: "Indústria", cor: FREQUENCIA_8(1) },
-      { chave: "construcao", rotulo: "Construção", cor: FREQUENCIA_8(2) },
-      { chave: "comercio", rotulo: "Comércio", cor: FREQUENCIA_8(3) },
-      { chave: "transporte_logistica", rotulo: "Transporte e logística", cor: FREQUENCIA_8(4) },
-      { chave: "servicos_empresariais", rotulo: "Serviços empresariais", cor: FREQUENCIA_8(5) },
-      { chave: "admin_educacao_saude", rotulo: "Administração, educação e saúde", cor: FREQUENCIA_8(6) },
-      { chave: "outros_servicos", rotulo: "Outros serviços", cor: FREQUENCIA_8(7) },
-      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "agropecuaria", rotulo: rot("setor", "agropecuaria"), cor: FREQUENCIA_8(0) },
+      { chave: "industria", rotulo: rot("setor", "industria"), cor: FREQUENCIA_8(1) },
+      { chave: "construcao", rotulo: rot("setor", "construcao"), cor: FREQUENCIA_8(2) },
+      { chave: "comercio", rotulo: rot("setor", "comercio"), cor: FREQUENCIA_8(3) },
+      { chave: "transporte_logistica", rotulo: rot("setor", "transporte_logistica"), cor: FREQUENCIA_8(4) },
+      { chave: "servicos_empresariais", rotulo: rot("setor", "servicos_empresariais"), cor: FREQUENCIA_8(5) },
+      { chave: "admin_educacao_saude", rotulo: rot("setor", "admin_educacao_saude"), cor: FREQUENCIA_8(6) },
+      { chave: "outros_servicos", rotulo: rot("setor", "outros_servicos"), cor: FREQUENCIA_8(7) },
+      { chave: "ignorado", rotulo: rot("setor", "ignorado"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("setor", "outros"), cor: SUPRIMIDO },
     ],
   },
   /** grandes grupos ocupacionais (01..11), agrupados em 8 classes por semelhança de conteúdo */
   ocupacao: {
-    titulo: "Grupo ocupacional",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.ocupacao.titulo,
+    nota: pt.comum.dimensoes.ocupacao.nota,
     categorias: [
-      { chave: "dirigentes_profissionais", rotulo: "Dirigentes e profissionais", cor: FREQUENCIA_8(0) },
-      { chave: "tecnicos_administrativo", rotulo: "Técnicos e apoio administrativo", cor: FREQUENCIA_8(1) },
-      { chave: "servicos_vendedores", rotulo: "Serviços e vendedores", cor: FREQUENCIA_8(2) },
-      { chave: "agropecuaria", rotulo: "Agropecuária", cor: FREQUENCIA_8(3) },
-      { chave: "industria_operadores", rotulo: "Indústria, construção e operadores", cor: FREQUENCIA_8(4) },
-      { chave: "elementares", rotulo: "Ocupações elementares", cor: FREQUENCIA_8(5) },
-      { chave: "forcas_seguranca", rotulo: "Forças armadas, polícia e bombeiros", cor: FREQUENCIA_8(6) },
+      { chave: "dirigentes_profissionais", rotulo: rot("ocupacao", "dirigentes_profissionais"), cor: FREQUENCIA_8(0) },
+      { chave: "tecnicos_administrativo", rotulo: rot("ocupacao", "tecnicos_administrativo"), cor: FREQUENCIA_8(1) },
+      { chave: "servicos_vendedores", rotulo: rot("ocupacao", "servicos_vendedores"), cor: FREQUENCIA_8(2) },
+      { chave: "agropecuaria", rotulo: rot("ocupacao", "agropecuaria"), cor: FREQUENCIA_8(3) },
+      { chave: "industria_operadores", rotulo: rot("ocupacao", "industria_operadores"), cor: FREQUENCIA_8(4) },
+      { chave: "elementares", rotulo: rot("ocupacao", "elementares"), cor: FREQUENCIA_8(5) },
+      { chave: "forcas_seguranca", rotulo: rot("ocupacao", "forcas_seguranca"), cor: FREQUENCIA_8(6) },
       // `agruparOcupacao` (lib/rm.ts) joga em `mal_definidas` tudo o que não é um dos códigos
       // 01-11, inclusive o residual `outros` de supressão -- por isso não há `outros` aqui.
-      { chave: "mal_definidas", rotulo: "Mal definidas, ignorado ou suprimido", cor: NEUTRO },
+      { chave: "mal_definidas", rotulo: rot("ocupacao", "mal_definidas"), cor: NEUTRO },
     ],
   },
   renda_trab: {
-    titulo: "Rendimento do trabalho",
-    nota: "em salários mínimos" as string | null,
+    titulo: pt.comum.dimensoes.renda_trab.titulo,
+    nota: pt.comum.dimensoes.renda_trab.nota,
     categorias: [
-      { chave: "ate_1_sm", rotulo: "Até 1 salário mínimo", cor: LARANJA(0) },
-      { chave: "de_1_a_2_sm", rotulo: "De 1 a 2 salários mínimos", cor: LARANJA(1) },
-      { chave: "de_2_a_3_sm", rotulo: "De 2 a 3 salários mínimos", cor: LARANJA(2) },
-      { chave: "de_3_a_5_sm", rotulo: "De 3 a 5 salários mínimos", cor: LARANJA(3) },
-      { chave: "mais_de_5_sm", rotulo: "Mais de 5 salários mínimos", cor: LARANJA(4) },
-      { chave: "sem_declaracao", rotulo: "Sem declaração", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "ate_1_sm", rotulo: rot("renda_trab", "ate_1_sm"), cor: LARANJA(0) },
+      { chave: "de_1_a_2_sm", rotulo: rot("renda_trab", "de_1_a_2_sm"), cor: LARANJA(1) },
+      { chave: "de_2_a_3_sm", rotulo: rot("renda_trab", "de_2_a_3_sm"), cor: LARANJA(2) },
+      { chave: "de_3_a_5_sm", rotulo: rot("renda_trab", "de_3_a_5_sm"), cor: LARANJA(3) },
+      { chave: "mais_de_5_sm", rotulo: rot("renda_trab", "mais_de_5_sm"), cor: LARANJA(4) },
+      { chave: "sem_declaracao", rotulo: rot("renda_trab", "sem_declaracao"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("renda_trab", "outros"), cor: SUPRIMIDO },
     ],
   },
   edu: DIMENSOES.edu,
   /** nível de estudo pendular: 4 categorias, rampa azul pulando o índice 3 (vazio aqui) */
   nivel: {
-    titulo: "Nível de estudo",
-    nota: null as string | null,
+    titulo: pt.comum.dimensoes.nivel.titulo,
+    nota: pt.comum.dimensoes.nivel.nota,
     categorias: [
-      { chave: "infantil_fundamental", rotulo: "Infantil ou fundamental", cor: AZUL(0) },
-      { chave: "medio", rotulo: "Médio", cor: AZUL(1) },
+      { chave: "infantil_fundamental", rotulo: rot("nivel", "infantil_fundamental"), cor: AZUL(0) },
+      { chave: "medio", rotulo: rot("nivel", "medio"), cor: AZUL(1) },
       // exclusiva da edição Censo 2000 (V0430 = 11): o pré-vestibular conta como frequência
       // à escola em 2000 e não em 2010/2022 -- ver pipeline/sql/2000/MAPEAMENTO_02_classify.md
       // §9 e docs/METODOLOGIA.md. Cor reaproveitada de AZUL(3), não usada por nenhuma outra
       // categoria desta dimensão.
-      { chave: "pre_vestibular", rotulo: "Pré-vestibular", cor: AZUL(3) },
-      { chave: "graduacao", rotulo: "Graduação", cor: AZUL(2) },
-      { chave: "pos_graduacao", rotulo: "Pós-graduação", cor: AZUL(4) },
-      { chave: "ignorado", rotulo: "Ignorado", cor: NEUTRO },
-      { chave: "outros", rotulo: "Outros ou suprimido", cor: SUPRIMIDO },
+      { chave: "pre_vestibular", rotulo: rot("nivel", "pre_vestibular"), cor: AZUL(3) },
+      { chave: "graduacao", rotulo: rot("nivel", "graduacao"), cor: AZUL(2) },
+      { chave: "pos_graduacao", rotulo: rot("nivel", "pos_graduacao"), cor: AZUL(4) },
+      { chave: "ignorado", rotulo: rot("nivel", "ignorado"), cor: NEUTRO },
+      { chave: "outros", rotulo: rot("nivel", "outros"), cor: SUPRIMIDO },
     ],
   },
 } as const;
 
 export type NomeDimensaoPendular = keyof typeof DIMENSOES_PENDULAR;
+
+// ================= Textos no idioma ativo =================
+
+type GrupoDimensao = keyof typeof pt.comum.dimensoes;
+
+/** Rótulo de uma categoria (grupo = dimensão, ou classeTrab/classeEstudo/faixasIdade) no idioma
+ *  de `d`; chave desconhecida volta como veio. */
+export function rotuloCategoria(grupo: Grupo, chave: string, d: Dicionario = pt): string {
+  return (d.comum.categorias[grupo] as Record<string, string>)[chave] ?? chave;
+}
+
+export const rotuloClasseTrab = (classe: string, d: Dicionario = pt) => rotuloCategoria("classeTrab", classe, d);
+export const rotuloClasseEstudo = (classe: string, d: Dicionario = pt) => rotuloCategoria("classeEstudo", classe, d);
+export const rotuloFaixaIdade = (chave: string, d: Dicionario = pt) => rotuloCategoria("faixasIdade", chave, d);
+
+/** Residual genérico ("Outros ou suprimido") no idioma de `d`. */
+export function categoriaOutros(d: Dicionario = pt): Categoria {
+  return { ...CATEGORIA_OUTROS, rotulo: d.comum.categoriaOutros };
+}
+
+/** Uma dimensão de perfil pronta para `BarraPerfil`: título, nota e categorias já no idioma. */
+export interface DimensaoPerfil {
+  titulo: string;
+  nota: string | null;
+  categorias: Categoria[];
+}
+
+function localizar(grupo: GrupoDimensao, categorias: readonly Categoria[], d: Dicionario): DimensaoPerfil {
+  return {
+    titulo: d.comum.dimensoes[grupo].titulo,
+    nota: d.comum.dimensoes[grupo].nota,
+    categorias: categorias.map((c) => ({ ...c, rotulo: rotuloCategoria(grupo, c.chave, d) })),
+  };
+}
+
+/** Dimensão de `DIMENSOES` (status, edu, renda) no idioma de `d`. */
+export const dimensao = (dim: NomeDimensao, d: Dicionario = pt): DimensaoPerfil =>
+  localizar(dim, DIMENSOES[dim].categorias, d);
+
+/** Dimensão de `DIMENSOES_PENDULAR` no idioma de `d`. */
+export const dimensaoPendular = (dim: NomeDimensaoPendular, d: Dicionario = pt): DimensaoPerfil =>
+  localizar(dim, DIMENSOES_PENDULAR[dim].categorias, d);
+
+/** Tipologia dos fluxos intra-RM no idioma de `d`. */
+export const tipologiaIntraRM = (d: Dicionario = pt): DimensaoPerfil =>
+  localizar("tipologia", TIPOLOGIA_INTRA_RM.categorias, d);

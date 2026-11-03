@@ -2,6 +2,8 @@
  *  categorias em classes mais legíveis e preparação dos dados do diagrama aluvial.
  *  Mantidas separadas de queries.ts e dos componentes para poder testar sem DuckDB/DOM. */
 
+import { pt, type Dicionario } from "../i18n/pt";
+
 // F10: desde a projeção Albers (vista padrão do mapa), toda bbox usada para enquadramento
 // (fitBounds cartesiano) vem de coordenadas já projetadas em METROS, não graus -- os nomes
 // dos campos (lon/lat) e do tipo (Bbox) ficaram, por não valer a pena renomear toda a
@@ -301,11 +303,12 @@ export interface DadosSankey { nodes: NoSankey[]; links: LinkSankey[]; caminhos:
  *  `nomes` traduz códigos de município em rótulos legíveis; entradas sem nome mapeado
  *  usam o próprio código. As colunas recebem prefixo (o: origem, r: residência,
  *  t: trabalho) para que o mesmo município possa aparecer, sem colisão de id, em
- *  mais de uma coluna. */
+ *  mais de uma coluna. Os nós residuais ("Outras origens"...) saem no idioma de `d`. */
 export function prepararSankey(
   caminhos: CaminhoPendular[],
   nomes: Map<string, string>,
   top = 12,
+  d: Dicionario = pt,
 ): DadosSankey {
   const nome = (cd: string) => nomes.get(cd) ?? cd;
   const ordenados = [...caminhos].sort((a, b) => b.total - a.total);
@@ -340,13 +343,14 @@ export function prepararSankey(
   if (resto.length > 0) {
     const o = "o:outros", r = "r:outros", t = "t:outros";
     const totalResto = resto.reduce((soma, c) => soma + c.total, 0);
-    addNode(o, "Outras origens");
-    addNode(r, "Outras residências");
-    addNode(t, "Outros municípios");
+    addNode(o, d.comum.sankeyResidual.origens);
+    addNode(r, d.comum.sankeyResidual.residencias);
+    addNode(t, d.comum.sankeyResidual.municipios);
     addLink(o, r, totalResto, "residencia");
     addLink(r, t, totalResto, "outros");
     caminhosResolvidos.push({
-      origem: "Outras origens", residencia: "Outras residências", trabalho: "Outros municípios",
+      origem: d.comum.sankeyResidual.origens, residencia: d.comum.sankeyResidual.residencias,
+      trabalho: d.comum.sankeyResidual.municipios,
       classe: "outros", total: totalResto, n_faixa: "—",
     });
   }

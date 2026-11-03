@@ -9,7 +9,8 @@
  *  para somar 100%: um município com 30% da massa suprimida parecia ter uma pirâmide completa.
  *  Agora cada barra é a fração do TOTAL do grupo e a parcela que não chega às barras sai em
  *  `pctOutros`, para o componente mostrá-la ("outros ou suprimido"). */
-import { FAIXAS_IDADE } from "./paletas";
+import { FAIXAS_IDADE, rotuloFaixaIdade } from "./paletas";
+import { pt, type Dicionario } from "../i18n/pt";
 
 export interface PontoPiramide {
   chave: string;
@@ -37,8 +38,8 @@ export interface DadosPiramide {
  *  das duas grafias publicadas: minúsculas nas colunas largas de `fluxos` ("05_14_m") e
  *  maiúsculas na categoria longa de `municipios_dim` ("05_14_M"/"05_14_F"/"05_14_I"). As chaves
  *  são normalizadas para minúsculas aqui, de modo que quem chama não precise saber de onde
- *  o dado veio. */
-export function prepararPiramide(valores: Record<string, number>): DadosPiramide {
+ *  o dado veio. O rótulo de cada faixa sai no idioma de `d`. */
+export function prepararPiramide(valores: Record<string, number>, d: Dicionario = pt): DadosPiramide {
   const v: Record<string, number> = {};
   for (const [chave, valor] of Object.entries(valores)) {
     if (typeof valor !== "number" || !Number.isFinite(valor)) continue;
@@ -48,7 +49,7 @@ export function prepararPiramide(valores: Record<string, number>): DadosPiramide
 
   const pontosBrutos = FAIXAS_IDADE.map((f) => ({
     chave: f.chave,
-    rotulo: f.rotulo,
+    rotulo: rotuloFaixaIdade(f.chave, d),
     homens: v[`${f.chave}_m`] ?? 0,
     mulheres: v[`${f.chave}_f`] ?? 0,
   }));

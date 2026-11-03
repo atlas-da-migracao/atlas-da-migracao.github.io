@@ -16,7 +16,9 @@
  *  O aviso é deliberadamente forte (não é um `<details>` fechado como o selo proxy): quem
  *  clica nessa forma no mapa precisa saber, ANTES de ler os números, que está olhando uma
  *  unidade que reúne vários municípios e não um município. */
+import { useT } from "../i18n";
 import type { Meta, UfForaDaEpocaMeta, UnidadeAgregadaMeta } from "../lib/types";
+import { textoDado } from "../i18n/dados";
 
 /** A unidade agregada de `codigo`, ou null se ele for um município normal. */
 export function unidadeAgregada(meta: Meta | null, codigo: string | null | undefined):
@@ -26,12 +28,13 @@ export function unidadeAgregada(meta: Meta | null, codigo: string | null | undef
 }
 
 export function AvisoUnidade({ meta, codigo }: { meta: Meta | null; codigo: string | null }) {
+  const d = useT();
   const u = unidadeAgregada(meta, codigo);
   if (!u) return null;
   return (
     <div className="aviso aviso-unidade" role="note">
       <p>
-        <strong>Não é um município.</strong> {u.nota}
+        <strong>{d.avisos.unidade.naoEMunicipio}</strong> {textoDado(`unidade_agregada.${meta?.edicao}.${u.codigo}`, u.nota)}
       </p>
     </div>
   );
@@ -51,12 +54,13 @@ export function ufForaDaEpoca(meta: Meta | null, codigoUf: string | null | undef
 }
 
 export function AvisoUnidadeUf({ meta, codigoUf }: { meta: Meta | null; codigoUf: string | null }) {
+  const d = useT();
   const u = ufForaDaEpoca(meta, codigoUf);
   if (!u) return null;
   return (
     <div className="aviso aviso-unidade" role="note">
       <p>
-        <strong>Esta UF não existia na época do censo.</strong> {u.nota}
+        <strong>{d.avisos.ufForaDaEpoca.titulo}</strong> {textoDado(`nota_uf.${meta?.edicao}.${u.uf}`, u.nota)}
       </p>
     </div>
   );

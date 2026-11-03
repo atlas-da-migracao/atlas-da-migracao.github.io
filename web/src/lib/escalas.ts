@@ -13,6 +13,9 @@
  *  faixas de valor e o painel lateral traz os números exatos do município selecionado.
  */
 
+import { pt, type Dicionario } from "../i18n/pt";
+import { num, numAte1 } from "./format";
+
 export type RGB = [number, number, number];
 
 const hex = (h: string): RGB => [
@@ -67,21 +70,25 @@ export function corDivergente(v: number | null, quebras: number[], escuro: boole
   return v > 0 ? p.pos[nivel] : p.neg[nivel];
 }
 
-/** Rótulos das faixas da legenda, do maior ganho à maior perda. */
-export function faixasLegenda(quebras: number[], unidade: string) {
-  const f = (v: number) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: unidade === "‰" ? 1 : 0 }).format(v);
+/** Rótulos das faixas da legenda, do maior ganho à maior perda. As frases vêm de
+ *  `d.comum.faixasLegenda` (a ordem das palavras e o "a" entre números variam por idioma); os
+ *  números seguem o idioma ativo (`lib/format.ts`), com 1 casa decimal só nas taxas em ‰. */
+/** `formato` substitui o formatador escolhido pela unidade -- o IEM, por exemplo, colore por
+ *  quebras ×100 mas é exibido na escala −1 a +1 com duas casas (quem chama divide as quebras). */
+export function faixasLegenda(
+  quebras: number[], unidade: string, d: Dicionario = pt, formato?: (v: number) => string,
+) {
+  const f = formato ?? (unidade === "‰" ? numAte1 : num);
+  const t = d.comum.faixasLegenda;
   return [
-    { nivel: 2, sinal: 1, rotulo: `ganho acima de ${f(quebras[2])}${unidade}` },
-    { nivel: 1, sinal: 1, rotulo: `${f(quebras[1])} a ${f(quebras[2])}${unidade}` },
-    { nivel: 0, sinal: 1, rotulo: `${f(quebras[0])} a ${f(quebras[1])}${unidade}` },
-    // "perto de zero" seria falso quando quebras[0] é grande (ex.: ±92,2‰ no Censo 1980 --
-    // a inflação de volume do proxy e o ruído de municípios pequenos alargam o 60º percentil).
-    // "baixa variação" descreve a mesma faixa (os 60% de menor |valor| da edição) sem prometer
-    // proximidade de zero que o número ao lado pode desmentir.
-    { nivel: -1, sinal: 0, rotulo: `baixa variação (±${f(quebras[0])}${unidade})` },
-    { nivel: 0, sinal: -1, rotulo: `${f(quebras[0])} a ${f(quebras[1])}${unidade}` },
-    { nivel: 1, sinal: -1, rotulo: `${f(quebras[1])} a ${f(quebras[2])}${unidade}` },
-    { nivel: 2, sinal: -1, rotulo: `perda acima de ${f(quebras[2])}${unidade}` },
+    { nivel: 2, sinal: 1, rotulo: t.ganhoAcima(f(quebras[2]), unidade) },
+    { nivel: 1, sinal: 1, rotulo: t.faixa(f(quebras[1]), f(quebras[2]), unidade) },
+    { nivel: 0, sinal: 1, rotulo: t.faixa(f(quebras[0]), f(quebras[1]), unidade) },
+    // a faixa central e o porquê de "baixa variação" estão em `comum.faixasLegenda`
+    { nivel: -1, sinal: 0, rotulo: t.baixaVariacao(f(quebras[0]), unidade) },
+    { nivel: 0, sinal: -1, rotulo: t.faixa(f(quebras[0]), f(quebras[1]), unidade) },
+    { nivel: 1, sinal: -1, rotulo: t.faixa(f(quebras[1]), f(quebras[2]), unidade) },
+    { nivel: 2, sinal: -1, rotulo: t.perdaAcima(f(quebras[2]), unidade) },
   ];
 }
 
@@ -129,43 +136,21 @@ export function corMedidaSerie(medida: MedidaMapaSerie, v: number | null, escuro
   return corSequencial(v, QUEBRAS_FIXAS[medida], rampa, escuro);
 }
 
-/** Rótulos de legenda das 4 medidas do mapa comparativo (seção 4.2 -- textos fixos do
- *  documento de desenho, não gerados por fórmula: os limiares de iem/tlm têm nomes da
- *  tipologia de Baeninger, não "faixas" genéricas). */
-export const LEGENDA_MEDIDA_SERIE: Record<MedidaMapaSerie, { cor: string; rotulo: string }[]> = {
-  iem: [
-    { cor: "pos2", rotulo: "absorção muito forte (acima de +0,60)" },
-    { cor: "pos1", rotulo: "absorção forte (+0,33 a +0,60)" },
-    { cor: "pos0", rotulo: "absorção (+0,15 a +0,33)" },
-    { cor: "zero", rotulo: "rotatividade (−0,15 a +0,15)" },
-    { cor: "neg0", rotulo: "evasão (−0,33 a −0,15)" },
-    { cor: "neg1", rotulo: "evasão forte (−0,60 a −0,33)" },
-    { cor: "neg2", rotulo: "evasão muito forte (abaixo de −0,60)" },
-  ],
-  tlm: [
-    { cor: "pos2", rotulo: "ganho acima de 80‰" },
-    { cor: "pos1", rotulo: "ganho de 30 a 80‰" },
-    { cor: "pos0", rotulo: "ganho de 10 a 30‰" },
-    { cor: "zero", rotulo: "quase equilíbrio (±10‰)" },
-    { cor: "neg0", rotulo: "perda de 10 a 30‰" },
-    { cor: "neg1", rotulo: "perda de 30 a 80‰" },
-    { cor: "neg2", rotulo: "perda acima de 80‰" },
-  ],
-  tbi: [
-    { cor: "seq0", rotulo: "até 25‰" },
-    { cor: "seq1", rotulo: "25 a 50‰" },
-    { cor: "seq2", rotulo: "50 a 80‰" },
-    { cor: "seq3", rotulo: "80 a 130‰" },
-    { cor: "seq4", rotulo: "130‰ ou mais" },
-  ],
-  tbe: [
-    { cor: "seq0", rotulo: "até 25‰" },
-    { cor: "seq1", rotulo: "25 a 50‰" },
-    { cor: "seq2", rotulo: "50 a 80‰" },
-    { cor: "seq3", rotulo: "80 a 130‰" },
-    { cor: "seq4", rotulo: "130‰ ou mais" },
-  ],
+/** Slots de cor da legenda das 4 medidas do mapa comparativo (seção 4.2 -- cada medida tem 7
+ *  ou 5 classes fixas; os limiares de iem/tlm têm nomes da tipologia de Baeninger, não "faixas"
+ *  genéricas). O TEXTO de cada classe mora em `d.comum.legendaMedidaSerie`, na mesma ordem. */
+const SLOTS_LEGENDA_MEDIDA_SERIE: Record<MedidaMapaSerie, string[]> = {
+  iem: ["pos2", "pos1", "pos0", "zero", "neg0", "neg1", "neg2"],
+  tlm: ["pos2", "pos1", "pos0", "zero", "neg0", "neg1", "neg2"],
+  tbi: ["seq0", "seq1", "seq2", "seq3", "seq4"],
+  tbe: ["seq0", "seq1", "seq2", "seq3", "seq4"],
 };
+
+/** Legenda de uma das 4 medidas do mapa comparativo, no idioma de `d`: um item por classe de cor. */
+export function legendaMedidaSerie(medida: MedidaMapaSerie, d: Dicionario = pt): { cor: string; rotulo: string }[] {
+  const textos = d.comum.legendaMedidaSerie[medida];
+  return SLOTS_LEGENDA_MEDIDA_SERIE[medida].map((cor, i) => ({ cor, rotulo: textos[i] }));
+}
 
 /** Cor efetiva de cada slot de legenda acima ("pos2", "neg0", "seq3"...), para desenhar a
  *  amostra de cor ao lado do rótulo. */

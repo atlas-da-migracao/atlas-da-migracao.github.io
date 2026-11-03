@@ -1,0 +1,275 @@
+import type { Dicionario } from "../pt";
+
+/** espacio inseparable antes de "%" y "‰" (TERMINOLOGIA.md, §3) */
+const NB = " ";
+const unidade = (u: string) => (u ? `${NB}${u}` : "");
+
+export const comum: Dicionario["comum"] = {
+  separadorIntervalo: "a",
+
+  precisao: {
+    boa: "buena",
+    cautela: "usar con cautela",
+    baixa: "baja precisión",
+    sem_estimativa: "sin estimación",
+  },
+
+  niveis: {
+    mun: {
+      curto: "Municipio", titulo: "Municipio", singular: "municipio", plural: "municipios",
+      artigoDef: "el municipio", demonstrativo: "este municipio", par: "los dos municipios",
+      ver: "Ver el municipio",
+    },
+    rgi: {
+      curto: "Reg. inmediata", titulo: "Región inmediata", singular: "región inmediata",
+      plural: "regiones inmediatas", artigoDef: "la región inmediata", demonstrativo: "esta región inmediata",
+      par: "las dos regiones inmediatas", ver: "Ver la región",
+    },
+    rgint: {
+      curto: "Reg. intermedia", titulo: "Región intermedia", singular: "región intermedia",
+      plural: "regiones intermedias", artigoDef: "la región intermedia",
+      demonstrativo: "esta región intermedia", par: "las dos regiones intermedias", ver: "Ver la región",
+    },
+    uf: {
+      curto: "Estado (UF)", titulo: "Estado (UF)", singular: "estado", plural: "estados", artigoDef: "el estado",
+      demonstrativo: "este estado", par: "los dos estados", ver: "Ver el estado",
+    },
+    rm: {
+      curto: "RM", titulo: "Región metropolitana", singular: "región metropolitana",
+      plural: "regiones metropolitanas", artigoDef: "la región metropolitana",
+      demonstrativo: "esta región metropolitana", par: "las dos regiones metropolitanas", ver: "Ver la RM",
+    },
+  },
+
+  dimensoes: {
+    status: { titulo: "Tipo de migrante", nota: null },
+    edu: { titulo: "Nivel educativo", nota: "personas de 25 años o más" },
+    renda: { titulo: "Ingreso del hogar per cápita", nota: "en salarios mínimos" },
+    tipologia: { titulo: "Tipo de flujo", nota: null },
+    frequencia: { titulo: "Frecuencia de retorno", nota: null },
+    frequencia2010: { titulo: "Frecuencia de retorno", nota: null },
+    modo: { titulo: "Modo de transporte", nota: null },
+    tempo: { titulo: "Tiempo de desplazamiento", nota: null },
+    tempo2010: { titulo: "Tiempo de desplazamiento", nota: "solo quienes regresan a casa diariamente" },
+    posicao: { titulo: "Situación en el empleo", nota: null },
+    setor: { titulo: "Sector de actividad", nota: null },
+    ocupacao: { titulo: "Grupo ocupacional", nota: null },
+    renda_trab: { titulo: "Ingreso laboral", nota: "en salarios mínimos" },
+    nivel: { titulo: "Nivel de estudio", nota: null },
+  },
+
+  categoriaOutros: "Otros o suprimido",
+
+  categorias: {
+    status: {
+      retorno_natal: "Retorno al municipio natal",
+      primeira_saida: "Primera salida del natal",
+      etapas_multiplas: "Etapas múltiples",
+      nascido_exterior: "Nacido en el exterior",
+      nao_natural: "No natural del destino",
+      outros: "Otros o suprimido",
+    },
+    edu: {
+      sem_instr_fund_incompleto: "Sin instrucción o básica incompleta",
+      fund_completo_medio_incompleto: "Básica completa",
+      medio_completo_superior_incompleto: "Media completa",
+      superior_completo: "Superior completa",
+      nao_determinado: "No determinado",
+      outros: "Otros o suprimido",
+    },
+    renda: {
+      ate_1_4_sm: "Hasta ¼",
+      de_1_4_a_1_2_sm: "De ¼ a ½",
+      de_1_2_a_1_sm: "De ½ a 1",
+      de_1_a_2_sm: "De 1 a 2",
+      mais_de_2_sm: "Más de 2",
+      nao_aplicavel: "Vivienda colectiva",
+      outros: "Otros o suprimido",
+    },
+    tipologia: {
+      nucleo_periferia: "Núcleo → periferia",
+      periferia_nucleo: "Periferia → núcleo",
+      periferia_periferia: "Periferia → periferia",
+    },
+    classeTrab: {
+      origem: "Volvió a trabajar en el origen",
+      nucleo: "Pasó a trabajar en el núcleo",
+      outro: "Trabaja en otro municipio de la RM",
+      proprio: "Trabaja en su propio municipio",
+      varios: "Varios municipios",
+      nao_informado: "No declarado",
+      exterior: "Exterior",
+      outros: "Otros",
+    },
+    classeEstudo: {
+      origem: "Volvió a estudiar en el origen",
+      nucleo: "Pasó a estudiar en el núcleo",
+      outro: "Estudia en otro municipio de la RM",
+      proprio: "Estudia en su propio municipio",
+      varios: "Varios municipios",
+      nao_informado: "No declarado",
+    },
+    faixasIdade: {
+      "05_14": "5 a 14",
+      "15_24": "15 a 24",
+      "25_39": "25 a 39",
+      "40_59": "40 a 59",
+      "60_mais": "60 y más",
+    },
+    frequencia: {
+      retorno_diario: "Retorna 3+ días/semana",
+      semanal_longa: "Retorno semanal o más espaciado",
+      ignorado: "Ignorado",
+      outros: "Otros o suprimido",
+    },
+    frequencia2010: {
+      retorno_diario: "Retorna diariamente",
+      semanal_longa: "No retorna diariamente",
+      ignorado: "Ignorado",
+      outros: "Otros o suprimido",
+    },
+    modo: {
+      a_pe_bicicleta: "A pie o en bicicleta",
+      motocicleta: "Motocicleta o mototaxi",
+      automovel_taxi: "Automóvil o taxi",
+      onibus_van_brt: "Autobús, van o BRT",
+      trem_metro: "Tren o metro",
+      outros: "Otros medios o suprimido",
+      ignorado: "Ignorado",
+    },
+    tempo: {
+      ate_15min: "Hasta 15 min",
+      de_16_a_30min: "16 a 30 min",
+      de_31min_a_1h: "31 min a 1 h",
+      de_1_a_2h: "1 a 2 h",
+      mais_de_2h: "Más de 2 h",
+      outros: "No se desplaza, ignorado o suprimido",
+    },
+    tempo2010: {
+      ate_5min: "Hasta 5 min",
+      de_6_a_30min: "6 a 30 min",
+      de_31min_a_1h: "31 min a 1 h",
+      de_1_a_2h: "1 a 2 h",
+      mais_de_2h: "Más de 2 h",
+      nao_se_aplica: "No retorna diariamente",
+      outros: "Otros o suprimido",
+    },
+    posicao: {
+      empregado_com_carteira: "Asalariado con contrato formal",
+      empregado_sem_carteira: "Asalariado sin contrato formal",
+      militar_estatutario: "Militar o funcionario de carrera",
+      empregador: "Empleador",
+      conta_propria_familiar: "Cuenta propia o trabajador familiar auxiliar",
+      ignorado: "Ignorado",
+      outros: "Otros o suprimido",
+    },
+    setor: {
+      agropecuaria: "Agropecuaria",
+      industria: "Industria",
+      construcao: "Construcción",
+      comercio: "Comercio",
+      transporte_logistica: "Transporte y logística",
+      servicos_empresariais: "Servicios empresariales",
+      admin_educacao_saude: "Administración pública, educación y salud",
+      outros_servicos: "Otros servicios",
+      ignorado: "Ignorado",
+      outros: "Otros o suprimido",
+    },
+    ocupacao: {
+      dirigentes_profissionais: "Directores y profesionales",
+      tecnicos_administrativo: "Técnicos y personal de apoyo administrativo",
+      servicos_vendedores: "Trabajadores de los servicios y vendedores",
+      agropecuaria: "Trabajadores agropecuarios",
+      industria_operadores: "Oficiales, operarios y operadores de máquinas",
+      elementares: "Ocupaciones elementales",
+      forcas_seguranca: "Fuerzas armadas, policía y bomberos",
+      mal_definidas: "Mal definidas, ignorado o suprimido",
+    },
+    renda_trab: {
+      ate_1_sm: "Hasta 1 salario mínimo",
+      de_1_a_2_sm: "De 1 a 2 salarios mínimos",
+      de_2_a_3_sm: "De 2 a 3 salarios mínimos",
+      de_3_a_5_sm: "De 3 a 5 salarios mínimos",
+      mais_de_5_sm: "Más de 5 salarios mínimos",
+      sem_declaracao: "Sin declaración",
+      outros: "Otros o suprimido",
+    },
+    nivel: {
+      infantil_fundamental: "Inicial o básica",
+      medio: "Media",
+      pre_vestibular: "Preuniversitario",
+      graduacao: "Pregrado",
+      pos_graduacao: "Posgrado",
+      ignorado: "Ignorado",
+      outros: "Otros o suprimido",
+    },
+  },
+
+  edicoes: {
+    "2022": { rotulo: "Censo 2022", subtitulo: "Censo 2022, fecha fija 2017–2022", rotuloRetorno: "Retorna 3+ días/semana" },
+    "2010": { rotulo: "Censo 2010", subtitulo: "Censo 2010, fecha fija 2005–2010", rotuloRetorno: "Retorna diariamente" },
+    "2000": { rotulo: "Censo 2000", subtitulo: "Censo 2000, fecha fija 1995–2000", rotuloRetorno: null },
+    "1991": { rotulo: "Censo 1991", subtitulo: "Censo 1991, fecha fija 1986–1991", rotuloRetorno: null },
+    "1980": { rotulo: "Censo 1980", subtitulo: "Censo 1980, proxy de fecha fija 1975–1980", rotuloRetorno: null },
+  },
+
+  faixasLegenda: {
+    ganhoAcima: (v: string, u: string) => `ganancia superior a ${v}${unidade(u)}`,
+    faixa: (a: string, b: string, u: string) => `${a} a ${b}${unidade(u)}`,
+    baixaVariacao: (v: string, u: string) => `baja variación (±${v}${unidade(u)})`,
+    perdaAcima: (v: string, u: string) => `pérdida superior a ${v}${unidade(u)}`,
+  },
+
+  legendaMedidaSerie: {
+    iem: [
+      "absorción muy fuerte (por encima de +0,60)",
+      "absorción fuerte (+0,33 a +0,60)",
+      "absorción (+0,15 a +0,33)",
+      "rotación (−0,15 a +0,15)",
+      "expulsión (−0,33 a −0,15)",
+      "expulsión fuerte (−0,60 a −0,33)",
+      "expulsión muy fuerte (por debajo de −0,60)",
+    ],
+    tlm: [
+      `ganancia superior a 80${NB}‰`,
+      `ganancia de 30 a 80${NB}‰`,
+      `ganancia de 10 a 30${NB}‰`,
+      `casi equilibrio (±10${NB}‰)`,
+      `pérdida de 10 a 30${NB}‰`,
+      `pérdida de 30 a 80${NB}‰`,
+      `pérdida superior a 80${NB}‰`,
+    ],
+    tbi: [`hasta 25${NB}‰`, `25 a 50${NB}‰`, `50 a 80${NB}‰`, `80 a 130${NB}‰`, `130${NB}‰ o más`],
+    tbe: [`hasta 25${NB}‰`, `25 a 50${NB}‰`, `50 a 80${NB}‰`, `80 a 130${NB}‰`, `130${NB}‰ o más`],
+  },
+
+  regioes: {
+    Norte: "Norte",
+    Nordeste: "Nordeste",
+    Sudeste: "Sudeste",
+    Sul: "Sur",
+    "Centro-Oeste": "Centro-Oeste",
+  },
+
+  sankeyResidual: {
+    origens: "Otros orígenes",
+    residencias: "Otras residencias",
+    municipios: "Otros municipios",
+  },
+
+  glossarioUi: {
+    oQueE: "Qué es",
+    comoInterpretar: "Cómo interpretar",
+    limitacoes: "Limitaciones",
+    ariaOQueE: (termo: string) => `Qué es ${termo}`,
+  },
+  ui: {
+    painelDetalhes: "Panel de detalles",
+    fecharPainel: "Cerrar panel",
+    carregando: "Cargando…",
+    carregandoFluxos: "Cargando flujos…",
+    carregandoFluxo: "Cargando el flujo…",
+    carregandoMapa: "Cargando el mapa…",
+    carregandoSerie: "Cargando la serie…",
+  },
+};

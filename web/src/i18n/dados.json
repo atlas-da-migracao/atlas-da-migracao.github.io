@@ -1,0 +1,356 @@
+{
+  "aviso.2022": {
+    "origem": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 2022 (IBGE, acesso controlado), sujeitas a controle estatístico de revelação e a erro amostral; podem divergir das tabulações oficiais do IBGE (SIDRA).",
+    "en": "Estimates produced by the author from the sample microdata of the 2022 Demographic Census (IBGE, controlled access), subject to statistical disclosure control and sampling error; they may differ from IBGE's official tabulations (SIDRA).",
+    "fr": "Estimations établies par l'auteur à partir des microdonnées de l'échantillon du Recensement démographique 2022 (IBGE, accès contrôlé), soumises au contrôle de la divulgation statistique et à l'erreur d'échantillonnage ; elles peuvent différer des tableaux officiels de l'IBGE (SIDRA).",
+    "es": "Estimaciones elaboradas por el autor a partir de los microdatos de la muestra del Censo Demográfico 2022 (IBGE, acceso controlado), sujetas a control de divulgación estadística y a error muestral; pueden diferir de los tabulados oficiales del IBGE (SIDRA)."
+  },
+  "aviso.2010": {
+    "origem": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 2010 (IBGE, dados públicos), sujeitas a controle estatístico de revelação e a erro amostral; podem divergir das tabulações oficiais do IBGE (SIDRA).",
+    "en": "Estimates produced by the author from the sample microdata of the 2010 Demographic Census (IBGE, public data), subject to statistical disclosure control and sampling error; they may differ from IBGE's official tabulations (SIDRA).",
+    "fr": "Estimations établies par l'auteur à partir des microdonnées de l'échantillon du Recensement démographique 2010 (IBGE, données publiques), soumises au contrôle de la divulgation statistique et à l'erreur d'échantillonnage ; elles peuvent différer des tableaux officiels de l'IBGE (SIDRA).",
+    "es": "Estimaciones elaboradas por el autor a partir de los microdatos de la muestra del Censo Demográfico 2010 (IBGE, datos públicos), sujetas a control de divulgación estadística y a error muestral; pueden diferir de los tabulados oficiales del IBGE (SIDRA)."
+  },
+  "aviso.2000": {
+    "origem": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 2000 (IBGE, dados públicos), sujeitas a controle estatístico de revelação e a erro amostral; podem divergir das tabulações oficiais do IBGE (SIDRA).",
+    "en": "Estimates produced by the author from the sample microdata of the 2000 Demographic Census (IBGE, public data), subject to statistical disclosure control and sampling error; they may differ from IBGE's official tabulations (SIDRA).",
+    "fr": "Estimations établies par l'auteur à partir des microdonnées de l'échantillon du Recensement démographique 2000 (IBGE, données publiques), soumises au contrôle de la divulgation statistique et à l'erreur d'échantillonnage ; elles peuvent différer des tableaux officiels de l'IBGE (SIDRA).",
+    "es": "Estimaciones elaboradas por el autor a partir de los microdatos de la muestra del Censo Demográfico 2000 (IBGE, datos públicos), sujetas a control de divulgación estadística y a error muestral; pueden diferir de los tabulados oficiales del IBGE (SIDRA)."
+  },
+  "aviso.1991": {
+    "origem": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 1991 (IBGE, dados públicos), sujeitas a controle estatístico de revelação e a erro amostral; podem divergir das tabulações oficiais do IBGE (SIDRA).",
+    "en": "Estimates produced by the author from the sample microdata of the 1991 Demographic Census (IBGE, public data), subject to statistical disclosure control and sampling error; they may differ from IBGE's official tabulations (SIDRA).",
+    "fr": "Estimations établies par l'auteur à partir des microdonnées de l'échantillon du Recensement démographique 1991 (IBGE, données publiques), soumises au contrôle de la divulgation statistique et à l'erreur d'échantillonnage ; elles peuvent différer des tableaux officiels de l'IBGE (SIDRA).",
+    "es": "Estimaciones elaboradas por el autor a partir de los microdatos de la muestra del Censo Demográfico 1991 (IBGE, datos públicos), sujetas a control de divulgación estadística y a error muestral; pueden diferir de los tabulados oficiales del IBGE (SIDRA)."
+  },
+  "aviso.1980": {
+    "origem": "Estimativas elaboradas pelo autor a partir dos microdados da amostra do Censo Demográfico 1980 (IBGE, dados públicos), sujeitas a controle estatístico de revelação, publicadas sem estimativa de erro amostral (a fonte não permite calculá-lo); podem divergir das tabulações oficiais do IBGE (SIDRA).",
+    "en": "Estimates produced by the author from the sample microdata of the 1980 Demographic Census (IBGE, public data), subject to statistical disclosure control, published without a sampling error estimate (the source does not allow it to be calculated); they may differ from IBGE's official tabulations (SIDRA).",
+    "fr": "Estimations établies par l'auteur à partir des microdonnées de l'échantillon du Recensement démographique 1980 (IBGE, données publiques), soumises au contrôle de la divulgation statistique, publiées sans estimation de l'erreur d'échantillonnage (la source ne permet pas de la calculer) ; elles peuvent différer des tableaux officiels de l'IBGE (SIDRA).",
+    "es": "Estimaciones elaboradas por el autor a partir de los microdatos de la muestra del Censo Demográfico 1980 (IBGE, datos públicos), sujetas a control de divulgación estadística, publicadas sin estimación del error muestral (la fuente no permite calcularlo); pueden diferir de los tabulados oficiales del IBGE (SIDRA)."
+  },
+  "fonte.2022": {
+    "origem": "IBGE, Censo Demográfico 2022, microdados da amostra (acesso controlado)",
+    "en": "IBGE, 2022 Demographic Census, sample microdata (controlled access)",
+    "fr": "IBGE, Recensement démographique 2022, microdonnées de l'échantillon (accès contrôlé)",
+    "es": "IBGE, Censo Demográfico 2022, microdatos de la muestra (acceso controlado)"
+  },
+  "fonte.2010": {
+    "origem": "IBGE, Censo Demográfico 2010, microdados da amostra (dados públicos)",
+    "en": "IBGE, 2010 Demographic Census, sample microdata (public data)",
+    "fr": "IBGE, Recensement démographique 2010, microdonnées de l'échantillon (données publiques)",
+    "es": "IBGE, Censo Demográfico 2010, microdatos de la muestra (datos públicos)"
+  },
+  "fonte.2000": {
+    "origem": "IBGE, Censo Demográfico 2000, microdados da amostra (dados públicos)",
+    "en": "IBGE, 2000 Demographic Census, sample microdata (public data)",
+    "fr": "IBGE, Recensement démographique 2000, microdonnées de l'échantillon (données publiques)",
+    "es": "IBGE, Censo Demográfico 2000, microdatos de la muestra (datos públicos)"
+  },
+  "fonte.1991": {
+    "origem": "IBGE, Censo Demográfico 1991, microdados da amostra (dados públicos)",
+    "en": "IBGE, 1991 Demographic Census, sample microdata (public data)",
+    "fr": "IBGE, Recensement démographique 1991, microdonnées de l'échantillon (données publiques)",
+    "es": "IBGE, Censo Demográfico 1991, microdatos de la muestra (datos públicos)"
+  },
+  "fonte.1980": {
+    "origem": "IBGE, Censo Demográfico 1980, microdados da amostra (dados públicos), via censobr/IPEA v1.0.0 (Parquet público derivado dos mesmos microdados; ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)",
+    "en": "IBGE, 1980 Demographic Census, sample microdata (public data), via censobr/IPEA v1.0.0 (public Parquet file derived from the same microdata; see pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)",
+    "fr": "IBGE, Recensement démographique 1980, microdonnées de l'échantillon (données publiques), via censobr/IPEA v1.0.0 (fichier Parquet public dérivé des mêmes microdonnées ; voir pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)",
+    "es": "IBGE, Censo Demográfico 1980, microdatos de la muestra (datos públicos), vía censobr/IPEA v1.0.0 (Parquet público derivado de los mismos microdatos; ver pipeline/sql/1980/MAPEAMENTO_fonte_censobr.md)"
+  },
+  "aviso_proxy.1980": {
+    "origem": "Esta edição não tem quesito de data fixa: a migração é um proxy (tempo de residência no município + município de residência anterior), calibrado contra a data fixa do Censo 1991. Ele capta 100% dos migrantes, acerta a origem municipal de 89% deles e reproduz as taxas líquidas com correlação de 0,98; em troca, infla o volume em cerca de 7%, atenua os saldos em 6% a 9% e subestima a migração interestadual em cerca de 2 pontos percentuais. Como a calibração foi feita em 1991, esses desvios são um piso. Entre edições, compare composição, direção e hierarquia dos fluxos — não o nível.",
+    "en": "This edition has no fixed-date question: migration is a proxy (duration of residence in the municipality + municipality of previous residence), calibrated against the fixed-date measure of the 1991 Census. It captures 100% of migrants, gets the municipality of origin right for 89% of them and reproduces net migration rates with a correlation of 0.98; on the other hand, it inflates volume by about 7%, attenuates net migration by 6% to 9% and underestimates interstate migration by about 2 percentage points. Because the calibration was done in 1991, these deviations are a lower bound. Across editions, compare the composition, direction and hierarchy of flows — not the level.",
+    "fr": "Cette édition ne comporte pas de question à date fixe : la migration est un proxy (durée de résidence dans la municipalité + municipalité de résidence antérieure), calibré sur la date fixe du Recensement 1991. Il capte 100 % des migrants, identifie correctement la municipalité d'origine de 89 % d'entre eux et reproduit les taux nets avec une corrélation de 0,98 ; en contrepartie, il gonfle le volume d'environ 7 %, atténue les soldes de 6 % à 9 % et sous-estime la migration interétatique d'environ 2 points de pourcentage. Comme la calibration a été faite en 1991, ces écarts sont un plancher. D'une édition à l'autre, comparez la composition, la direction et la hiérarchie des flux — pas le niveau.",
+    "es": "Esta edición no tiene pregunta de fecha fija: la migración es un proxy (tiempo de residencia en el municipio + municipio de residencia anterior), calibrado con la fecha fija del Censo 1991. Capta el 100 % de los migrantes, acierta el origen municipal del 89 % de ellos y reproduce las tasas netas con una correlación de 0,98; a cambio, infla el volumen en cerca de un 7 %, atenúa los saldos entre un 6 % y un 9 % y subestima la migración interestatal en cerca de 2 puntos porcentuales. Como la calibración se hizo en 1991, esas desviaciones son un piso. Entre ediciones, compare la composición, la dirección y la jerarquía de los flujos — no el nivel."
+  },
+  "aviso_proxy_resumo.1980": {
+    "origem": "O Censo 1980 não perguntou onde a pessoa morava 5 anos antes: a migração aqui é estimada por um proxy, com volume cerca de 7% acima do real e saldos mais fracos do que seriam. Compare direção e composição entre municípios — não o volume total.",
+    "en": "The 1980 Census did not ask where the person lived 5 years earlier: migration here is estimated with a proxy, with volume about 7% above the true value and net migration weaker than it would be. Compare direction and composition across municipalities — not the total volume.",
+    "fr": "Le Recensement 1980 n'a pas demandé où la personne résidait 5 ans auparavant : la migration est ici estimée par un proxy, avec un volume supérieur d'environ 7 % à la réalité et des soldes plus faibles qu'ils ne le seraient. Comparez la direction et la composition entre municipalités — pas le volume total.",
+    "es": "El Censo 1980 no preguntó dónde vivía la persona 5 años antes: la migración aquí se estima con un proxy, con un volumen cerca de un 7 % por encima del real y saldos más débiles de lo que serían. Compare la dirección y la composición entre municipios — no el volumen total."
+  },
+  "aviso_pendular_estudo.1980": {
+    "origem": "Em 1980 o quesito de município de estudo só foi aplicado a quem tinha 10 anos ou mais: o deslocamento pendular para estudo desta edição não inclui as crianças de 5 a 9 anos, ao contrário das outras edições. Compare composição e direção, não o volume.",
+    "en": "In 1980 the question on municipality of study was asked only of those aged 10 and over: commuting to school in this edition does not include children aged 5 to 9, unlike the other editions. Compare composition and direction, not volume.",
+    "fr": "En 1980, la question sur la municipalité d'études n'a été posée qu'aux personnes de 10 ans ou plus : la mobilité pendulaire pour études de cette édition n'inclut pas les enfants de 5 à 9 ans, contrairement aux autres éditions. Comparez la composition et la direction, pas le volume.",
+    "es": "En 1980 la pregunta de municipio de estudio solo se aplicó a quien tenía 10 años o más: la movilidad pendular por estudio de esta edición no incluye a los niños de 5 a 9 años, a diferencia de las otras ediciones. Compare la composición y la dirección, no el volumen."
+  },
+  "nota_uf.1980.17": {
+    "origem": "O Tocantins foi criado em 1988. Em 1980 este território eram 52 municípios do norte de Goiás, publicados aqui sob o código de UF de hoje (mesmo precedente de Fernando de Noronha) para que a série de UF compare o mesmo território nas cinco edições. As trocas com o restante de Goiás aparecem como migração interestadual; quem nasceu aqui e mora fora declarou Goiás como UF de nascimento.",
+    "en": "Tocantins was created in 1988. In 1980 this territory consisted of 52 municipalities in northern Goiás, published here under today's state (UF) code (the same precedent as Fernando de Noronha) so that the state series compares the same territory across all five editions. Exchanges with the rest of Goiás appear as interstate migration; those born here and living elsewhere reported Goiás as their state of birth.",
+    "fr": "Le Tocantins a été créé en 1988. En 1980, ce territoire correspondait à 52 municipalités du nord de Goiás, publiées ici sous le code d'UF actuel (même précédent que Fernando de Noronha) afin que la série par UF compare le même territoire dans les cinq éditions. Les échanges avec le reste de Goiás apparaissent comme migration interétatique ; ceux qui sont nés ici et vivent ailleurs ont déclaré Goiás comme UF de naissance.",
+    "es": "Tocantins fue creado en 1988. En 1980 este territorio eran 52 municipios del norte de Goiás, publicados aquí con el código de UF actual (mismo precedente de Fernando de Noronha) para que la serie por UF compare el mismo territorio en las cinco ediciones. Los intercambios con el resto de Goiás aparecen como migración interestatal; quien nació aquí y vive fuera declaró Goiás como UF de nacimiento."
+  },
+  "notas.cobertura_insuficiente": {
+    "origem": "Nesta edição, menos de 90% da população de 2022 desta unidade está coberta pelo território dos municípios existentes: a unidade não é mais a mesma e o número não é publicado.",
+    "en": "In this edition, less than 90% of this unit's 2022 population is covered by the territory of the municipalities that existed: the unit is no longer the same and the number is not published.",
+    "fr": "Dans cette édition, moins de 90 % de la population de 2022 de cette unité est couverte par le territoire des municipalités existantes : l'unité n'est plus la même et le nombre n'est pas publié.",
+    "es": "En esta edición, menos del 90 % de la población de 2022 de esta unidad está cubierta por el territorio de los municipios existentes: la unidad ya no es la misma y el número no se publica."
+  },
+  "notas.conectividade_limiar_1980": {
+    "origem": "O número de parceiros publicados depende do limiar de revelação, e 1980 é a única edição com limiar próprio (n ≥ 20 em vez de n ≥ 5, por não ter chave de domicílio): ela publica 11,0% dos pares da amostra, contra 16,2%–20,4% nas demais. A contagem de parceiros de 1980 não é comparável com a das outras edições.",
+    "en": "The number of published partners depends on the disclosure threshold, and 1980 is the only edition with its own threshold (n ≥ 20 instead of n ≥ 5, because it has no household identifier): it publishes 11.0% of the sample pairs, against 16.2%–20.4% in the others. The 1980 partner count is not comparable with that of the other editions.",
+    "fr": "Le nombre de partenaires publiés dépend du seuil de diffusion, et 1980 est la seule édition avec un seuil propre (n ≥ 20 au lieu de n ≥ 5, faute d'identifiant de ménage) : elle publie 11,0 % des couples de l'échantillon, contre 16,2 %–20,4 % dans les autres. Le nombre de partenaires de 1980 n'est pas comparable à celui des autres éditions.",
+    "es": "El número de contrapartes publicadas depende del umbral de divulgación, y 1980 es la única edición con umbral propio (n ≥ 20 en lugar de n ≥ 5, por no tener identificador de hogar): publica el 11,0 % de los pares de la muestra, frente al 16,2 %–20,4 % en las demás. El conteo de contrapartes de 1980 no es comparable con el de las otras ediciones."
+  },
+  "notas.conectividade_supressao": {
+    "origem": "O número de parceiros conta pares publicados: pares pequenos são suprimidos pelas regras de revelação e não aparecem. Como o tamanho da amostra varia entre censos, a contagem mede em parte a supressão, não só a conectividade — e também cai quando o território da unidade ainda não estava subdividido como hoje.",
+    "en": "The number of partners counts published pairs: small pairs are suppressed by the disclosure rules and do not appear. Since sample size varies between censuses, the count partly measures suppression, not only connectivity — and it also falls when the unit's territory was not yet subdivided as it is today.",
+    "fr": "Le nombre de partenaires compte les couples publiés : les petits couples sont masqués par les règles de divulgation et n'apparaissent pas. Comme la taille de l'échantillon varie entre recensements, le décompte mesure en partie le masquage, et pas seulement la connectivité — et il baisse aussi lorsque le territoire de l'unité n'était pas encore subdivisé comme aujourd'hui.",
+    "es": "El número de contrapartes cuenta pares publicados: los pares pequeños se suprimen por las reglas de divulgación y no aparecen. Como el tamaño de la muestra varía entre censos, el conteo mide en parte la supresión, no solo la conectividad — y también cae cuando el territorio de la unidad todavía no estaba subdividido como hoy."
+  },
+  "notas.duncan_matriz_comum": {
+    "origem": "Calculado sobre a união dos pares publicados nas duas edições comparadas, com o par ausente numa delas valendo 0 e cada matriz normalizada pelo próprio total. Por isso o índice é um limite superior da mudança de padrão: ele soma à mudança migratória a criação de município e a supressão de revelação entre as duas edições. A versão sobre a matriz comum (só pares existentes nas duas), com `n_pares_comuns` publicado, fica como pendência declarada.",
+    "en": "Calculated on the union of the pairs published in the two editions compared, with a pair missing from one of them counted as 0 and each matrix normalized by its own total. That is why the index is an upper bound of the change in pattern: it adds municipality creation and disclosure suppression between the two editions to the change in migration. The version on the common matrix (only pairs present in both), with `n_pares_comuns` published, remains a declared pending item.",
+    "fr": "Calculé sur l'union des couples publiés dans les deux éditions comparées, le couple absent de l'une d'elles valant 0 et chaque matrice étant normalisée par son propre total. C'est pourquoi l'indice est une borne supérieure du changement de configuration : il ajoute au changement migratoire la création de municipalités et le masquage entre les deux éditions. La version sur la matrice commune (uniquement les couples présents dans les deux), avec `n_pares_comuns` publié, reste un point en suspens déclaré.",
+    "es": "Calculado sobre la unión de los pares publicados en las dos ediciones comparadas, con el par ausente en una de ellas valiendo 0 y cada matriz normalizada por su propio total. Por eso el índice es un límite superior del cambio de patrón: suma al cambio migratorio la creación de municipios y la supresión por control de divulgación entre las dos ediciones. La versión sobre la matriz común (solo los pares existentes en ambas), con `n_pares_comuns` publicado, queda como pendiente declarada."
+  },
+  "notas.duncan_matriz_comum_1980": {
+    "origem": "Duncan D calculado sobre a união dos pares publicados nas duas edições (par ausente numa delas vale 0). Entre 1980 e 1991 é a comparação mais afetada da série: 1.579 municípios de 2022 não existem em 1980 (os 52 do norte de Goiás, hoje Tocantins, entram com o código de 2022), então a parcela do índice que é fronteira e supressão, não mudança de padrão, é a maior de todas; leia-o como limite superior.",
+    "en": "Duncan's D calculated on the union of the pairs published in the two editions (a pair missing from one of them counts as 0). Between 1980 and 1991 it is the most affected comparison in the series: 1,579 municipalities of 2022 do not exist in 1980 (the 52 in northern Goiás, now Tocantins, are included with their 2022 code), so the share of the index that is boundary change and suppression, not change in pattern, is the largest of all; read it as an upper bound.",
+    "fr": "D de Duncan calculé sur l'union des couples publiés dans les deux éditions (le couple absent de l'une d'elles vaut 0). Entre 1980 et 1991, c'est la comparaison la plus affectée de la série : 1 579 municipalités de 2022 n'existent pas en 1980 (les 52 du nord de Goiás, aujourd'hui Tocantins, y figurent avec le code de 2022), de sorte que la part de l'indice qui relève des changements de limites et du masquage, et non d'un changement de configuration, est la plus grande de toutes ; lisez-le comme une borne supérieure.",
+    "es": "D de Duncan calculado sobre la unión de los pares publicados en las dos ediciones (el par ausente en una de ellas vale 0). Entre 1980 y 1991 es la comparación más afectada de la serie: 1.579 municipios de 2022 no existen en 1980 (los 52 del norte de Goiás, hoy Tocantins, entran con el código de 2022), así que la parte del índice que es cambio de límites y supresión, y no cambio de patrón, es la mayor de todas; léalo como límite superior."
+  },
+  "notas.edu_anos_estudo": {
+    "origem": "Nesta edição o nível de instrução é derivado de 'anos de estudo': uma graduação de três anos soma 14 anos e cai em 'médio completo/superior incompleto', o que subestima ligeiramente 'superior completo' frente a 2010 e 2022.",
+    "en": "In this edition the level of education is derived from “years of schooling”: a three-year degree adds up to 14 years and falls into “completed high school/incomplete higher education”, which slightly underestimates “completed higher education” relative to 2010 and 2022.",
+    "fr": "Dans cette édition, le niveau d'instruction est dérivé des « années d'études » : un diplôme en trois ans totalise 14 années et tombe dans « secondaire achevé/supérieur incomplet », ce qui sous-estime légèrement « supérieur achevé » par rapport à 2010 et 2022.",
+    "es": "En esta edición el nivel de instrucción se deriva de «años de estudio»: una carrera de tres años suma 14 años y cae en «media completa/superior incompleta», lo que subestima ligeramente «superior completa» frente a 2010 y 2022."
+  },
+  "notas.edu_reconstruida_1980": {
+    "origem": "A escolaridade de 1980 é reconstruída do par 'última série concluída' × 'grau', com a lista de graus do dicionário do IBGE corrigida de um deslocamento de código. É uma aproximação declarada: quem estava estudando tem o nível subestimado, e o fim do curso superior é uma faixa, não um ponto.",
+    "en": "1980 education is reconstructed from the pair “last grade completed” × “level”, with the list of levels in IBGE's data dictionary corrected for a code shift. It is a declared approximation: those who were studying have their level underestimated, and the end of higher education is a range, not a point.",
+    "fr": "L'instruction de 1980 est reconstituée à partir du couple « dernière année réussie » × « cycle », avec la liste des cycles du dictionnaire des variables de l'IBGE corrigée d'un décalage de code. C'est une approximation déclarée : le niveau de ceux qui étaient en études est sous-estimé, et la fin des études supérieures est une plage, non un point.",
+    "es": "La escolaridad de 1980 se reconstruye a partir del par «último grado aprobado» × «nivel», con la lista de niveles del diccionario de variables del IBGE corregida de un desplazamiento de código. Es una aproximación declarada: quien estaba estudiando tiene el nivel subestimado, y el fin de la carrera superior es un rango, no un punto."
+  },
+  "notas.escala_cmi": {
+    "origem": "Intensidade e migração líquida agregada dependem do número de unidades do nível: comparar o valor de um município com o de uma UF não tem significado. A série é sempre lida dentro de um mesmo nível territorial.",
+    "en": "Intensity and the aggregate net migration rate depend on the number of units in the level: comparing the value of a municipality with that of a state (UF) is meaningless. The series is always read within a single territorial level.",
+    "fr": "L'intensité et le taux net de migration agrégé dépendent du nombre d'unités du niveau : comparer la valeur d'une municipalité à celle d'une UF n'a pas de sens. La série se lit toujours au sein d'un même niveau territorial.",
+    "es": "La intensidad y la tasa neta de migración agregada dependen del número de unidades del nivel: comparar el valor de un municipio con el de una UF no tiene sentido. La serie se lee siempre dentro de un mismo nivel territorial."
+  },
+  "notas.estudo_piso": {
+    "origem": "O deslocamento pendular para estudo é um piso, não uma estimativa do total: o censo tem um quesito único de trabalho/estudo com precedência do trabalho, e quem trabalha no próprio município e estuda em outro assinala 'neste município'. Comparável em composição e direção, nunca em nível.",
+    "en": "Commuting to school is a lower bound, not an estimate of the total: the census has a single work/study question, with work taking precedence, and those who work in their own municipality and study in another one tick “in this municipality”. Comparable in composition and direction, never in level.",
+    "fr": "La mobilité pendulaire pour études est un plancher, et non une estimation du total : le recensement comporte une question unique travail/études, le travail primant, et ceux qui travaillent dans leur propre municipalité et étudient dans une autre cochent « dans cette municipalité ». Comparable en composition et en direction, jamais en niveau.",
+    "es": "La movilidad pendular por estudio es un piso, no una estimación del total: el censo tiene una pregunta única de trabajo/estudio, con precedencia del trabajo, y quien trabaja en su propio municipio y estudia en otro marca «en este municipio». Comparable en composición y dirección, nunca en nivel."
+  },
+  "notas.faixas_largas": {
+    "origem": "Calculada sobre as cinco faixas etárias publicadas (5–14, 15–24, 25–39, 40–59, 60+). A granularidade não permite ajustar um perfil de Rogers-Castro nem detectar deslocamentos da idade do pico menores que a largura da faixa.",
+    "en": "Calculated on the five published age groups (5–14, 15–24, 25–39, 40–59, 60+). The granularity does not allow a Rogers-Castro profile to be fitted or shifts in peak age smaller than the width of the group to be detected.",
+    "fr": "Calculée sur les cinq groupes d'âge publiés (5–14, 15–24, 25–39, 40–59, 60+). La granularité ne permet ni d'ajuster un profil de Rogers-Castro ni de détecter des déplacements de l'âge du pic inférieurs à la largeur du groupe.",
+    "es": "Calculada sobre los cinco grupos de edad publicados (5–14, 15–24, 25–39, 40–59, 60+). La granularidad no permite ajustar un perfil de Rogers-Castro ni detectar desplazamientos de la edad del pico menores que la amplitud del grupo."
+  },
+  "notas.fonte_1980": {
+    "origem": "Em 1980 os 52 municípios do norte de Goiás (hoje Tocantins) são publicados como municípios, com o código de 2022, a partir do Parquet do censobr/IPEA (fonte da edição desde 1.1.0-1980); a Base dos Dados não trazia o código de município deles.",
+    "en": "In 1980 the 52 municipalities of northern Goiás (now Tocantins) are published as municipalities, with their 2022 code, based on the censobr/IPEA Parquet file (the edition's source since 1.1.0-1980); Base dos Dados did not include their municipality code.",
+    "fr": "En 1980, les 52 municipalités du nord de Goiás (aujourd'hui Tocantins) sont publiées comme municipalités, avec le code de 2022, à partir du fichier Parquet de censobr/IPEA (source de l'édition depuis 1.1.0-1980) ; la Base dos Dados ne contenait pas leur code de municipalité.",
+    "es": "En 1980 los 52 municipios del norte de Goiás (hoy Tocantins) se publican como municipios, con el código de 2022, a partir del Parquet de censobr/IPEA (fuente de la edición desde 1.1.0-1980); la Base dos Dados no traía su código de municipio."
+  },
+  "notas.frequencia_definicao_2010": {
+    "origem": "2010 pergunta se a pessoa retorna do trabalho para casa DIARIAMENTE; 2022 pergunta se retorna TRÊS OU MAIS DIAS POR SEMANA. Os códigos coincidem, as definições não: comparável em ordem de grandeza, não como série.",
+    "en": "2010 asks whether the person returns home from work DAILY; 2022 asks whether they return THREE OR MORE DAYS A WEEK. The codes coincide, the definitions do not: comparable in order of magnitude, not as a series.",
+    "fr": "2010 demande si la personne rentre du travail chez elle TOUS LES JOURS ; 2022 demande si elle rentre TROIS JOURS OU PLUS PAR SEMAINE. Les codes coïncident, les définitions non : comparable en ordre de grandeur, pas comme série.",
+    "es": "2010 pregunta si la persona retorna del trabajo a casa DIARIAMENTE; 2022 pregunta si retorna TRES O MÁS DÍAS POR SEMANA. Los códigos coinciden, las definiciones no: comparable en orden de magnitud, no como serie."
+  },
+  "notas.gini_limiar_1980": {
+    "origem": "Concentração calculada sobre os pares publicados, com o limiar próprio de 1980 (n ≥ 20). A cobertura de volume é equivalente à das demais edições (70,5%, contra 67,6%–71,6%), então a concentração da massa publicada é comparável; a contagem de pares não é.",
+    "en": "Concentration calculated on the published pairs, with 1980's own threshold (n ≥ 20). Volume coverage is equivalent to that of the other editions (70.5%, against 67.6%–71.6%), so the concentration of the published mass is comparable; the pair count is not.",
+    "fr": "Concentration calculée sur les couples publiés, avec le seuil propre à 1980 (n ≥ 20). La couverture en volume est équivalente à celle des autres éditions (70,5 %, contre 67,6 %–71,6 %), de sorte que la concentration de la masse publiée est comparable ; le nombre de couples ne l'est pas.",
+    "es": "Concentración calculada sobre los pares publicados, con el umbral propio de 1980 (n ≥ 20). La cobertura de volumen es equivalente a la de las demás ediciones (70,5 %, frente al 67,6 %–71,6 %), así que la concentración de la masa publicada es comparable; el conteo de pares no lo es."
+  },
+  "notas.gini_supressao": {
+    "origem": "Concentração calculada sobre os fluxos publicados; a cauda suprimida (cerca de 30% do volume, em todas as edições) não entra na conta.",
+    "en": "Concentration calculated on the published flows; the suppressed tail (about 30% of the volume, in all editions) is not counted.",
+    "fr": "Concentration calculée sur les flux publiés ; la queue masquée (environ 30 % du volume, dans toutes les éditions) n'entre pas dans le calcul.",
+    "es": "Concentración calculada sobre los flujos publicados; la cola suprimida (cerca del 30 % del volumen, en todas las ediciones) no entra en la cuenta."
+  },
+  "notas.iem_sem_guarda_1980": {
+    "origem": "A tipologia de 1980 é publicada sem guarda estatística: a edição não estima erro amostral, então não há como distinguir eficácia pequena de ruído.",
+    "en": "The 1980 typology is published without a statistical guard: the edition does not estimate sampling error, so there is no way to distinguish small effectiveness from noise.",
+    "fr": "La typologie de 1980 est publiée sans garde-fou statistique : l'édition n'estime pas l'erreur d'échantillonnage, il n'y a donc aucun moyen de distinguer une faible efficacité du bruit.",
+    "es": "La tipología de 1980 se publica sin salvaguarda estadística: la edición no estima el error muestral, así que no hay cómo distinguir una eficacia pequeña del ruido."
+  },
+  "notas.loglinear_matriz_comum": {
+    "origem": "Ajustado por edição, sobre a matriz publicada daquela edição (não sobre uma matriz comum). Todos os parâmetros exceto T são livres de escala, de modo que a razão entre dois censos mede mudança de estrutura, não de volume -- mas o conjunto de unidades ajustado difere entre edições, e isso entra na comparação.",
+    "en": "Fitted by edition, on that edition's published matrix (not on a common matrix). All parameters except T are scale-free, so the ratio between two censuses measures change in structure, not in volume -- but the set of fitted units differs between editions, and this enters the comparison.",
+    "fr": "Ajusté par édition, sur la matrice publiée de cette édition (et non sur une matrice commune). Tous les paramètres sauf T sont indépendants de l'échelle, de sorte que le rapport entre deux recensements mesure un changement de structure, non de volume -- mais l'ensemble d'unités ajusté diffère selon les éditions, et cela entre dans la comparaison.",
+    "es": "Ajustado por edición, sobre la matriz publicada de esa edición (no sobre una matriz común). Todos los parámetros excepto T son independientes de la escala, de modo que la razón entre dos censos mide cambio de estructura, no de volumen -- pero el conjunto de unidades ajustado difiere entre ediciones, y eso entra en la comparación."
+  },
+  "notas.loglinear_matriz_comum_1980": {
+    "origem": "Decomposição ajustada sobre a matriz publicada de 1980, a de menor conjunto de unidades da série. Os parâmetros O, D e OD são livres de escala, mas o conjunto sobre o qual foram ajustados é menor que o de 2022 e o volume vem do proxy de data fixa.",
+    "en": "Decomposition fitted on the published 1980 matrix, the one with the smallest set of units in the series. The O, D and OD parameters are scale-free, but the set on which they were fitted is smaller than that of 2022 and the volume comes from the fixed-date proxy.",
+    "fr": "Décomposition ajustée sur la matrice publiée de 1980, celle qui a le plus petit ensemble d'unités de la série. Les paramètres O, D et OD sont indépendants de l'échelle, mais l'ensemble sur lequel ils ont été ajustés est plus petit que celui de 2022 et le volume provient du proxy de date fixe.",
+    "es": "Descomposición ajustada sobre la matriz publicada de 1980, la de menor conjunto de unidades de la serie. Los parámetros O, D y OD son independientes de la escala, pero el conjunto sobre el que se ajustaron es menor que el de 2022 y el volumen proviene del proxy de fecha fija."
+  },
+  "notas.mei_estavel": {
+    "origem": "O índice de eficácia é uma razão entre saldo e volume e é estável a partir de ~20 unidades: pode ser lido entre níveis territoriais diferentes.",
+    "en": "The effectiveness index is a ratio between net migration and volume and is stable from ~20 units upward: it can be read across different territorial levels.",
+    "fr": "L'indice d'efficacité est un rapport entre solde et volume et il est stable à partir de ~20 unités : il peut être lu entre niveaux territoriaux différents.",
+    "es": "El índice de eficacia es una razón entre saldo y volumen y es estable a partir de ~20 unidades: puede leerse entre niveles territoriales distintos."
+  },
+  "notas.municipio_mae": {
+    "origem": "Nesta edição o município era territorialmente maior: parte da área que ele ocupa aqui é hoje de outro município. A queda de volume entre censos inclui, portanto, um degrau de fronteira que não é migração.",
+    "en": "In this edition the municipality was territorially larger: part of the area it occupies here now belongs to another municipality. The drop in volume between censuses therefore includes a boundary-change step that is not migration.",
+    "fr": "Dans cette édition, la municipalité était territorialement plus grande : une partie de la surface qu'elle occupe ici appartient aujourd'hui à une autre municipalité. La baisse de volume entre recensements comprend donc une rupture due au changement de limites, qui n'est pas de la migration.",
+    "es": "En esta edición el municipio era territorialmente mayor: parte del área que ocupa aquí pertenece hoy a otro municipio. La caída de volumen entre censos incluye, por lo tanto, un salto por cambio de límites que no es migración."
+  },
+  "notas.municipio_nao_existia": {
+    "origem": "O município não existia nesta edição. Seu território fazia parte do município de origem do desmembramento, cuja série pode ser aberta ao lado — as duas nunca são somadas nem emendadas.",
+    "en": "The municipality did not exist in this edition. Its territory was part of the municipality it later split from, whose series can be opened alongside — the two are never added together or joined.",
+    "fr": "La municipalité n'existait pas dans cette édition. Son territoire faisait partie de la municipalité dont elle a été détachée, dont la série peut être ouverte à côté — les deux ne sont jamais additionnées ni raccordées.",
+    "es": "El municipio no existía en esta edición. Su territorio formaba parte del municipio de origen del desmembramiento, cuya serie puede abrirse al lado — las dos nunca se suman ni se empalman."
+  },
+  "notas.n_unidades_variavel": {
+    "origem": "Medida do sistema calculada sobre as unidades existentes naquela edição, que são menos que as de 2022. A intensidade migratória cresce com o número de unidades (efeito Courgeau): parte da variação entre censos é de recorte, não de comportamento. O número de unidades é publicado ao lado de cada ponto.",
+    "en": "System-level measure calculated over the units that existed in that edition, which are fewer than those of 2022. Migration intensity grows with the number of units (the Courgeau effect): part of the variation between censuses is due to delineation, not behavior. The number of units is published next to each point.",
+    "fr": "Mesure du système calculée sur les unités existant dans cette édition, moins nombreuses que celles de 2022. L'intensité migratoire augmente avec le nombre d'unités (effet Courgeau) : une partie de la variation entre recensements relève du découpage, non du comportement. Le nombre d'unités est publié à côté de chaque point.",
+    "es": "Medida del sistema calculada sobre las unidades existentes en esa edición, que son menos que las de 2022. La intensidad migratoria crece con el número de unidades (efecto Courgeau): parte de la variación entre censos es de delimitación, no de comportamiento. El número de unidades se publica junto a cada punto."
+  },
+  "notas.nucleo_divergente": {
+    "origem": "O núcleo metropolitano desta edição não é o mesmo das demais (o município-núcleo ainda não existia e o atlas usa o mais populoso presente): a decomposição núcleo × periferia não forma série.",
+    "en": "The metropolitan core in this edition is not the same as in the others (the core municipality did not yet exist and the atlas uses the most populous one present): the core × periphery breakdown does not form a series.",
+    "fr": "Le centre métropolitain de cette édition n'est pas le même que dans les autres (la municipalité-centre n'existait pas encore et l'atlas utilise la plus peuplée présente) : la décomposition centre × périphérie ne forme pas une série.",
+    "es": "El núcleo metropolitano de esta edición no es el mismo que el de las demás (el municipio núcleo todavía no existía y el atlas usa el más poblado presente): la descomposición núcleo × periferia no forma serie."
+  },
+  "notas.ocup_elementares": {
+    "origem": "A classe 'ocupações elementares' não é comparável nesta edição: em 2000 ela é estruturalmente vazia (a CBO-Domiciliar 2000 distribui essa massa por três outras classes) e em 1980 ela existe, mas mais estreita que o grande grupo da ISCO-08.",
+    "en": "The “elementary occupations” class is not comparable in this edition: in 2000 it is structurally empty (the CBO-Domiciliar 2000 spreads this mass across three other classes) and in 1980 it exists, but it is narrower than the ISCO-08 major group.",
+    "fr": "La classe « professions élémentaires » n'est pas comparable dans cette édition : en 2000, elle est structurellement vide (la CBO-Domiciliar 2000 répartit cette masse entre trois autres classes) et en 1980, elle existe, mais elle est plus étroite que le grand groupe de la CITP-08.",
+    "es": "La clase «ocupaciones elementales» no es comparable en esta edición: en 2000 está estructuralmente vacía (la CBO-Domiciliar 2000 distribuye esa masa entre otras tres clases) y en 1980 existe, pero es más estrecha que el gran grupo de la CIUO-08."
+  },
+  "notas.pend_estudo_universo_1980": {
+    "origem": "Em 1980 o quesito de município de trabalho/estudo só é aplicado a quem tem 10 anos ou mais (universo econômico do censo): o fluxo pendular de estudo exclui as crianças de 5 a 9 anos que as outras edições incluem. Comparável em composição e direção, com este aviso de universo; nunca em nível.",
+    "en": "In 1980 the question on municipality of work/study is asked only of those aged 10 and over (the census's economic universe): the commuting flow to school excludes the children aged 5 to 9 that the other editions include. Comparable in composition and direction, with this universe caveat; never in level.",
+    "fr": "En 1980, la question sur la municipalité de travail/d'études n'est posée qu'aux personnes de 10 ans ou plus (champ économique du recensement) : le flux pendulaire pour études exclut les enfants de 5 à 9 ans que les autres éditions incluent. Comparable en composition et en direction, avec cet avertissement sur le champ ; jamais en niveau.",
+    "es": "En 1980 la pregunta de municipio de trabajo/estudio solo se aplica a quien tiene 10 años o más (universo económico del censo): el flujo pendular de estudio excluye a los niños de 5 a 9 años que las otras ediciones incluyen. Comparable en composición y dirección, con este aviso de universo; nunca en nivel."
+  },
+  "notas.posto_supressao_1980": {
+    "origem": "O ranking de 1980 é montado sobre menos pares publicados (limiar n ≥ 20): parceiros pequenos podem estar ausentes do ranking por supressão, não por não existirem.",
+    "en": "The 1980 ranking is built on fewer published pairs (threshold n ≥ 20): small partners may be missing from the ranking because of suppression, not because they do not exist.",
+    "fr": "Le classement de 1980 est établi sur moins de couples publiés (seuil n ≥ 20) : de petits partenaires peuvent être absents du classement en raison du masquage, et non parce qu'ils n'existent pas.",
+    "es": "El ranking de 1980 se construye sobre menos pares publicados (umbral n ≥ 20): contrapartes pequeñas pueden faltar en el ranking por supresión, no por no existir."
+  },
+  "notas.precisao_aproximada_1991": {
+    "origem": "1991 não tem área de ponderação: o estrato do estimador de variância é um substituto (município × situação urbano/rural), mais heterogêneo que a área real. O CV mediano fica 5% a 20% acima do de 2000 em pares de mesmo tamanho amostral — leia `se` e `cv` de 1991 como conservadores, não como comparáveis ponto a ponto.",
+    "en": "1991 has no weighting area: the stratum of the variance estimator is a substitute (municipality × urban/rural status), more heterogeneous than the actual area. The median CV is 5% to 20% higher than in 2000 for pairs of the same sample size — read 1991 `se` and `cv` as conservative, not as comparable point by point.",
+    "fr": "1991 n'a pas de zone de pondération : la strate de l'estimateur de variance est un substitut (municipalité × situation urbaine/rurale), plus hétérogène que la zone réelle. Le CV médian se situe de 5 % à 20 % au-dessus de celui de 2000 pour des couples de même taille d'échantillon — lisez `se` et `cv` de 1991 comme prudents, et non comme comparables point par point.",
+    "es": "1991 no tiene área de ponderación: el estrato del estimador de varianza es un sustituto (municipio × situación urbana/rural), más heterogéneo que el área real. El CV mediano queda entre un 5 % y un 20 % por encima del de 2000 en pares del mismo tamaño muestral — lea `se` y `cv` de 1991 como conservadores, no como comparables punto a punto."
+  },
+  "notas.proxy_1980_distancia": {
+    "origem": "A migração em etapas transfere fluxo longo para fluxo curto: em 1991, o proxy reduz a participação interestadual de 35,07% para 32,96%. 1980 subestima a distância percorrida, em magnitude não medida.",
+    "en": "Step migration shifts long flows into short flows: in 1991, the proxy reduces the interstate share from 35.07% to 32.96%. 1980 underestimates the distance traveled, by an unmeasured amount.",
+    "fr": "La migration par étapes fait passer des flux longs dans les flux courts : en 1991, le proxy réduit la part interétatique de 35,07 % à 32,96 %. 1980 sous-estime la distance parcourue, dans une proportion non mesurée.",
+    "es": "La migración por etapas traslada flujo largo a flujo corto: en 1991, el proxy reduce la participación interestatal del 35,07 % al 32,96 %. 1980 subestima la distancia recorrida, en una magnitud no medida."
+  },
+  "notas.proxy_1980_interestadual": {
+    "origem": "Medido na calibração de 1991: o proxy subestima a participação interestadual em 2,11 pontos percentuais (35,07% → 32,96%).",
+    "en": "Measured in the 1991 calibration: the proxy underestimates the interstate share by 2.11 percentage points (35.07% → 32.96%).",
+    "fr": "Mesuré lors de la calibration sur 1991 : le proxy sous-estime la part interétatique de 2,11 points de pourcentage (35,07 % → 32,96 %).",
+    "es": "Medido en la calibración con 1991: el proxy subestima la participación interestatal en 2,11 puntos porcentuales (35,07 % → 32,96 %)."
+  },
+  "notas.proxy_1980_pendular_contexto": {
+    "origem": "O módulo pendular de 1980 é medido, não é proxy — o selo de proxy da edição vale para a migração. A ressalva aqui é outra: 1980 publica quatro dimensões do pendular (sem posição na ocupação e sem renda) e o fluxo de estudo é um piso.",
+    "en": "The 1980 commuting module is measured, not a proxy — the edition's proxy badge applies to migration. The caveat here is a different one: 1980 publishes four commuting dimensions (no status in employment and no income) and the flow to school is a lower bound.",
+    "fr": "Le module de mobilité pendulaire de 1980 est mesuré, ce n'est pas un proxy — la mention « proxy » de l'édition vaut pour la migration. La réserve ici est autre : 1980 publie quatre dimensions de la mobilité pendulaire (sans statut dans l'emploi ni revenu) et le flux d'études est un plancher.",
+    "es": "El módulo pendular de 1980 es medido, no es proxy — el distintivo «proxy» de la edición vale para la migración. La salvedad aquí es otra: 1980 publica cuatro dimensiones de la movilidad pendular (sin situación en el empleo y sin ingreso) y el flujo de estudio es un piso."
+  },
+  "notas.proxy_1980_razao": {
+    "origem": "Razão entre entradas e saídas: é a família de medida menos sensível ao proxy, porque os falsos positivos entram dos dois lados. Ainda assim o proxy a atenua em direção a zero — 1980 tende a parecer mais 'de rotatividade' do que foi.",
+    "en": "Ratio between arrivals and departures: it is the family of measures least sensitive to the proxy, because false positives enter on both sides. Even so, the proxy pulls it toward zero — 1980 tends to look more like “turnover” than it was.",
+    "fr": "Rapport entre entrées et sorties : c'est la famille de mesures la moins sensible au proxy, car les faux positifs entrent des deux côtés. Le proxy l'atténue néanmoins vers zéro — 1980 tend à paraître plus « de rotation » qu'il ne l'a été.",
+    "es": "Razón entre entradas y salidas: es la familia de medidas menos sensible al proxy, porque los falsos positivos entran por los dos lados. Aun así, el proxy la atenúa hacia cero — 1980 tiende a parecer más «de rotación» de lo que fue."
+  },
+  "notas.proxy_1980_saldo": {
+    "origem": "O proxy de 1980 atenua o saldo: a regressão contra a data fixa verdadeira de 1991 dá coeficiente 0,941 por município e 0,912 por UF, e o sinal do saldo se inverte em 5,4% dos municípios, quase todos pequenos.",
+    "en": "The 1980 proxy attenuates net migration: the regression against the true fixed-date measure of 1991 gives a coefficient of 0.941 by municipality and 0.912 by state (UF), and the sign of net migration is reversed in 5.4% of municipalities, almost all of them small.",
+    "fr": "Le proxy de 1980 atténue le solde : la régression sur la date fixe réelle de 1991 donne un coefficient de 0,941 par municipalité et de 0,912 par UF, et le signe du solde s'inverse dans 5,4 % des municipalités, presque toutes petites.",
+    "es": "El proxy de 1980 atenúa el saldo: la regresión frente a la fecha fija verdadera de 1991 da un coeficiente de 0,941 por municipio y de 0,912 por UF, y el signo del saldo se invierte en el 5,4 % de los municipios, casi todos pequeños."
+  },
+  "notas.proxy_1980_volume": {
+    "origem": "1980 não pergunta onde a pessoa morava há cinco anos: a migração é um proxy (última etapa + tempo de residência). Calibrado contra 1991, o proxy infla o volume em ~7,3% (migração de ida-e-volta). O valor bruto é publicado; a estimativa calibrada aparece ao lado, como piso de correção.",
+    "en": "1980 does not ask where the person lived five years earlier: migration is a proxy (last previous residence + duration of residence). Calibrated against 1991, the proxy inflates volume by ~7.3% (round-trip migration). The raw value is published; the calibrated estimate appears alongside, as a lower bound of the correction.",
+    "fr": "1980 ne demande pas où la personne résidait cinq ans auparavant : la migration est un proxy (dernière résidence antérieure + durée de résidence). Calibré sur 1991, le proxy gonfle le volume de ~7,3 % (migration aller-retour). La valeur brute est publiée ; l'estimation calibrée apparaît à côté, comme plancher de la correction.",
+    "es": "1980 no pregunta dónde vivía la persona cinco años antes: la migración es un proxy (última etapa + tiempo de residencia). Calibrado con 1991, el proxy infla el volumen en ~7,3 % (migración de ida y vuelta). Se publica el valor bruto; la estimación calibrada aparece al lado, como piso de la corrección."
+  },
+  "notas.rm_unitaria": {
+    "origem": "Nesta edição a região metropolitana tem um único município: fluxo entre núcleo e periferia e pendularidade interna são zero por construção, não por medida.",
+    "en": "In this edition the metropolitan region has a single municipality: the core–periphery flow and internal commuting are zero by construction, not by measurement.",
+    "fr": "Dans cette édition, la région métropolitaine compte une seule municipalité : le flux entre centre et périphérie et la mobilité pendulaire interne sont nuls par construction, et non par mesure.",
+    "es": "En esta edición la región metropolitana tiene un único municipio: el flujo entre núcleo y periferia y la movilidad pendular interna son cero por construcción, no por medición."
+  },
+  "notas.seletividade_1980": {
+    "origem": "Razão de chances entre migrantes e residentes em 1980: além da ressalva geral (a característica é medida no fim do período), a escolaridade da edição é reconstruída e a migração é um proxy.",
+    "en": "Odds ratio between migrants and residents in 1980: in addition to the general caveat (the characteristic is measured at the end of the period), the edition's education is reconstructed and migration is a proxy.",
+    "fr": "Rapport de cotes entre migrants et résidents en 1980 : outre la réserve générale (la caractéristique est mesurée à la fin de la période), l'instruction de l'édition est reconstituée et la migration est un proxy.",
+    "es": "Razón de probabilidades (odds ratio) entre migrantes y residentes en 1980: además de la salvedad general (la característica se mide al final del período), la escolaridad de la edición es reconstruida y la migración es un proxy."
+  },
+  "notas.seletividade_fim_do_periodo": {
+    "origem": "Razão de chances entre migrantes e residentes. Dados de transição medem a característica no FIM do período: não se sabe se a escolaridade (ou a renda) é causa ou consequência da migração.",
+    "en": "Odds ratio between migrants and residents. Transition data measure the characteristic at the END of the period: it is not known whether education (or income) is a cause or a consequence of migration.",
+    "fr": "Rapport de cotes entre migrants et résidents. Les données de transition mesurent la caractéristique à la FIN de la période : on ne sait pas si l'instruction (ou le revenu) est une cause ou une conséquence de la migration.",
+    "es": "Razón de probabilidades (odds ratio) entre migrantes y residentes. Los datos de transición miden la característica al FINAL del período: no se sabe si la escolaridad (o el ingreso) es causa o consecuencia de la migración."
+  },
+  "notas.sem_estimativa_1980": {
+    "origem": "A edição 1980 não publica erro amostral: a fonte não traz chave de domicílio e os domicílios não são reconstruíveis, então não há unidade primária de amostragem. `se` e `cv` são nulos e a precisão é declarada como 'sem estimativa'.",
+    "en": "The 1980 edition does not publish sampling error: the source has no household identifier and households cannot be reconstructed, so there is no primary sampling unit. `se` and `cv` are null and precision is reported as “no estimate”.",
+    "fr": "L'édition 1980 ne publie pas d'erreur d'échantillonnage : la source n'a pas d'identifiant de ménage et les ménages ne peuvent pas être reconstitués, il n'y a donc pas d'unité primaire d'échantillonnage. `se` et `cv` sont vides (null) et la précision est déclarée « sans estimation ».",
+    "es": "La edición 1980 no publica error muestral: la fuente no trae identificador de hogar y los hogares no son reconstruibles, así que no hay unidad primaria de muestreo. `se` y `cv` son nulos y la precisión se declara como «sin estimación»."
+  },
+  "notas.sem_modo_2010": {
+    "origem": "O questionário de 2010 não tem quesito de meio de transporte: a dimensão 'modo' não existe nesta edição.",
+    "en": "The 2010 questionnaire has no question on mode of transport: the “mode” dimension does not exist in this edition.",
+    "fr": "Le questionnaire de 2010 ne comporte pas de question sur le mode de transport : la dimension « mode » n'existe pas dans cette édition.",
+    "es": "El cuestionario de 2010 no tiene pregunta sobre el medio de transporte: la dimensión «modo» no existe en esta edición."
+  },
+  "notas.sem_pendular_1991": {
+    "origem": "O questionário da amostra de 1991 não pergunta em que município a pessoa trabalha ou estuda: a edição não tem módulo de deslocamento pendular. A ausência é do questionário, não do atlas — a célula não é zero, é não medida.",
+    "en": "The 1991 sample questionnaire does not ask in which municipality the person works or studies: the edition has no commuting module. The absence comes from the questionnaire, not from the atlas — the cell is not zero, it is not measured.",
+    "fr": "Le questionnaire de l'échantillon de 1991 ne demande pas dans quelle municipalité la personne travaille ou étudie : l'édition n'a pas de module de mobilité pendulaire. L'absence vient du questionnaire, et non de l'atlas — la cellule n'est pas nulle, elle est non mesurée.",
+    "es": "El cuestionario de la muestra de 1991 no pregunta en qué municipio trabaja o estudia la persona: la edición no tiene módulo de movilidad pendular. La ausencia es del cuestionario, no del atlas — la celda no es cero, es no medida."
+  },
+  "notas.sem_renda_1980": {
+    "origem": "A edição 1980 não publica nenhuma variável de renda: a fonte atual (censobr/IPEA, desde 1.1.0-1980) traz as variáveis de rendimento nas 27 unidades da federação, mas elas ainda não foram mapeadas nem validadas para publicação (a fonte anterior, a Base dos Dados, só as tinha preenchidas no Ceará).",
+    "en": "The 1980 edition does not publish any income variable: the current source (censobr/IPEA, since 1.1.0-1980) contains the income variables for all 27 states, but they have not yet been mapped or validated for publication (the previous source, Base dos Dados, had them filled in only for Ceará).",
+    "fr": "L'édition 1980 ne publie aucune variable de revenu : la source actuelle (censobr/IPEA, depuis 1.1.0-1980) contient les variables de revenu pour les 27 unités fédératives, mais elles n'ont pas encore été mises en correspondance ni validées pour publication (la source précédente, la Base dos Dados, ne les avait renseignées que pour le Ceará).",
+    "es": "La edición 1980 no publica ninguna variable de ingreso: la fuente actual (censobr/IPEA, desde 1.1.0-1980) trae las variables de ingreso en las 27 unidades federativas, pero todavía no se han mapeado ni validado para su publicación (la fuente anterior, la Base dos Dados, solo las tenía completadas en Ceará)."
+  },
+  "notas.sem_tempo_freq_modo": {
+    "origem": "O bloco de deslocamento desta edição tem só o município de destino: não há tempo gasto, frequência de retorno nem meio de transporte. A célula não é zero, é não medida.",
+    "en": "This edition's commuting block has only the municipality of destination: there is no time spent, return frequency or mode of transport. The cell is not zero, it is not measured.",
+    "fr": "Le bloc de mobilité pendulaire de cette édition ne comporte que la municipalité de destination : il n'y a ni durée du trajet, ni fréquence de retour, ni mode de transport. La cellule n'est pas nulle, elle est non mesurée.",
+    "es": "El bloque de desplazamiento de esta edición solo tiene el municipio de destino: no hay tiempo de desplazamiento, frecuencia de retorno ni medio de transporte. La celda no es cero, es no medida."
+  },
+  "notas.sexo_indeterminado_2022": {
+    "origem": "O sexo 'indeterminado' só existe em 2022 e pesa menos de 0,03% da massa. Ele entra no total da faixa etária e fica fora do denominador da razão de sexo, em todas as edições, para que a comparação use a mesma base.",
+    "en": "The “undetermined” sex exists only in 2022 and weighs less than 0.03% of the mass. It is included in the age-group total and left out of the denominator of the sex ratio, in all editions, so that the comparison uses the same base.",
+    "fr": "Le sexe « indéterminé » n'existe qu'en 2022 et pèse moins de 0,03 % de la masse. Il entre dans le total du groupe d'âge et reste hors du dénominateur du rapport de masculinité, dans toutes les éditions, afin que la comparaison utilise la même base.",
+    "es": "El sexo «indeterminado» solo existe en 2022 y pesa menos del 0,03 % de la masa. Entra en el total del grupo de edad y queda fuera del denominador de la razón de sexo, en todas las ediciones, para que la comparación use la misma base."
+  },
+  "notas.sm_implicito_1991": {
+    "origem": "Em 1991 o divisor de salário mínimo é o valor implícito nas faixas de rendimento do próprio IBGE (Cr$ 36.161,60, que reproduz 24 de 24 limites de faixa), e não o mínimo legal vigente. É o que faz os cortes relativos coincidirem com as tabulações oficiais da época.",
+    "en": "In 1991 the minimum-wage divisor is the value implicit in IBGE's own income bands (Cr$ 36,161.60, which reproduces 24 of 24 band limits), not the legal minimum in force. This is what makes the relative cut-offs match the official tabulations of the time.",
+    "fr": "En 1991, le diviseur du salaire minimum est la valeur implicite dans les tranches de revenu de l'IBGE lui-même (Cr$ 36 161,60, qui reproduit 24 limites de tranche sur 24), et non le minimum légal en vigueur. C'est ce qui fait coïncider les seuils relatifs avec les tableaux officiels de l'époque.",
+    "es": "En 1991 el divisor de salario mínimo es el valor implícito en los rangos de ingreso del propio IBGE (Cr$ 36.161,60, que reproduce 24 de 24 límites de rango), y no el mínimo legal vigente. Es lo que hace que los cortes relativos coincidan con los tabulados oficiales de la época."
+  },
+  "notas.status_colapsado_2022": {
+    "origem": "Só 2022 separa quem saiu do município natal pela primeira vez de quem já morava fora dele. Para comparar com as outras quatro edições, as duas categorias são somadas em 'não natural do município' — a distinção fina continua disponível no painel da edição de 2022.",
+    "en": "Only 2022 separates those who left their municipality of birth for the first time from those who already lived outside it. To compare with the other four editions, the two categories are added together into “not born in the municipality” — the fine distinction remains available in the 2022 edition panel.",
+    "fr": "Seule 2022 distingue ceux qui ont quitté leur municipalité de naissance pour la première fois de ceux qui vivaient déjà ailleurs. Pour comparer avec les quatre autres éditions, les deux catégories sont additionnées dans « non natif de la municipalité » — la distinction fine reste disponible dans le panneau de l'édition 2022.",
+    "es": "Solo 2022 separa a quien salió del municipio natal por primera vez de quien ya vivía fuera de él. Para comparar con las otras cuatro ediciones, las dos categorías se suman en «no natural del municipio» — la distinción fina sigue disponible en el panel de la edición 2022."
+  },
+  "notas.status_retorno_1980": {
+    "origem": "Em 1980 o retorno ao município natal (`retorno_natal`) vem do quesito 'nasceu neste município' e vale para todos os municípios, inclusive os 52 do norte de Goiás (hoje Tocantins). O que a UF de nascimento distorce é só a leitura por UF: quem nasceu no território do atual Tocantins declarava 'Goiás', então o retorno à UF natal (indicador auxiliar, não publicado) fica subestimado no Tocantins e superestimado no restante de Goiás.",
+    "en": "In 1980 return to the municipality of birth (`retorno_natal`) comes from the question “born in this municipality” and applies to all municipalities, including the 52 in northern Goiás (now Tocantins). What the state of birth distorts is only the reading by state: those born in the territory of present-day Tocantins reported “Goiás”, so return to the state of birth (an auxiliary indicator, not published) is underestimated in Tocantins and overestimated in the rest of Goiás.",
+    "fr": "En 1980, le retour dans la municipalité de naissance (`retorno_natal`) provient de la question « né dans cette municipalité » et vaut pour toutes les municipalités, y compris les 52 du nord de Goiás (aujourd'hui Tocantins). Ce que l'UF de naissance fausse, c'est seulement la lecture par UF : ceux qui sont nés sur le territoire de l'actuel Tocantins déclaraient « Goiás », de sorte que le retour dans l'UF de naissance (indicateur auxiliaire, non publié) est sous-estimé au Tocantins et surestimé dans le reste de Goiás.",
+    "es": "En 1980 el retorno al municipio natal (`retorno_natal`) proviene de la pregunta «nació en este municipio» y vale para todos los municipios, incluidos los 52 del norte de Goiás (hoy Tocantins). Lo que la UF de nacimiento distorsiona es solo la lectura por UF: quien nació en el territorio del actual Tocantins declaraba «Goiás», así que el retorno a la UF natal (indicador auxiliar, no publicado) queda subestimado en Tocantins y sobreestimado en el resto de Goiás."
+  },
+  "notas.tempo_vocabulario_2010": {
+    "origem": "As cinco faixas de tempo de deslocamento de 2010 não são aninhadas nas oito de 2022 (a segunda faixa de 2010 atravessa duas de 2022), e 2010 não mede minutos. As distribuições não formam série; cada edição publica o próprio vocabulário.",
+    "en": "The five 2010 commuting-time bands are not nested in the eight of 2022 (the second 2010 band spans two of 2022), and 2010 does not measure minutes. The distributions do not form a series; each edition publishes its own set of categories.",
+    "fr": "Les cinq tranches de durée du trajet de 2010 ne s'emboîtent pas dans les huit de 2022 (la deuxième tranche de 2010 chevauche deux tranches de 2022), et 2010 ne mesure pas les minutes. Les distributions ne forment pas une série ; chaque édition publie sa propre nomenclature.",
+    "es": "Los cinco rangos de tiempo de desplazamiento de 2010 no están anidados en los ocho de 2022 (el segundo rango de 2010 atraviesa dos de 2022), y 2010 no mide minutos. Las distribuciones no forman serie; cada edición publica sus propias categorías."
+  }
+}

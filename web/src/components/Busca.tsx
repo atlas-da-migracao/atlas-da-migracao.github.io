@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useT } from "../i18n";
 
 /** Busca por município, sem acentuação e sem distinção de caixa. Generalizada na F6 para
  *  também buscar regiões imediatas/intermediárias e UFs -- o chamador decide os itens
@@ -7,9 +8,11 @@ const normalizar = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toL
 
 export interface ItemBusca { codigo: string; rotulo: string; peso: number; detalhe?: string }
 
-export function Busca({ itens, placeholder = "Buscar município…", aoEscolher }: {
+export function Busca({ itens, placeholder, aoEscolher }: {
   itens: ItemBusca[]; placeholder?: string; aoEscolher: (codigo: string) => void;
 }) {
+  const d = useT();
+  const rotuloCampo = placeholder ?? d.controles.busca.placeholderMun;
   const [texto, setTexto] = useState("");
   const [aberto, setAberto] = useState(false);
 
@@ -32,8 +35,8 @@ export function Busca({ itens, placeholder = "Buscar município…", aoEscolher 
       <input
         type="search"
         value={texto}
-        placeholder={placeholder}
-        aria-label={placeholder}
+        placeholder={rotuloCampo}
+        aria-label={rotuloCampo}
         onChange={(e) => { setTexto(e.target.value); setAberto(true); }}
         onFocus={() => setAberto(true)}
         onBlur={() => setTimeout(() => setAberto(false), 150)}

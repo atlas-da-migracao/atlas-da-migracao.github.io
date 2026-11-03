@@ -4,6 +4,8 @@ import type { Metrica } from "../lib/types";
 import { edicao, type Censo } from "../lib/edicoes";
 import { MIN_EDICOES_SERIE, ordenarEdicoes, type EdicaoSerie } from "../lib/serie";
 import { lerUrl, montarQuery, type EstadoUrl, type Modo, type UnidadeSerieSel } from "./url";
+import { IDIOMA_PADRAO, langDoNavegador, lerLang, type Lang } from "../i18n/tipos";
+import { aplicarIdioma } from "../i18n";
 
 export type { Modo, UnidadeSerieSel };
 export type AbaRM = "mig" | "trab" | "estudo";
@@ -27,6 +29,9 @@ interface Estado {
   filtro: string | null;         // ex.: "edu__superior_completo"
   topN: number;                  // arcos exibidos por município/unidade
   tema: "claro" | "escuro" | "sistema";
+  /** idioma da interface (pt-BR, en, fr, es) -- na URL (`?lang=`, ausente = pt-BR) e salvo no
+   *  `localStorage` como o tema. Trocar não mexe em nenhuma outra peça do estado. */
+  lang: Lang;
   /** módulo metropolitano: RM ativa (cd_rm), aba do painel e se inclui fluxos transfronteiriços.
    *  Só existe no nível município. */
   rm: string | null;
@@ -84,6 +89,7 @@ interface Estado {
   setFiltro: (f: string | null) => void;
   setTopN: (n: number) => void;
   setTema: (t: "claro" | "escuro" | "sistema") => void;
+  setLang: (l: Lang) => void;
   entrarModoRM: (cd_rm: string) => void;
   sairModoRM: () => void;
   setAba: (aba: AbaRM) => void;
@@ -121,6 +127,25 @@ function paraUrl(e: EstadoUrl) {
 }
 
 const inicial = daUrl();
+
+/** Idioma da primeira carga: `?lang=` > idioma salvo > idioma do navegador > português. Um
+ *  link compartilhado com `?lang=` sempre vence a preferência de quem o abre. */
+function langInicial(): Lang {
+  const daQuery = lerLang(new URLSearchParams(location.search).get("lang"));
+  if (daQuery) return daQuery;
+  let salvo: Lang | null = null;
+  try { salvo = lerLang(localStorage.getItem("lang")); } catch { /* storage bloqueado */ }
+  // só no navegador: o Node (vitest) também tem `navigator`, com "en-US"
+  const doNavegador = typeof window !== "undefined"
+    ? langDoNavegador(navigator.languages ?? [navigator.language]) : null;
+  return salvo ?? doNavegador ?? IDIOMA_PADRAO;
+}
+inicial.lang = langInicial();
+// idioma vindo do localStorage/navegador entra logo na URL: copiada ao abrir a página, ela
+// deve abrir no mesmo idioma para quem a recebe
+if (typeof history !== "undefined" && inicial.lang !== lerUrl(new URLSearchParams(location.search)).lang) {
+  paraUrl(inicial);
+}
 
 export const useStore = create<Estado>((set, get) => ({
   ...inicial,
@@ -194,6 +219,13 @@ export const useStore = create<Estado>((set, get) => ({
     const raiz = document.documentElement;
     if (tema === "sistema") raiz.removeAttribute("data-theme");
     else raiz.setAttribute("data-theme", tema === "escuro" ? "dark" : "light");
+  },
+  setLang: (lang) => {
+    if (lang === get().lang) return;
+    set({ lang });
+    try { localStorage.setItem("lang", lang); } catch { /* storage bloqueado */ }
+    paraUrl({ ...get(), lang });
+    void aplicarIdioma(lang);
   },
   entrarModoRM: (cd_rm) => {
     set({ rm: cd_rm, aba: "mig", municipio: null, selecao: null, origem: null, destino: null });

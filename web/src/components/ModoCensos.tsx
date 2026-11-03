@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Busca, type ItemBusca } from "./Busca";
 import { SeletorEdicoes } from "./SeletorEdicoes";
-import { SerieCensos, ROTULO_NIVEL } from "./SerieCensos";
+import { SerieCensos } from "./SerieCensos";
+import { useT } from "../i18n";
 import { serieUnidadesParaBusca, type UnidadeBusca } from "../db/queries";
 import { lerUnidadeSerie } from "../state/url";
 import { useStore } from "../state/store";
@@ -11,6 +12,7 @@ import { useStore } from "../state/store";
 export function ModoCensos({ escuro, aoAbrirMetodologia }: {
   escuro: boolean; aoAbrirMetodologia: () => void;
 }) {
+  const d = useT();
   const { unidadeSerie, edicoesSerie, setUnidadeSerie, setEdicoesSerie } = useStore();
   const [unidades, setUnidades] = useState<UnidadeBusca[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -27,12 +29,12 @@ export function ModoCensos({ escuro, aoAbrirMetodologia }: {
     if (!unidades) return [];
     return unidades.map((u): ItemBusca => {
       const rotulo = u.nivel === "mun" && u.uf_sigla ? `${u.nome}/${u.uf_sigla}` : u.nome;
-      const detalheNivel = ROTULO_NIVEL[u.nivel];
+      const detalheNivel = d.comum.niveis[u.nivel].singular;
       const detalhe = (u.nivel === "rgi" || u.nivel === "rgint") && u.uf_sigla
         ? `${detalheNivel} · ${u.uf_sigla}` : detalheNivel;
       return { codigo: `${u.nivel}:${u.codigo}`, rotulo, detalhe, peso: u.peso };
     });
-  }, [unidades]);
+  }, [unidades, d]);
 
   const aoEscolher = (chave: string) => setUnidadeSerie(lerUnidadeSerie(chave));
 
@@ -50,37 +52,32 @@ export function ModoCensos({ escuro, aoAbrirMetodologia }: {
 
   return (
     <main className="conteudo modo-censos" id="conteudo-principal">
-      <div className="modo-censos-topo" role="toolbar" aria-label="Território e censos comparados">
-        <Busca itens={itens} placeholder="Buscar município, região, UF ou RM…" aoEscolher={aoEscolher} />
+      <div className="modo-censos-topo" role="toolbar" aria-label={d.serie.modo.aria}>
+        <Busca itens={itens} placeholder={d.serie.modo.placeholderBusca} aoEscolher={aoEscolher} />
         <SeletorEdicoes marcadas={edicoesSerie} aoMudar={setEdicoesSerie} />
         {unidadeSerie && nome && (
           <div className="modo-censos-unidade">
-            <span className="muted-pequeno">{ROTULO_NIVEL[unidadeSerie.nivel]}</span>
+            <span className="muted-pequeno">{d.comum.niveis[unidadeSerie.nivel].singular}</span>
             <h2>{nome}</h2>
           </div>
         )}
       </div>
       <div className="modo-censos-corpo">
         {erro ? (
-          <p className="erro" role="alert">Falha ao carregar as unidades: {erro}</p>
+          <p className="erro" role="alert">{d.serie.modo.falhaUnidades(erro)}</p>
         ) : !unidadeSerie ? (
           <section className="modo-censos-vazio">
-            <h2>Compare um território ao longo dos censos</h2>
-            <p>
-              Escolha um município, uma região imediata ou intermediária, uma UF ou uma região
-              metropolitana para ver como a migração mudou entre 1980 e 2022.
-            </p>
-            <Busca itens={itens} placeholder="Buscar município, região, UF ou RM…" aoEscolher={aoEscolher} />
+            <h2>{d.serie.modo.vazioTitulo}</h2>
+            <p>{d.serie.modo.vazioTexto}</p>
+            <Busca itens={itens} placeholder={d.serie.modo.placeholderBusca} aoEscolher={aoEscolher} />
           </section>
         ) : naoEncontrada ? (
           <section className="modo-censos-vazio">
-            <h2>Esta unidade não existe na base territorial de 2022</h2>
+            <h2>{d.serie.modo.naoEncontradaTitulo}</h2>
             <p>
-              O código <code>{unidadeSerie.codigo}</code> não corresponde a nenhuma unidade da
-              malha de 2022, que é a base territorial comparada nos cinco censos. O link pode ser
-              antigo ou estar incompleto.
+              {d.serie.modo.naoEncontradaTexto.antes}<code>{unidadeSerie.codigo}</code>{d.serie.modo.naoEncontradaTexto.depois}
             </p>
-            <button className="link-serie" onClick={() => setUnidadeSerie(null)}>Voltar à busca</button>
+            <button className="link-serie" onClick={() => setUnidadeSerie(null)}>{d.serie.modo.voltarBusca}</button>
           </section>
         ) : unidadeAtual && nome ? (
           <SerieCensos
@@ -89,7 +86,7 @@ export function ModoCensos({ escuro, aoAbrirMetodologia }: {
             edicoes={edicoesSerie} aoAbrirMetodologia={aoAbrirMetodologia}
           />
         ) : (
-          <p className="muted">Carregando…</p>
+          <p className="muted">{d.comum.ui.carregando}</p>
         )}
       </div>
     </main>

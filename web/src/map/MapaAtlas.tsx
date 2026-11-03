@@ -10,7 +10,8 @@ import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Fluxo, Metrica } from "../lib/types";
 import { fitBoundsCartesiano, validarEExpandirBbox, type Bbox } from "../lib/rm";
 import { corDivergente, type RGB } from "../lib/escalas";
-import { num, sinal, sinal1, rotuloPrecisao } from "../lib/format";
+import { num, sinal, sinal1, sinal2, rotuloPrecisao } from "../lib/format";
+import { useT, type Dicionario } from "../i18n";
 import { FLUXO_MAPA, hexParaRgb } from "../lib/paletas";
 import { poligonoFluxo, RAIO_NO_PX } from "../lib/fluxos";
 import {
@@ -228,24 +229,27 @@ const valorDaMetrica = (m: ValorMapa | undefined, metrica: Metrica): number | nu
  *  na frase de saldo (o valor de `valorDaMetrica`, com sinal invertido para o coroplético, não
  *  o valor bruto que o leitor espera ver na dica). */
 
-const textoMetrica = (m: ValorMapa | undefined, metrica: Metrica): string => {
-  if (!m) return "sem dados";
+const textoMetrica = (m: ValorMapa | undefined, metrica: Metrica, d: Dicionario): string => {
+  const t = d.mapa;
+  if (!m) return t.semDados;
   switch (metrica) {
-    case "tlm": return m.tlm == null ? "sem dados" : `${sinal1(m.tlm)} por mil habitantes`;
-    case "saldo": return m.saldo == null ? "sem dados" : `saldo ${sinal(m.saldo)} pessoas`;
-    case "imig": return m.imig == null ? "sem dados" : `${num(m.imig)} imigrantes`;
-    case "emig": return m.emig == null ? "sem dados" : `${num(m.emig)} emigrantes`;
-    case "iem": return m.iem == null ? "sem dados" : `eficácia ${sinal1(m.iem * 100)}%`;
+    case "tlm": return m.tlm == null ? t.semDados : t.metricaTlm(sinal1(m.tlm));
+    case "saldo": return m.saldo == null ? t.semDados : t.metricaSaldo(sinal(m.saldo), m.saldo);
+    case "imig": return m.imig == null ? t.semDados : t.metricaImig(num(m.imig), m.imig);
+    case "emig": return m.emig == null ? t.semDados : t.metricaEmig(num(m.emig), m.emig);
+    case "iem": return m.iem == null ? t.semDados : t.metricaIem(sinal2(m.iem));
   }
 };
 
 export function MapaAtlas({
   malha, contornos = null, porCodigo, metrica, quebras, arcos, selecionado, escuro, aoSelecionar, aoSelecionarFluxo,
-  foco = null, zoomMaximo, rotuloReenquadrar = "Ver o Brasil", destacar = null, perimetro = null, nucleo = null,
+  foco = null, zoomMaximo, rotuloReenquadrar, destacar = null, perimetro = null, nucleo = null,
   campoId = "CD_MUN", rotuloDaFeicao, descricaoAcessivel, aoPassarFeicao,
   mostrarFluxos = true, ancoraFluxos = null, boundsNacional = null, centroides = null,
   mostrarSatelite = false, modoRM = false,
 }: Props) {
+  const d = useT();
+  const rotuloVoltar = rotuloReenquadrar ?? d.mapa.reenquadrarPadrao;
   const [hover, setHover] = useState<PickingInfo | null>(null);
   const feicaoSobCursor = useRef<string | null>(null);
   const aoHover = (info: PickingInfo) => {
@@ -751,12 +755,10 @@ export function MapaAtlas({
     // focáveis (regra "nested-interactive" do axe). O rótulo textual completo já está
     // no <p class="somente-leitor"> logo abaixo.
     <div ref={containerRef} style={{ position: "absolute", inset: 0 }}
-         role="group" aria-label={descricaoAcessivel ?? "Mapa coroplético do Brasil com arcos de fluxo migratório"}>
+         role="group" aria-label={descricaoAcessivel ?? d.mapa.ariaPadrao}>
       {descricaoAcessivel && (
         <p className="somente-leitor">
-          {descricaoAcessivel} Os mesmos dados aparecem, em forma de tabela, no painel ao lado
-          (indicadores e principais fluxos de origem e destino). Use a busca do cabeçalho para
-          selecionar um município ou unidade pelo teclado.
+          {d.mapa.paragrafoLeitor(descricaoAcessivel)}
         </p>
       )}
       <DeckGL
@@ -805,7 +807,7 @@ export function MapaAtlas({
             setMoveu(false);
           }}
         >
-          {rotuloReenquadrar}
+          {rotuloVoltar}
         </button>
       )}
       {dica && hover && (
@@ -813,31 +815,31 @@ export function MapaAtlas({
           {camadaHover === "espigas" ? (
             <>
               <strong>{rotuloDaFeicao?.(dica.cd) ?? dica.cd}</strong>
-              <div>{textoMetrica(porCodigo.get(dica.cd), metrica)}</div>
+              <div>{textoMetrica(porCodigo.get(dica.cd), metrica, d)}</div>
               {(() => {
                 const rot = porCodigo.get(dica.cd)?.precisao_imig;
-                const rotulo = rot ? rotuloPrecisao[rot] ?? rot : null;
-                return rotulo ? <div className="muted-pequeno">precisão da imigração: {rotulo}</div> : null;
+                const rotulo = rot ? rotuloPrecisao(rot, d) : null;
+                return rotulo ? <div className="muted-pequeno">{d.mapa.precisaoImigracao(rotulo)}</div> : null;
               })()}
             </>
           ) : camadaHover === idFluxos ? (
             <>
               <strong>{dica.nm_origem}/{dica.uf_origem} → {dica.nm_destino}/{dica.uf_destino}</strong>
-              <div>{num(dica.total)} pessoas · clique para ver o perfil</div>
+              <div>{d.mapa.fluxoClique(num(dica.total), dica.total)}</div>
               {dica.precisao && (
                 <div className="muted-pequeno">
-                  precisão: {rotuloPrecisao[dica.precisao] ?? dica.precisao}
+                  {d.mapa.precisaoFluxo(rotuloPrecisao(dica.precisao, d))}
                 </div>
               )}
             </>
           ) : "properties" in dica && dica.properties?.[campoId] ? (
             <>
               <strong>{rotuloDaFeicao?.(dica.properties[campoId]) ?? dica.properties[campoId]}</strong>
-              <div>{textoMetrica(porCodigo.get(dica.properties[campoId]), metrica)}</div>
+              <div>{textoMetrica(porCodigo.get(dica.properties[campoId]), metrica, d)}</div>
               {(() => {
                 const m = porCodigo.get(dica.properties[campoId]);
-                const rot = m?.precisao_imig ? rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig : null;
-                return rot ? <div className="muted-pequeno">precisão da imigração: {rot}</div> : null;
+                const rot = m?.precisao_imig ? rotuloPrecisao(m.precisao_imig, d) : null;
+                return rot ? <div className="muted-pequeno">{d.mapa.precisaoImigracao(rot)}</div> : null;
               })()}
             </>
           ) : null}

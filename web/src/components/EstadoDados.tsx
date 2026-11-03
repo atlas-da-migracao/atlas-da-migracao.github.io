@@ -7,8 +7,21 @@
 import { useEffect, useState } from "react";
 import { conectar, ouvirProgresso, type ProgressoDuckDB } from "../db/duckdb";
 import { useStore } from "../state/store";
+import { useT, type Dicionario } from "../i18n";
+
+/** `db/duckdb.ts` emite a mensagem de cada etapa já em português; aqui ela é reconhecida e
+ *  traduzida (as que não são conhecidas passam como vieram). */
+function mensagemDaEtapa(mensagem: string, d: Dicionario): string {
+  const e = d.controles.estadoDados.etapas;
+  if (mensagem === "baixando o motor…") return e.baixando;
+  if (mensagem === "baixando o motor de consulta…") return e.baixandoMotor;
+  if (mensagem === "iniciando o banco…") return e.iniciando;
+  const m = /^registrando tabelas (\d+)\/(\d+)$/.exec(mensagem);
+  return m ? e.registrando(m[1], m[2]) : mensagem;
+}
 
 export function EstadoDados() {
+  const d = useT();
   const censo = useStore((s) => s.censo);
   const [p, setP] = useState<ProgressoDuckDB | null>(null);
 
@@ -24,13 +37,13 @@ export function EstadoDados() {
       {p.estagio !== "erro" ? (
         <>
           <span className="estado-dados-spinner" aria-hidden="true" />
-          <span>Preparando os dados… {p.mensagem}</span>
+          <span>{d.controles.estadoDados.preparando(mensagemDaEtapa(p.mensagem, d))}</span>
         </>
       ) : (
         <>
-          <span>Não foi possível preparar os dados{p.erro ? `: ${p.erro}` : "."}</span>
+          <span>{d.controles.estadoDados.falha(p.erro ?? null)}</span>
           <button onClick={() => { setP(null); conectar(censo).catch(() => {}); }}>
-            tentar de novo
+            {d.controles.estadoDados.tentarDeNovo}
           </button>
         </>
       )}

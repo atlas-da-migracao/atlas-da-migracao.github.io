@@ -13,25 +13,25 @@
  *  (.comparativo-toggle). Antes do `meta.json` chegar, mostra um aviso genérico em vez de
  *  reproduzir o texto substantivo por conta própria. */
 import { edicao } from "../lib/edicoes";
+import { useT } from "../i18n";
 import type { Meta } from "../lib/types";
 import { useStore } from "../state/store";
-
-const RESUMO_PADRAO =
-  "Esta edição não tem quesito de data fixa: a migração publicada é estimada por um proxy calibrado, não medida diretamente.";
+import { textoDado } from "../i18n/dados";
 
 export function AvisoProxy({ meta }: { meta: Meta | null }) {
+  const d = useT();
   const ed = edicao(useStore((s) => s.censo));
   if (!ed.proxyDataFixa) return null;
-  const resumo = meta?.aviso_proxy_resumo ?? RESUMO_PADRAO;
-  const completo = meta?.aviso_proxy;
+  const resumo = textoDado(`aviso_proxy_resumo.${meta?.edicao}`, meta?.aviso_proxy_resumo) ?? d.avisos.proxy.resumoPadrao;
+  const completo = textoDado(`aviso_proxy.${meta?.edicao}`, meta?.aviso_proxy);
   return (
     <div className="aviso aviso-proxy" role="note">
       <p className="aviso-proxy-resumo">
-        <strong>Selo proxy.</strong> {resumo}
+        <strong>{d.avisos.proxy.selo}</strong> {resumo}
       </p>
       {completo && (
         <details className="aviso-proxy-detalhe">
-          <summary>Saiba mais sobre a calibração</summary>
+          <summary>{d.avisos.proxy.saibaMais}</summary>
           <p>{completo}</p>
         </details>
       )}

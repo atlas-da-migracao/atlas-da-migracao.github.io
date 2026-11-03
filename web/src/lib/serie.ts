@@ -17,6 +17,10 @@
  *  percentual. A capa nacional (`queries.ts`) já calcula em percentual por conta própria.
  */
 
+import { pt, type Dicionario } from "../i18n/pt";
+import { num, num2 } from "./format";
+import { textoDado } from "../i18n/dados";
+
 // --------------------------------------------------------------------------------------
 // Eixos
 // --------------------------------------------------------------------------------------
@@ -30,14 +34,12 @@ export type EdicaoSerie = (typeof EDICOES_SERIE)[number];
 export const NIVEIS_SERIE = ["mun", "rgi", "rgint", "uf", "rm"] as const;
 export type NivelSerie = (typeof NIVEIS_SERIE)[number];
 
-export const rotuloEdicao = (e: EdicaoSerie): string => (e === "1980" ? "1980 (proxy)" : e);
+/** Rótulo da edição nos eixos e cabeçalhos da série: 1980 leva o selo de proxy (`d.serie.edicaoProxy`). */
+export const rotuloEdicao = (e: EdicaoSerie, d: Dicionario = pt): string =>
+  (e === "1980" ? d.serie.edicaoProxy(e) : e);
 
-/** Plural dos rótulos de nível -- "regiões imediatas", nunca "região imediatas" (concatenar "s"
- *  ao singular quebra todo rótulo composto). O singular (`ROTULO_NIVEL`) mora em `SerieCensos.tsx`. */
-export const ROTULO_NIVEL_PLURAL: Record<NivelSerie, string> = {
-  mun: "municípios", rgi: "regiões imediatas", rgint: "regiões intermediárias", uf: "UFs",
-  rm: "regiões metropolitanas",
-};
+// Rótulos de nível (singular/plural...): `d.comum.niveis[nivel]` (i18n/pt/comum.ts). Plural é
+// forma própria, nunca "singular + s" -- "regiões imediatas", não "região imediatas".
 
 /** Número mínimo de edições marcadas na seção "Ao longo dos censos": abaixo disso não há
  *  o que comparar (F13). */
@@ -105,16 +107,12 @@ export const IEM_LIMIAR_FORTE = 1 / 3;
 export type TipoIEM =
   | "rotatividade" | "absorcao" | "absorcao_forte" | "evasao" | "evasao_forte" | "indefinido";
 
-/** Nomes em português da tipologia (R3 do documento de desenho) -- os MESMOS nomes usados
+/** Nome da tipologia (R3 do documento de desenho) no idioma de `d` -- os MESMOS nomes usados
  *  no mapa (seção 4.2) e na frase-síntese: painel, mapa e frase nunca podem divergir. */
-export const NOME_TIPO_IEM: Record<TipoIEM, string> = {
-  rotatividade: "rotatividade",
-  absorcao: "absorção",
-  absorcao_forte: "absorção forte",
-  evasao: "evasão",
-  evasao_forte: "evasão forte",
-  indefinido: "situação indefinida (amostra pequena)",
-};
+export const nomeTipoIem = (tipo: TipoIEM, d: Dicionario = pt): string => d.serie.tipoIem[tipo];
+
+/** Referência em português (`d.serie.tipoIem` do `pt`). Em interface use `nomeTipoIem(tipo, d)`. */
+export const NOME_TIPO_IEM: Record<TipoIEM, string> = pt.serie.tipoIem;
 
 /** Erro-padrão do IEM pelo método delta (porte de `se_iem` em comparabilidade_regras.py). */
 export function seIem(
@@ -158,16 +156,14 @@ export const LIMIAR_INTERESTADUAL_PCT = 50;
 
 export type TipoFluxoPredominante = "curta_intra" | "curta_inter" | "longa_intra" | "longa_inter";
 
-export const ROTULO_TIPO_FLUXO: Record<TipoFluxoPredominante, string> = {
-  curta_intra: "Curta distância, intraestadual",
-  curta_inter: "Curta distância, interestadual",
-  longa_intra: "Longa distância, intraestadual",
-  longa_inter: "Longa distância, interestadual",
-};
+/** Referência em português (`d.serie.tipoFluxo` do `pt`). `tipoFluxoPredominante(..., d)` já
+ *  devolve o rótulo no idioma de `d`. */
+export const ROTULO_TIPO_FLUXO: Record<TipoFluxoPredominante, string> = pt.serie.tipoFluxo;
 
 export function tipoFluxoPredominante(
   distanciaMediaMetros: number | null | undefined,
   pctInterestadual: number | null | undefined,
+  d: Dicionario = pt,
 ): { chave: TipoFluxoPredominante; rotulo: string } | null {
   if (distanciaMediaMetros == null || pctInterestadual == null) return null;
   const longa = distanciaMediaMetros / 1000 >= LIMIAR_DISTANCIA_LONGA_KM;
@@ -175,7 +171,7 @@ export function tipoFluxoPredominante(
   const chave: TipoFluxoPredominante = longa
     ? (interestadual ? "longa_inter" : "longa_intra")
     : (interestadual ? "curta_inter" : "curta_intra");
-  return { chave, rotulo: ROTULO_TIPO_FLUXO[chave] };
+  return { chave, rotulo: d.serie.tipoFluxo[chave] };
 }
 
 /** `pct_interestadual` chega de `unidades_serie.parquet` como FRAÇÃO (0-1); o front trabalha em
@@ -341,24 +337,18 @@ export function estadoNoMapa(
   return "numero";
 }
 
-const nf0q = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-
-/** Quebra fixa em texto pt-BR: IEM com duas casas (0,15 · 0,33 · 0,60 -- nunca 0.3333333333333333),
- *  demais medidas (‰) inteiras. */
+/** Quebra fixa em texto, no idioma ativo: IEM com duas casas (0,15 · 0,33 · 0,60 -- nunca
+ *  0.3333333333333333), demais medidas (‰) inteiras. */
 export const formatarQuebra = (medida: string, v: number): string =>
-  medida === "iem" ? nf2.format(v) : nf0q.format(v);
+  medida === "iem" ? num2(v) : num(v);
 
 /** Palavra curta exibida na célula/ponto quando não há número (regra: nunca "0" nem "—"
- *  sozinho). */
-export const PALAVRA_ESTADO: Record<EstadoCelula, string> = {
-  numero: "",
-  nao_existia: "não existia",
-  sem_cobertura: "sem cobertura",
-  cobertura_insuficiente: "cobertura insuficiente",
-  suprimido: "suprimido",
-  nao_medido: "não medido",
-  nao_comparavel: "não comparável",
-};
+ *  sozinho), no idioma de `d`. */
+export const palavraEstado = (estado: EstadoCelula, d: Dicionario = pt): string =>
+  d.serie.palavraEstado[estado];
+
+/** Referência em português (`d.serie.palavraEstado` do `pt`). Em interface use `palavraEstado(e, d)`. */
+export const PALAVRA_ESTADO: Record<EstadoCelula, string> = pt.serie.palavraEstado;
 
 // --------------------------------------------------------------------------------------
 // comparabilidade.json (matriz medida x edição x nível) -- espelha
@@ -424,6 +414,18 @@ export function estadoDaCelula(
   return comp.matriz.find((r) => r.medida === medida && r.edicao === edicao && r.nivel === nivel) ?? null;
 }
 
+/** ÚNICO ponto de leitura do texto de uma nota de comparabilidade (`comparabilidade.json -> notas`).
+ *  O texto vem dos dados publicados, em português; quando houver tradução da prosa dos dados
+ *  (`i18n/dados.json`), é aqui que o idioma de `d` passa a ser aplicado. Devolve `undefined` se a
+ *  chave não existe -- quem chama escolhe o fallback. */
+export function notaComparabilidade(
+  chave: string, notas: Record<string, string> | null | undefined, _d: Dicionario = pt,
+): string | undefined {
+  // `_d` fica na assinatura para os chamadores re-renderizarem na troca de idioma; o idioma
+  // da prosa dos dados em si vem de `textoDado` (i18n/dados.ts)
+  return textoDado(`notas.${chave}`, notas?.[chave]);
+}
+
 /** Ressalvas de comparabilidade de um conjunto de medidas de uma unidade: junta, por nota
  *  (`comparabilidade.json -> notas`), as medidas e as edições em que ela vale. Só conta as
  *  edições em que a unidade tem número (`edicoesComNumero`) -- uma ressalva sobre uma célula que
@@ -431,7 +433,7 @@ export function estadoDaCelula(
 export function ressalvasDoBloco(
   comp: Comparabilidade, nivel: NivelSerie,
   medidas: readonly { medidaComp: string; rotulo: string }[],
-  edicoes: readonly EdicaoSerie[], edicoesComNumero: ReadonlySet<EdicaoSerie>,
+  edicoes: readonly EdicaoSerie[], edicoesComNumero: ReadonlySet<EdicaoSerie>, d: Dicionario = pt,
 ): { nota: string; texto: string; medidas: string[]; edicoes: EdicaoSerie[] }[] {
   const porNota = new Map<string, { medidas: Set<string>; edicoes: Set<EdicaoSerie> }>();
   for (const m of medidas) {
@@ -446,7 +448,7 @@ export function ressalvasDoBloco(
     }
   }
   return [...porNota.entries()].map(([nota, g]) => ({
-    nota, texto: comp.notas[nota] ?? nota, medidas: [...g.medidas],
+    nota, texto: notaComparabilidade(nota, comp.notas, d) ?? nota, medidas: [...g.medidas],
     edicoes: EDICOES_SERIE.filter((e) => g.edicoes.has(e)),
   }));
 }
@@ -663,22 +665,20 @@ export function filhosNoIntervalo(
   return { nomes, ultimaEdicaoJunto: datadas[0] };
 }
 
-const nf2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-/** IEM em texto (R5): sinal tipográfico explícito e duas casas em pt-BR -- `+0,24`, `−0,08`,
- *  `0,00`. Único formatador do IEM da seção (frase, cards, tabela): nunca `toFixed` cru, que
- *  devolve ponto decimal e hífen. */
+/** IEM em texto (R5): sinal tipográfico explícito e duas casas no idioma ativo -- `+0,24`,
+ *  `−0,08`, `0,00`. Único formatador do IEM da seção (frase, cards, tabela): nunca `toFixed` cru,
+ *  que devolve ponto decimal e hífen. */
 export const formatarIem = (v: number | null | undefined): string => {
   if (v == null) return "—";
   // sinal decidido sobre o valor ARREDONDADO: -0,001 vira "0,00", não "−0,00"
   const r = Math.round(v * 100);
   const s = r > 0 ? "+" : r < 0 ? "−" : "";
-  return `${s}${nf2.format(Math.abs(v))}`;
+  return `${s}${num2(Math.abs(v))}`;
 };
 const fmtIem = formatarIem;
 
-const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
-const numFrase = (v: number | null): string => (v == null ? "—" : nf0.format(Math.abs(v)));
+/** Contagem de pessoas na frase: sempre o módulo (o sentido -- chegando/saindo -- está no texto). */
+const numFrase = (v: number | null): string => num(v == null ? null : Math.abs(v));
 
 type Direcao = "up" | "down" | "flat";
 function direcao(ini: number | null, fim: number | null): Direcao {
@@ -689,7 +689,7 @@ function direcao(ini: number | null, fim: number | null): Direcao {
   return "flat";
 }
 
-/** Tabela de complemento por direção de imig/emig (R4).
+/** Complemento por direção de imig/emig (R4); os nove textos moram em `d.serie.frase.complemento`.
  *
  *  Com `porTaxa` (município-mãe) compara as TAXAS brutas (tbi/tbe), que sofrem menos com o degrau
  *  de fronteira do que os volumes, e só então o complemento leva o sufixo sobre a fronteira --
@@ -697,71 +697,44 @@ function direcao(ini: number | null, fim: number | null): Direcao {
  *  volta aos volumes e NÃO afirma desconto nenhum (o prefixo de município-mãe já avisa que parte
  *  da variação de volume é fronteira). Versão anterior comparava `tlm` no lugar de `tbi` e
  *  dizia "descontada a mudança de fronteira" sem ter calculado nada disso. */
-function complemento(ini: PontoFrase, fim: PontoFrase, porTaxa = false): string {
+function complemento(ini: PontoFrase, fim: PontoFrase, porTaxa: boolean, d: Dicionario): string {
   const temTaxas = porTaxa && ini.tbi != null && fim.tbi != null && ini.tbe != null && fim.tbe != null;
   const dImig = temTaxas ? direcao(ini.tbi!, fim.tbi!) : direcao(ini.imig, fim.imig);
   const dEmig = temTaxas ? direcao(ini.tbe!, fim.tbe!) : direcao(ini.emig, fim.emig);
-  const chave = `${dImig}_${dEmig}`;
-  const tabela: Record<string, string> = {
-    up_up: "chega mais gente do que antes, e sai mais também",
-    flat_up: "continua recebendo gente, mas agora perde quase o mesmo tanto",
-    down_up: "chega menos gente e sai mais",
-    up_flat: "chega mais gente e a saída não acompanhou",
-    flat_flat: "entradas e saídas mudaram pouco",
-    down_flat: "chega menos gente do que antes",
-    up_down: "chega mais gente e sai menos",
-    flat_down: "sai menos gente do que antes",
-    down_down: "entram e saem menos pessoas do que antes",
-  };
-  const texto = tabela[chave] ?? "entradas e saídas mudaram pouco";
-  return temTaxas ? `${texto} — pelas taxas, que descontam em parte a mudança de fronteira` : texto;
+  const chave = `${dImig}_${dEmig}` as keyof Dicionario["serie"]["frase"]["complemento"];
+  const texto = d.serie.frase.complemento[chave] ?? d.serie.frase.complemento.flat_flat;
+  return temTaxas ? d.serie.frase.complementoPorTaxas(texto) : texto;
 }
 
 /** R7: ressalva de proxy, obrigatória quando `ini.edicao === "1980"`. */
-function ressalvaProxy(ini: PontoFrase, fim: PontoFrase): string | null {
+function ressalvaProxy(ini: PontoFrase, fim: PontoFrase, d: Dicionario): string | null {
   if (ini.edicao !== "1980") return null;
-  if (fim.edicao === "1980") {
-    return "Este número é uma estimativa por proxy, não uma medida direta.";
-  }
-  return "O ponto de 1980 é uma estimativa por proxy, que tende a aproximar o índice de zero " +
-    "— a mudança real pode ser maior.";
+  return fim.edicao === "1980" ? d.serie.frase.proxyEstimativa : d.serie.frase.proxyPontoInicial;
 }
 
 /** R8: ressalva de cobertura, uma frase por conjunto de edições insuficientes/sem cobertura
  *  entre 1980 e `fim`, mais o caso de RM unitária. */
-function ressalvaCobertura(entrada: EntradaFrase, fim: PontoFrase): string | null {
+function ressalvaCobertura(entrada: EntradaFrase, fim: PontoFrase, d: Dicionario): string | null {
   const anos = entrada.pontos
     .filter((p) => EDICOES_SERIE.indexOf(p.edicao) <= EDICOES_SERIE.indexOf(fim.edicao))
     .filter((p) => p.estado === "cobertura_insuficiente" || p.estado === "sem_cobertura")
     .map((p) => p.edicao);
   const partes: string[] = [];
-  if (anos.length > 0) {
-    const lista = anos.join(", ");
-    const plural = anos.length > 1;
-    partes.push(
-      `Em ${lista} menos de 90% da população de hoje estava coberta pelos municípios da ` +
-      `época; não há número para ${plural ? "esses anos" : "esse ano"}.`,
-    );
-  }
+  if (anos.length > 0) partes.push(d.serie.frase.coberturaInsuficiente(anos));
   if (entrada.rmUnitaria && entrada.rmUnitaria.length > 0) {
-    partes.push(
-      `Em ${entrada.rmUnitaria.join(", ")} a região tinha um só município: os indicadores ` +
-      "internos não existem, não são zero.",
-    );
+    partes.push(d.serie.frase.rmUnitaria(entrada.rmUnitaria));
   }
   return partes.length > 0 ? partes.join(" ") : null;
 }
 
-function prefixoTruncamento(entrada: EntradaFrase): string | null {
+function prefixoTruncamento(entrada: EntradaFrase, d: Dicionario): string | null {
   if (!entrada.mae) return null;
   // Mãe de código não numérico = unidade agregada da edição (caso genérico, hoje inativo): o
   // território É publicado, só que junto com outros. A coluna da edição fica sem número, mas a
   // frase NÃO afirma "foi criado depois de" -- não se sabe (nem se diz) quando a separação
   // aconteceu.
   if (entrada.mae.agregada) {
-    const anos = entrada.mae.edicoes.length > 0 ? `Em ${entrada.mae.edicoes.join(", ")}` : "Em edições anteriores";
-    return `${anos}, ${entrada.nome} não tem número próprio: o território é publicado agregado em ` +
-      `${entrada.mae.nome}.`;
+    return d.serie.frase.maeAgregada(entrada.nome, entrada.mae.edicoes, entrada.mae.nome);
   }
   // O município foi criado DEPOIS da ÚLTIMA edição em que ainda não existia -- não da primeira
   // (bug da auditoria F12.6-aud: `.find` pegava a primeira ocorrência de `nao_existia`, dizendo
@@ -772,32 +745,34 @@ function prefixoTruncamento(entrada: EntradaFrase): string | null {
   const semExistir = entrada.pontos.filter((p) => p.estado === "nao_existia");
   const ultimaSemExistir = entrada.mae.ultimaEdicaoAusente
     ?? (semExistir.length > 0 ? semExistir[semExistir.length - 1].edicao : undefined);
-  return `${entrada.nome} foi criado depois de ${ultimaSemExistir ?? entrada.mae.edicoes[entrada.mae.edicoes.length - 1]}; ` +
-    `até então seu território fazia parte de ${entrada.mae.nome}.`;
+  return d.serie.frase.criadoDepois(
+    entrada.nome,
+    ultimaSemExistir ?? entrada.mae.edicoes[entrada.mae.edicoes.length - 1],
+    entrada.mae.nome,
+  );
 }
 
-function prefixoMae(entrada: EntradaFrase): string | null {
+function prefixoMae(entrada: EntradaFrase, d: Dicionario): string | null {
   if (!entrada.filhos) return null;
-  const nomes = entrada.filhos.nomes.length > 3
-    ? `${entrada.filhos.nomes.slice(0, 3).join(", ")} e outros`
-    : entrada.filhos.nomes.join(" e ");
-  const ate = entrada.filhos.ultimaEdicaoJunto ? `Até ${entrada.filhos.ultimaEdicaoJunto}, ` : "Antes, ";
-  return `${ate}${entrada.nome} incluía o território que hoje ` +
-    `é ${nomes}; parte da variação de volume desde então é fronteira, não migração.`;
+  return d.serie.frase.maeIncluia(
+    entrada.nome, entrada.filhos.nomes, entrada.filhos.ultimaEdicaoJunto ?? null,
+  );
 }
 
-/** Gera a frase-síntese determinística (T1-T8), seguindo docs/design_serie_censos.md, seção 2. */
-export function fraseSintese(entrada: EntradaFrase): string {
+/** Gera a frase-síntese determinística (T1-T8), seguindo docs/design_serie_censos.md, seção 2.
+ *  Este arquivo só decide QUAL caso vale e formata os valores; a sintaxe de cada caso mora em
+ *  `d.serie.frase` (um bloco por caso, para cada idioma ter a sua). */
+export function fraseSintese(entrada: EntradaFrase, d: Dicionario = pt): string {
+  const f = d.serie.frase;
+  const tipo = (t: TipoIEM | null) => nomeTipoIem(t!, d);
   const comNumero = entrada.pontos.filter((p) => p.estado === "numero" && p.tipo != null);
 
   // T6 -- nenhuma edição com número
   if (comNumero.length === 0) {
-    const motivoDominante = motivoDominanteTexto(entrada.pontos);
-    const abraMae = entrada.mae
-      ? ` Abra a série de ${entrada.mae.nome}, ${entrada.mae.agregada
-          ? "em que o território está agregado" : "de que o território fazia parte"}.`
-      : "";
-    return `Não há série para ${entrada.nome}: ${motivoDominante}.${abraMae}`;
+    return f.semSerie(
+      entrada.nome, motivoDominanteTexto(entrada.pontos, d),
+      entrada.mae ? { nome: entrada.mae.nome, agregada: entrada.mae.agregada } : null,
+    );
   }
 
   let ini = comNumero[0];
@@ -813,30 +788,31 @@ export function fraseSintese(entrada: EntradaFrase): string {
   }
 
   const porTaxa = Boolean(entrada.filhos);
-  const prefixo = prefixoTruncamento(entrada) ?? prefixoMae(entrada);
+  const prefixo = prefixoTruncamento(entrada, d) ?? prefixoMae(entrada, d);
 
   // T5 -- só uma edição com número
   if (ini === fim) {
-    const outrasNota = motivoDasOutras(entrada, fim.edicao);
-    const nucleo = `Só há dado para ${entrada.nome} em ${fim.edicao}: ${NOME_TIPO_IEM[fim.tipo!]} ` +
-      `(IEM ${fmtIem(fim.iem)}), com ${numFrase(fim.imig)} pessoas chegando e ${numFrase(fim.emig)} ` +
-      `saindo.${outrasNota ? ` ${outrasNota}` : ""}`;
-    return juntar([prefixo, nucleo, ressalvaProxy(fim, fim), ressalvaCobertura(entrada, fim)]);
+    const nucleo = f.soUmaEdicao({
+      nome: entrada.nome, edicao: fim.edicao, tipo: tipo(fim.tipo), iem: fmtIem(fim.iem),
+      imig: numFrase(fim.imig), emig: numFrase(fim.emig),
+    });
+    return juntar([
+      prefixo, nucleo, motivoDasOutras(entrada, fim.edicao, d),
+      ressalvaProxy(fim, fim, d), ressalvaCobertura(entrada, fim, d),
+    ]);
   }
 
   // T4 -- uma (ou ambas) âncoras indefinidas, sem como corrigir andando para dentro
   if (ini.tipo === "indefinido" || fim.tipo === "indefinido") {
     if (ini.tipo === "indefinido" && fim.tipo === "indefinido") {
-      const lista = comNumero.map((p) => `${p.edicao}: ${fmtIem(p.iem)}`).join(", ");
-      return `Em nenhum censo a amostra de ${entrada.nome} é grande o bastante para classificar ` +
-        `a migração: os índices (${lista}) têm margem maior que o próprio valor.`;
+      return f.indefinidoAmbos(entrada.nome, comNumero.map((p) => ({ edicao: p.edicao, iem: fmtIem(p.iem) })));
     }
-    const margem = ini.tipo === "indefinido"
-      ? (ini.seIem != null ? `±${(1.96 * ini.seIem).toFixed(2).replace(".", ",")}` : "±—")
-      : (fim.seIem != null ? `±${(1.96 * fim.seIem).toFixed(2).replace(".", ",")}` : "±—");
-    return `Em ${fim.edicao}, ${entrada.nome} tem ${NOME_TIPO_IEM[fim.tipo!]}. Em ${ini.edicao} a ` +
-      `amostra é pequena demais para dizer se havia ganho ou perda (IEM ${fmtIem(ini.iem)}, com ` +
-      `margem de ${margem}). A comparação entre as duas pontas não é conclusiva.`;
+    const seMargem = ini.tipo === "indefinido" ? ini.seIem : fim.seIem;
+    const margem = seMargem != null ? `±${num2(1.96 * seMargem)}` : "±—";
+    return f.indefinidoUmaPonta({
+      nome: entrada.nome, edicaoFim: fim.edicao, tipoFim: tipo(fim.tipo), edicaoIni: ini.edicao,
+      iemIni: fmtIem(ini.iem), margem,
+    });
   }
 
   // T8 -- 1980 é a única âncora inicial possível e a variação é menor que a incerteza do
@@ -852,68 +828,61 @@ export function fraseSintese(entrada: EntradaFrase): string {
     const valores = comNumero.map((p) => p.iem!).filter((v) => v != null);
     const min = Math.min(...valores);
     const max = Math.max(...valores);
-    const mesmaClasse = ini.tipo === fim.tipo;
-    const nucleo = mesmaClasse
-      ? `${entrada.nome} aparece em ${NOME_TIPO_IEM[fim.tipo!]} em todos os censos com dado ` +
-        `(IEM entre ${fmtIem(min)} e ${fmtIem(max)})`
-      : `${entrada.nome} vai de ${NOME_TIPO_IEM[ini.tipo!]} (1980) a ${NOME_TIPO_IEM[fim.tipo!]} ` +
-        `(${fim.edicao}), mas o IEM quase não se move (${fmtIem(ini.iem)} para ${fmtIem(fim.iem)}) -- ` +
-        "a diferença atravessa um limiar da classificação sem ser, de fato, uma mudança grande";
-    return juntar([
-      prefixo,
-      `${nucleo}. A diferença em relação a 1980 é menor que a incerteza do proxy daquele ano; ` +
-      "não é seguro afirmar tendência.",
-      ressalvaCobertura(entrada, fim),
-    ]);
+    const nucleo = ini.tipo === fim.tipo
+      ? f.incertezaProxyMesmaClasse({ nome: entrada.nome, tipo: tipo(fim.tipo), min: fmtIem(min), max: fmtIem(max) })
+      : f.incertezaProxyMudaClasse({
+          nome: entrada.nome, tipoIni: tipo(ini.tipo), tipoFim: tipo(fim.tipo), edicaoFim: fim.edicao,
+          iemIni: fmtIem(ini.iem), iemFim: fmtIem(fim.iem),
+        });
+    return juntar([prefixo, nucleo, ressalvaCobertura(entrada, fim, d)]);
   }
 
-  const comp = complemento(ini, fim, porTaxa);
+  const comp = complemento(ini, fim, porTaxa, d);
 
   // T2 -- manteve a classe
   if (ini.tipo === fim.tipo) {
     const grande = Math.abs(fim.iem! - ini.iem!) >= 0.1;
     const nucleo = grande
-      ? `${entrada.nome} continua em ${NOME_TIPO_IEM[fim.tipo!]}, mas ` +
-        `${Math.abs(fim.iem!) < Math.abs(ini.iem!) ? "mais perto" : "mais longe"} do equilíbrio (IEM de ${fmtIem(ini.iem)} ` +
-        `para ${fmtIem(fim.iem)}): ${comp}.`
-      : `${entrada.nome} está em ${NOME_TIPO_IEM[fim.tipo!]} desde ${ini.edicao} (IEM de ` +
-        `${fmtIem(ini.iem)} para ${fmtIem(fim.iem)}): ${comp}.`;
-    return juntar([prefixo, nucleo, ressalvaProxy(ini, fim), ressalvaCobertura(entrada, fim)]);
+      ? f.manteveGrande({
+          nome: entrada.nome, tipo: tipo(fim.tipo), maisPerto: Math.abs(fim.iem!) < Math.abs(ini.iem!),
+          iemIni: fmtIem(ini.iem), iemFim: fmtIem(fim.iem), complemento: comp,
+        })
+      : f.manteveEstavel({
+          nome: entrada.nome, tipo: tipo(fim.tipo), edicaoIni: ini.edicao,
+          iemIni: fmtIem(ini.iem), iemFim: fmtIem(fim.iem), complemento: comp,
+        });
+    return juntar([prefixo, nucleo, ressalvaProxy(ini, fim, d), ressalvaCobertura(entrada, fim, d)]);
   }
 
   // T1 -- mudou de classe
-  const nucleo = `Entre ${ini.edicao} e ${fim.edicao}, ${entrada.nome} passou de ` +
-    `${NOME_TIPO_IEM[ini.tipo!]} (IEM ${fmtIem(ini.iem)}) para ${NOME_TIPO_IEM[fim.tipo!]} ` +
-    `(IEM ${fmtIem(fim.iem)}): ${comp}.`;
-  return juntar([prefixo, nucleo, ressalvaProxy(ini, fim), ressalvaCobertura(entrada, fim)]);
+  const nucleo = f.mudou({
+    nome: entrada.nome, edicaoIni: ini.edicao, edicaoFim: fim.edicao,
+    tipoIni: tipo(ini.tipo), iemIni: fmtIem(ini.iem), tipoFim: tipo(fim.tipo), iemFim: fmtIem(fim.iem),
+    complemento: comp,
+  });
+  return juntar([prefixo, nucleo, ressalvaProxy(ini, fim, d), ressalvaCobertura(entrada, fim, d)]);
 }
 
 function juntar(partes: (string | null)[]): string {
   return partes.filter((p): p is string => Boolean(p)).join(" ");
 }
 
-function motivoDasOutras(entrada: EntradaFrase, fimEdicao: EdicaoSerie): string | null {
+function motivoDasOutras(entrada: EntradaFrase, fimEdicao: EdicaoSerie, d: Dicionario): string | null {
   const outras = entrada.pontos.filter((p) => p.edicao !== fimEdicao);
   if (outras.length === 0) return null;
   const motivos = new Set(outras.map((p) => p.estado));
-  const texto = motivos.has("nao_existia")
-    ? (entrada.mae?.agregada ? `o território é publicado agregado em ${entrada.mae.nome}` : "não existia")
-    : motivos.has("cobertura_insuficiente") || motivos.has("sem_cobertura") ? "a cobertura é insuficiente"
-    : motivos.has("suprimido") ? "o dado foi suprimido"
-    : "o dado não foi medido";
-  return `Nas demais edições, ${texto}.`;
+  const motivo = motivos.has("nao_existia")
+    ? (entrada.mae?.agregada ? "agregado" : "nao_existia")
+    : motivos.has("cobertura_insuficiente") || motivos.has("sem_cobertura") ? "cobertura"
+    : motivos.has("suprimido") ? "suprimido"
+    : "nao_medido";
+  return d.serie.frase.nasDemaisEdicoes(motivo, entrada.mae?.nome ?? "");
 }
 
-function motivoDominanteTexto(pontos: PontoFrase[]): string {
+function motivoDominanteTexto(pontos: PontoFrase[], d: Dicionario): string {
   const contagem = new Map<string, number>();
   for (const p of pontos) contagem.set(p.estado, (contagem.get(p.estado) ?? 0) + 1);
   const [motivo] = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0] ?? ["nao_medido", 0];
-  const textos: Record<string, string> = {
-    nao_existia: "o território não existia como unidade em nenhuma edição com dado suficiente",
-    sem_cobertura: "nenhuma edição tem cobertura territorial suficiente",
-    cobertura_insuficiente: "a cobertura territorial é insuficiente em todas as edições",
-    suprimido: "os fluxos foram suprimidos pelo limiar de revelação em todas as edições",
-    nao_medido: "a medida não é publicada em nenhuma edição",
-  };
-  return textos[motivo] ?? "não há dado suficiente";
+  const textos = d.serie.frase.motivoDominante as Record<string, string>;
+  return textos[motivo] ?? d.serie.frase.motivoDominante.outro;
 }

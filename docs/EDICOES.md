@@ -481,3 +481,16 @@ conteúdo deles — leia-os e faça o análogo.
 11. **Páginas estáticas de SEO.** Hoje `pipeline/build_paginas.py` gera páginas apenas para a
     edição 2022 (não recebe `--edicao`). Se a edição nova também deve ter páginas estáticas, isso é
     trabalho adicional a planejar — ver `docs/SEO.md`.
+12. **Idiomas (pt-BR, en, fr, es).** O atlas é publicado em quatro idiomas, com o português como
+    texto de referência (convenções em `web/src/i18n/LEIAME.md`, termos em
+    `web/src/i18n/TERMINOLOGIA.md`). Uma edição nova toca o i18n em três pontos:
+    - **rótulos da edição** (`comum.edicoes` em `web/src/i18n/pt/comum.ts`) e qualquer texto novo
+      de interface: entram em `pt/` e nos três dicionários `en/`, `fr/`, `es/` — o `tsc -b` recusa
+      chave faltando, e `i18n/__tests__/paridade.test.ts` acusa texto em português esquecido;
+    - **metodologia**: `TEXTO` é `Record<Censo, …>` em cada um dos quatro arquivos de
+      `web/src/conteudo/metodologia/` — a edição nova quebra o build até ter texto nos quatro;
+    - **prosa vinda dos dados** (`aviso`, `fonte`, `aviso_proxy*`, notas de UF em `meta.json`;
+      `notas` de `series/comparabilidade.json`): cada texto novo ou alterado precisa de entrada em
+      `web/src/i18n/dados.json` (`origem` = texto PT exato + `en`/`fr`/`es`).
+      `i18n/__tests__/dados.test.ts` compara com `data/processed` e acusa a lacuna ou a tradução
+      velha; enquanto isso, a interface mostra o português, nunca uma tradução desatualizada.

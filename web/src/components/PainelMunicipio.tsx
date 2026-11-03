@@ -5,12 +5,13 @@ import { perfilDoMunicipio } from "../db/queries";
 import { usarDuckDBPronto } from "../db/duckdb";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { PiramideIdadeSexo } from "./PiramideIdadeSexo";
-import { DIMENSOES, rotuloRecorte, type NomeDimensao } from "../lib/paletas";
-import { edicao } from "../lib/edicoes";
+import { dimensao, rotuloRecorte, type NomeDimensao } from "../lib/paletas";
+import { edicao, rotuloCenso } from "../lib/edicoes";
+import { useT } from "../i18n";
 import { useStore } from "../state/store";
 import { AvisoProxy } from "./AvisoProxy";
 import { AvisoUnidade, unidadeAgregada } from "./AvisoUnidade";
-import { classificarIem, NOME_TIPO_IEM, seIem } from "../lib/serie";
+import { classificarIem, nomeTipoIem, seIem } from "../lib/serie";
 import { ResumoSerie } from "./ResumoSerie";
 import { Termo } from "./Termo";
 
@@ -41,11 +42,12 @@ interface Props {
 function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
   cd: string; nome: string; escuro: boolean; recorte: string | null;
 }) {
+  const d = useT();
   const [dados, setDados] = useState<Record<string, Record<string, Record<string, number>>>>({});
   // sem renda em edições que não publicam essa dimensão (hoje só 1980, ver lib/edicoes.ts
   // `recursos.renda`) -- mesmo padrão usado em PainelPendular.tsx para "modo"/"tempo".
   const temRenda = edicao(useStore((s) => s.censo)).recursos.renda;
-  const dims = (["status", "edu", "renda"] as NomeDimensao[]).filter((d) => d !== "renda" || temRenda);
+  const dims = (["status", "edu", "renda"] as NomeDimensao[]).filter((dim) => dim !== "renda" || temRenda);
 
   useEffect(() => {
     let vivo = true;
@@ -64,38 +66,40 @@ function PerfilDoMunicipio({ cd, nome, escuro, recorte }: {
 
   return (
     <>
-      <h3 className="secao-titulo">Perfil dos migrantes</h3>
+      <h3 className="secao-titulo">{d.paineis.perfilMigrantes}</h3>
       {recorte && (
         <p className="muted-pequeno explicacao">
-          Composição de <strong>todos</strong> os migrantes do município: as barras não
-          seguem o recorte ativo, que se aplica aos indicadores e aos fluxos acima.
+          {d.paineis.municipio.perfilRecorte.antes}<strong>{d.paineis.municipio.perfilRecorte.forte}</strong>
+          {d.paineis.municipio.perfilRecorte.depois}
         </p>
       )}
       {dims.map((dim) => {
-        const d = dados[dim];
-        if (!d) return null;
+        const dd = dados[dim];
+        if (!dd) return null;
         const series: SeriePerfil[] = [
-          { rotulo: `Chegaram a ${nome}`, valores: d.imig ?? {}, destaque: true },
-          { rotulo: `Saíram de ${nome}`, valores: d.emig ?? {} },
+          { rotulo: d.paineis.municipio.chegaramA(nome), valores: dd.imig ?? {}, destaque: true },
+          { rotulo: d.paineis.municipio.sairamDe(nome), valores: dd.emig ?? {} },
         ];
         // status migratório não se aplica a quem não migrou
-        if (dim !== "status") series.push({ rotulo: `Residentes de ${nome}`, valores: d.residente ?? {} });
+        if (dim !== "status") series.push({ rotulo: d.paineis.municipio.residentesDe(nome), valores: dd.residente ?? {} });
         const glossarioDim: Record<string, string> = {
           status: "status_migratorio", edu: "escolaridade", renda: "renda_domiciliar",
         };
         const chaveGlossario = glossarioDim[dim];
+        const dimLocal = dimensao(dim, d);
         return (
           <BarraPerfil key={dim}
-                       titulo={chaveGlossario ? <Termo chave={chaveGlossario}>{DIMENSOES[dim].titulo}</Termo> : DIMENSOES[dim].titulo}
-                       nota={DIMENSOES[dim].nota}
-                       categorias={DIMENSOES[dim].categorias} series={series} escuro={escuro} />
+                       titulo={chaveGlossario ? <Termo chave={chaveGlossario}>{dimLocal.titulo}</Termo> : dimLocal.titulo}
+                       nota={dimLocal.nota}
+                       categorias={dimLocal.categorias} series={series} escuro={escuro} />
         );
       })}
       {dados.idade_sexo && (
         <PiramideIdadeSexo
-          titulo={<Termo chave="idade_sexo">Idade e sexo</Termo>} rotuloGrupo={`Chegaram a ${nome}`}
+          titulo={<Termo chave="idade_sexo">{d.paineis.termos.idadeSexo}</Termo>}
+          rotuloGrupo={d.paineis.municipio.chegaramA(nome)}
           valoresGrupo={dados.idade_sexo.imig ?? {}}
-          rotuloReferencia={`Residentes de ${nome}`}
+          rotuloReferencia={d.paineis.municipio.residentesDe(nome)}
           valoresReferencia={dados.idade_sexo.residente ?? {}}
           escuro={escuro}
         />
@@ -122,39 +126,32 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
   // hooks (contagem de hooks diferente entre renders da mesma fibra), o que o React 19 acusa
   // como "Expected static flag was missing" em vez do aviso de dev mais usual.
   const duckdbPronto = usarDuckDBPronto();
+  const d = useT();
   const ed = edicao(useStore((s) => s.censo));
   const { periodo, nome: censoNome } = ed;
+  const naoExiste = d.paineis.naoExisteNaEdicao(d.comum.niveis.mun.demonstrativo);
 
   if (!m) {
     return (
-      <aside className="painel" aria-label="Painel de detalhes">
+      <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
         <div className="vazio">
-          <h2>Atlas da migração interna</h2>
+          <h2>{d.paineis.tituloAtlas}</h2>
           {naoEncontrado ? (
             <div className="aviso" role="note">
               <p>
-                Este município não existe na edição <strong>{ed.rotulo}</strong> selecionada —
-                edições antigas podem cobrir um território menor ou ter divisão administrativa
-                diferente.
+                {naoExiste.antes}<strong>{rotuloCenso(ed.nome, d)}</strong>{naoExiste.depois}
               </p>
               <button type="button" className="link-metodologia" onClick={aoFechar}>
-                Limpar seleção
+                {d.paineis.limparSelecao}
               </button>
             </div>
           ) : (
             <>
               <p>
-                Fluxos migratórios entre municípios brasileiros no quinquênio{" "}
-                {periodo.de.slice(0, 4)}–{periodo.ate.slice(0, 4)},
-                {ed.proxyDataFixa
-                  ? ` a partir de um proxy de data fixa do Censo Demográfico ${censoNome} (ver aviso abaixo).`
-                  : ` a partir do quesito de data fixa do Censo Demográfico ${censoNome}.`}
+                {d.paineis.municipio.intro(periodo.de.slice(0, 4), periodo.ate.slice(0, 4), censoNome, ed.proxyDataFixa)}
               </p>
               <AvisoProxy meta={meta} />
-              <p className="muted">
-                Clique em um município no mapa para ver seu saldo, os principais fluxos de entrada
-                e de saída, e o perfil dos migrantes. Clique em um arco para detalhar um fluxo.
-              </p>
+              <p className="muted">{d.paineis.municipio.clique}</p>
             </>
           )}
         </div>
@@ -170,7 +167,7 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
   const agregada = unidadeAgregada(meta, m.cd_mun);
 
   return (
-    <aside className="painel" aria-label="Painel de detalhes">
+    <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
       <header className="painel-topo">
         <div>
           <h2>{m.nm_mun}<span className="uf">/{m.uf_sigla}</span></h2>
@@ -178,48 +175,48 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
             {/* F9.9: uma unidade agregada não tem RGI (cobre várias) -- no lugar dela,
                 a contagem de municípios que a compõem, que é o que situa o leitor. */}
             {agregada
-              ? <>{agregada.n_municipios} municípios agregados</>
+              ? <>{d.paineis.municipio.municipiosAgregados(agregada.n_municipios)}</>
               : m.nm_rgi}
-            {" · "}{num(m.pop)} habitantes
+            {" · "}{d.paineis.municipio.habitantes(num(m.pop))}
             {m.nm_rm && <> · {m.nm_rm}</>}
           </div>
         </div>
-        <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
+        <button className="fechar" onClick={aoFechar} aria-label={d.comum.ui.fecharPainel}>×</button>
       </header>
 
       <AvisoUnidade meta={meta} codigo={m.cd_mun} />
       <AvisoProxy meta={meta} />
 
       {recorteCarregando ? (
-        <p className="muted carregando-recorte">Aplicando o recorte…</p>
+        <p className="muted carregando-recorte">{d.paineis.municipio.aplicandoRecorte}</p>
       ) : m.semDado ? (
         // sob recorte, município sem nenhuma célula publicada para o subgrupo: os zeros que o
         // App preenche são ausência de dado, não zero -- dizer isso em vez de mostrar "0"
-        <p className="muted carregando-recorte">Sem dado publicado para este recorte neste município.</p>
+        <p className="muted carregando-recorte">{d.paineis.municipio.semDadoRecorte}</p>
       ) : (
       <div className="kpis">
-        <Kpi rotulo={<Termo chave="saldo">Saldo migratório</Termo>} valor={sinal(m.saldo)}
-             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.saldo, m.se_saldo, false)}</>} />
-        <Kpi rotulo={<Termo chave="taxa_liquida">Taxa líquida</Termo>} valor={m.tlm != null ? `${sinal1(m.tlm)} ‰` : "—"}
-             detalhe="por mil habitantes de 5+ anos" />
-        <Kpi rotulo={<Termo chave="imigrantes">Imigrantes</Termo>} valor={num(m.imig)}
-             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.imig, m.se_imig)}</>} />
-        <Kpi rotulo={<Termo chave="emigrantes">Emigrantes</Termo>} valor={num(m.emig)}
-             detalhe={<><Termo chave="ic95">IC 95%</Termo>: {ic95(m.emig, m.se_emig)}</>} />
+        <Kpi rotulo={<Termo chave="saldo">{d.paineis.termos.saldoMigratorio}</Termo>} valor={sinal(m.saldo)}
+             detalhe={<><Termo chave="ic95">{d.paineis.termos.ic95}</Termo>{d.paineis.dp} {ic95(m.saldo, m.se_saldo, false)}</>} />
+        <Kpi rotulo={<Termo chave="taxa_liquida">{d.paineis.termos.taxaLiquida}</Termo>} valor={m.tlm != null ? `${sinal1(m.tlm)} ‰` : "—"}
+             detalhe={d.paineis.municipio.taxaDetalhe} />
+        <Kpi rotulo={<Termo chave="imigrantes">{d.paineis.termos.imigrantes}</Termo>} valor={num(m.imig)}
+             detalhe={<><Termo chave="ic95">{d.paineis.termos.ic95}</Termo>{d.paineis.dp} {ic95(m.imig, m.se_imig)}</>} />
+        <Kpi rotulo={<Termo chave="emigrantes">{d.paineis.termos.emigrantes}</Termo>} valor={num(m.emig)}
+             detalhe={<><Termo chave="ic95">{d.paineis.termos.ic95}</Termo>{d.paineis.dp} {ic95(m.emig, m.se_emig)}</>} />
       </div>)}
 
       {recorte && !recorteCarregando && (
         <div className="aviso-recorte">
-          Todos os números acima se referem apenas ao recorte ativo
-          <strong> {rotuloRecorte(recorte)}</strong>. Sem o recorte, o painel mostra o total de migrantes.
+          {d.paineis.municipio.avisoRecorte.antes}<strong>{rotuloRecorte(recorte, d)}</strong>
+          {d.paineis.municipio.avisoRecorte.depois}
         </div>
       )}
 
       {!recorte && <div className="nota-precisao">
-        <Termo chave="precisao">Precisão</Termo> da estimativa de imigração: <strong>{rotuloPrecisao[m.precisao_imig] ?? m.precisao_imig}</strong>
-        {m.cv_imig != null && <> (<Termo chave="cv">coeficiente de variação</Termo> {num1(m.cv_imig)}%)</>}
-        {m.imig_ni > 0 && <> · {num(m.imig_ni)} imigrantes com origem não informada</>}
-        {m.imig_int > 0 && <> · {num(m.imig_int)} vindos do exterior</>}
+        <Termo chave="precisao">{d.paineis.municipio.precisaoImigracao.termo}</Termo>{d.paineis.municipio.precisaoImigracao.depois}{d.paineis.dp} <strong>{rotuloPrecisao(m.precisao_imig, d)}</strong>
+        {m.cv_imig != null && <> (<Termo chave="cv">{d.paineis.termos.coefVariacao}</Termo> {d.paineis.pct(num1(m.cv_imig))})</>}
+        {m.imig_ni > 0 && <> · {d.paineis.municipio.imigNaoInformados(num(m.imig_ni), m.imig_ni)}</>}
+        {m.imig_int > 0 && <> · {d.paineis.municipio.imigExterior(num(m.imig_int), m.imig_int)}</>}
       </div>}
 
       {m.iem != null && (() => {
@@ -232,8 +229,8 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
         const tipo = classificarIem(m.iem, se);
         return (
           <div className="nota-precisao">
-            <Termo chave="eficacia_iem">Índice de eficácia migratória</Termo>: <strong>{num2(m.iem)}</strong>{" "}
-            <span className="muted">({tipo ? NOME_TIPO_IEM[tipo] : "—"})</span>
+            <Termo chave="eficacia_iem">{d.paineis.termos.indiceEficacia}</Termo>{d.paineis.dp} <strong>{num2(m.iem)}</strong>{" "}
+            <span className="muted">({tipo ? nomeTipoIem(tipo, d) : "—"})</span>
           </div>
         );
       })()}
@@ -244,12 +241,12 @@ export function PainelMunicipio({ municipio: m, naoEncontrado, fluxos, carregand
       )}
 
       {carregando ? (
-        <p className="muted">{duckdbPronto ? "Carregando fluxos…" : "preparando os dados…"}</p>
+        <p className="muted">{duckdbPronto ? d.comum.ui.carregandoFluxos : d.paineis.preparandoDados}</p>
       ) : (
         <>
-          <TabelaFluxos titulo="Principais origens" cor="var(--arc-in)" fluxos={entradas}
+          <TabelaFluxos titulo={d.paineis.principaisOrigens} cor="var(--arc-in)" fluxos={entradas}
                         campo="nm_origem" campoUf="uf_origem" aoClicar={aoSelecionarFluxo} />
-          <TabelaFluxos titulo="Principais destinos" cor="var(--arc-out)" fluxos={saidas}
+          <TabelaFluxos titulo={d.paineis.principaisDestinos} cor="var(--arc-out)" fluxos={saidas}
                         campo="nm_destino" campoUf="uf_destino" aoClicar={aoSelecionarFluxo} />
           <PerfilDoMunicipio cd={m.cd_mun} nome={m.nm_mun} escuro={escuro} recorte={recorte} />
         </>
@@ -263,11 +260,12 @@ function TabelaFluxos({ titulo, cor, fluxos, campo, campoUf, aoClicar }: {
   campo: "nm_origem" | "nm_destino"; campoUf: "uf_origem" | "uf_destino";
   aoClicar: (o: string, d: string) => void;
 }) {
+  const d = useT();
   if (fluxos.length === 0) {
     return (
       <section className="secao">
         <h3><span className="ponto" style={{ background: cor }} /> {titulo}</h3>
-        <p className="muted">Nenhum fluxo acima do limiar de divulgação.</p>
+        <p className="muted">{d.paineis.nenhumFluxo}</p>
       </section>
     );
   }

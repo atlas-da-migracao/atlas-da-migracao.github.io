@@ -1,7 +1,7 @@
 /** Painel do modo "Regiões metropolitanas": cabeçalho da RM e três abas
  *  (migração intra-RM, pendular trabalho, pendular estudo), com o comparativo
  *  entre RMs ao final. */
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { AbaRM } from "../state/store";
 import {
   caminhosPendularDaRM, estudoPendularDaRM, fluxosIntraDaRM, listarRMs, migEstudoDaRM,
@@ -9,17 +9,23 @@ import {
   type FluxoPendularRM, type MigPendularResumoRM, type ResumoRM,
 } from "../db/queries";
 import type { Fluxo, Meta } from "../lib/types";
-import { calcularRankingSaldoIntraRM, prepararSankey } from "../lib/rm";
-import { CLASSE_ESTUDO, CLASSE_TRAB, TIPOLOGIA_INTRA_RM, cor } from "../lib/paletas";
+import { calcularRankingSaldoIntraRM, prepararSankey, type CaminhoPendular } from "../lib/rm";
+import {
+  CLASSE_ESTUDO, CLASSE_TRAB, cor, rotuloClasseEstudo, rotuloClasseTrab, tipologiaIntraRM,
+} from "../lib/paletas";
+import { useT } from "../i18n";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
 import { ResumoSerie } from "./ResumoSerie";
 import { Sankey } from "./Sankey";
 import { ComparativoRM } from "./ComparativoRM";
 import { AvisoProxy } from "./AvisoProxy";
 import { num, num1, sinal } from "../lib/format";
-import { edicao } from "../lib/edicoes";
+import { edicao, rotuloCenso, rotuloRetornoCenso } from "../lib/edicoes";
 import { useStore } from "../state/store";
 import { Termo } from "./Termo";
+
+/** nº de caminhos individuais do Sankey; o restante vira um caminho agregado */
+const TOP_SANKEY = 12;
 
 interface Props {
   cdRm: string;
@@ -55,7 +61,8 @@ function Kpi({ rotulo, valor, detalhe }: { rotulo: React.ReactNode; valor: strin
 function TabelaFluxosRM({ fluxos, aoClicar }: {
   fluxos: (Fluxo & { direcao?: string })[]; aoClicar: (o: string, d: string) => void;
 }) {
-  if (fluxos.length === 0) return <p className="muted">Nenhum fluxo acima do limiar de divulgação.</p>;
+  const d = useT();
+  if (fluxos.length === 0) return <p className="muted">{d.rm.tabelaFluxos.vazio}</p>;
   const max = Math.max(...fluxos.map((f) => f.total));
   return (
     <table className="tabela-fluxos">
@@ -84,7 +91,8 @@ function TabelaFluxosRM({ fluxos, aoClicar }: {
 function RankingDivergente({ itens, rotuloValor }: {
   itens: { nome: string; valor: number }[]; rotuloValor: (v: number) => string;
 }) {
-  if (itens.length === 0) return <p className="muted">Sem dados suficientes.</p>;
+  const d = useT();
+  if (itens.length === 0) return <p className="muted">{d.rm.semDados}</p>;
   const max = Math.max(1, ...itens.map((i) => Math.abs(i.valor)));
   return (
     <ul className="ranking-divergente">
@@ -105,6 +113,7 @@ export function PainelRM({
   cdRm, aba, cruzar, topN, escuro, meta, comparativoAberto, aoAlternarComparativo, aoMudarAba, aoMudarCruzar,
   aoSair, aoEscolherRM, aoSelecionarFluxo, aoAbrirSerie,
 }: Props) {
+  const d = useT();
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
   const recursos = ed.recursos;
@@ -114,7 +123,12 @@ export function PainelRM({
   const [rms, setRms] = useState<ResumoRM[]>([]);
   const [fluxosIntra, setFluxosIntra] = useState<(Fluxo & { tipologia: string })[]>([]);
   const [migResumo, setMigResumo] = useState<MigPendularResumoRM | null>(null);
-  const [sankeyDados, setSankeyDados] = useState<ReturnType<typeof prepararSankey> | null>(null);
+  // entrada bruta do Sankey; o diagrama (com os nós residuais no idioma ativo) sai do useMemo abaixo,
+  // para a troca de idioma não refazer a consulta
+  const [sankeyEntrada, setSankeyEntrada] = useState<{ caminhos: CaminhoPendular[]; nomes: Map<string, string> } | null>(null);
+  const sankeyDados = useMemo(
+    () => (sankeyEntrada ? prepararSankey(sankeyEntrada.caminhos, sankeyEntrada.nomes, TOP_SANKEY, d) : null),
+    [sankeyEntrada, d]);
   const [pendularTrab, setPendularTrab] = useState<FluxoPendularRM[]>([]);
   const [pendularEstudo, setPendularEstudo] = useState<FluxoPendularRM[]>([]);
   const [rankingPendular, setRankingPendular] = useState<Awaited<ReturnType<typeof municipiosPendularDaRM>>>([]);
@@ -132,7 +146,7 @@ export function PainelRM({
   // Este efeito vem antes dos de dados, então roda primeiro no mesmo commit; os `setX` das
   // consultas só chegam depois (assíncronos), sem risco de serem apagados por ele.
   useEffect(() => {
-    setResumo(null); setCarregado(false); setFluxosIntra([]); setMigResumo(null); setSankeyDados(null);
+    setResumo(null); setCarregado(false); setFluxosIntra([]); setMigResumo(null); setSankeyEntrada(null);
     setPendularTrab([]); setPendularEstudo([]); setRankingPendular([]); setEstudoResumo(null);
     setMigEstudo([]);
   }, [censo, cdRm]);
@@ -167,11 +181,11 @@ export function PainelRM({
       const codigos = [...new Set(caminhos.flatMap((c) => [c.origem_mig, c.destino_mig, c.destino_trab]))];
       const nomes = await nomesDeMunicipios(codigos);
       const mapa = new Map(nomes.map((n) => [n.cd_mun, `${n.nm_mun}/${n.uf_sigla}`]));
-      if (vivo) setSankeyDados(prepararSankey(caminhos, mapa, 12));
+      if (vivo) setSankeyEntrada({ caminhos, nomes: mapa });
     }).catch((e) => {
       // sem isto o diagrama ficaria em "Carregando…" para sempre; vazio cai no aviso de "insuficientes"
       console.error(e);
-      if (vivo) setSankeyDados({ nodes: [], links: [], caminhos: [] });
+      if (vivo) setSankeyEntrada({ caminhos: [], nomes: new Map() });
     });
     return () => { vivo = false; };
   }, [cdRm, aba, censo, recursos.pendular]);
@@ -221,23 +235,22 @@ export function PainelRM({
 
   if (!resumo) {
     return (
-      <aside className="painel" aria-label="Painel de detalhes">
+      <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
         {carregado ? (
           <div className="vazio">
-            <h2>Atlas da migração interna</h2>
+            <h2>{d.rm.painel.tituloVazio}</h2>
             <div className="aviso" role="note">
               <p>
-                Esta região metropolitana não existe na edição <strong>{ed.rotulo}</strong>{" "}
-                selecionada — edições antigas podem cobrir um território menor ou ter divisão
-                administrativa diferente.
+                {d.rm.painel.naoExisteNaEdicao(<strong>{rotuloCenso(ed.nome, d)}</strong>)
+                  .map((p, i) => <Fragment key={i}>{p}</Fragment>)}
               </p>
               <button type="button" className="link-metodologia" onClick={aoSair}>
-                Voltar para o Brasil
+                {d.rm.painel.voltarBrasil}
               </button>
             </div>
           </div>
         ) : (
-          <p className="muted">Carregando a região metropolitana…</p>
+          <p className="muted">{d.rm.painel.carregando}</p>
         )}
       </aside>
     );
@@ -250,27 +263,27 @@ export function PainelRM({
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">
-            {resumo.tipo === "RIDE" ? <Termo chave="ride">RIDE</Termo> : "Região metropolitana"}
+            {resumo.tipo === "RIDE" ? <Termo chave="ride">RIDE</Termo> : d.comum.niveis.rm.titulo}
           </div>
           <h2>{resumo.nm_rm}</h2>
           <div className="muted">
-            Núcleo: {resumo.nm_nucleo}{resumo.nucleo_uf && `/${resumo.nucleo_uf}`} ·{" "}
-            {resumo.n_municipios} {resumo.n_municipios === 1 ? "município" : "municípios"} · {num(resumo.pop)} habitantes
+            {d.rm.painel.linhaResumo(
+              `${resumo.nm_nucleo}${resumo.nucleo_uf ? `/${resumo.nucleo_uf}` : ""}`, resumo.n_municipios, num(resumo.pop))}
           </div>
         </div>
-        <button className="fechar" onClick={aoSair} aria-label="Sair do modo RM">×</button>
+        <button className="fechar" onClick={aoSair} aria-label={d.rm.painel.sairModoRM}>×</button>
       </header>
 
       {recursos.pendular && (
-        <div className="segmentado abas-rm" role="group" aria-label="Aba do painel metropolitano">
+        <div className="segmentado abas-rm" role="group" aria-label={d.rm.painel.abasAria}>
           <button className={aba === "mig" ? "ativo" : ""} onClick={() => aoMudarAba("mig")}>
-            Migração intra-RM
+            {d.rm.painel.abas.mig}
           </button>
           <button className={aba === "trab" ? "ativo" : ""} onClick={() => aoMudarAba("trab")}>
-            Pendular trabalho
+            {d.rm.painel.abas.trab}
           </button>
           <button className={aba === "estudo" ? "ativo" : ""} onClick={() => aoMudarAba("estudo")}>
-            Pendular estudo
+            {d.rm.painel.abas.estudo}
           </button>
         </div>
       )}
@@ -278,7 +291,7 @@ export function PainelRM({
       {recursos.pendular && (aba === "trab" || aba === "estudo") && (
         <label className="checkbox-cruzar">
           <input type="checkbox" checked={cruzar} onChange={(e) => aoMudarCruzar(e.target.checked)} />
-          Incluir fluxos que cruzam o limite da RM
+          {d.rm.painel.incluirCruzam}
         </label>
       )}
 
@@ -287,10 +300,10 @@ export function PainelRM({
           <AvisoProxy meta={meta} />
 
           <div className="kpis">
-            <Kpi rotulo={<Termo chave="rm_migracao_intra">Migrantes intra-RM</Termo>} valor={num(resumo.mig_intra)} />
-            <Kpi rotulo={<Termo chave="rm_saldo_externo">Saldo com o resto do país</Termo>} valor={sinal(resumo.saldo_externo)}
-                 detalhe={`entradas ${num(resumo.entradas_externas)} · saídas ${num(resumo.saidas_externas)}`} />
-            <Kpi rotulo={<Termo chave="rm_nucleo_periferia">Núcleo → periferia</Termo>} valor={`${num1((resumo.nucleo_periferia / totalIntra) * 100)}%`}
+            <Kpi rotulo={<Termo chave="rm_migracao_intra">{d.rm.mig.migrantesIntra}</Termo>} valor={num(resumo.mig_intra)} />
+            <Kpi rotulo={<Termo chave="rm_saldo_externo">{d.rm.mig.saldoExterno}</Termo>} valor={sinal(resumo.saldo_externo)}
+                 detalhe={d.rm.mig.entradasSaidas(num(resumo.entradas_externas), num(resumo.saidas_externas))} />
+            <Kpi rotulo={<Termo chave="rm_nucleo_periferia">{d.comum.categorias.tipologia.nucleo_periferia}</Termo>} valor={d.rm.pct(num1((resumo.nucleo_periferia / totalIntra) * 100))}
                  detalhe={num(resumo.nucleo_periferia)} />
           </div>
 
@@ -298,44 +311,44 @@ export function PainelRM({
             <ResumoSerie nivel="rm" codigo={cdRm} nome={resumo.nm_rm} aoAbrirSerieCompleta={aoAbrirSerie} />
           )}
 
-          <h3 className="secao-titulo"><Termo chave="rm_nucleo_periferia">Matriz núcleo × periferia</Termo></h3>
+          <h3 className="secao-titulo"><Termo chave="rm_nucleo_periferia">{d.rm.mig.matrizTitulo}</Termo></h3>
           <table className="matriz-np">
             <thead>
-              <tr><th /><th>Destino núcleo</th><th>Destino periferia</th></tr>
+              <tr><th /><th>{d.rm.mig.destinoNucleo}</th><th>{d.rm.mig.destinoPeriferia}</th></tr>
             </thead>
             <tbody>
               <tr>
-                <th>Origem núcleo</th>
+                <th>{d.rm.mig.origemNucleo}</th>
                 <td className="valor-cel">—</td>
                 <td className="valor-cel">
                   {num(resumo.nucleo_periferia)} <span className="muted-pequeno">
-                    ({num1((resumo.nucleo_periferia / totalIntra) * 100)}%)</span>
+                    ({d.rm.pct(num1((resumo.nucleo_periferia / totalIntra) * 100))})</span>
                 </td>
               </tr>
               <tr>
-                <th>Origem periferia</th>
+                <th>{d.rm.mig.origemPeriferia}</th>
                 <td className="valor-cel">
                   {num(resumo.periferia_nucleo)} <span className="muted-pequeno">
-                    ({num1((resumo.periferia_nucleo / totalIntra) * 100)}%)</span>
+                    ({d.rm.pct(num1((resumo.periferia_nucleo / totalIntra) * 100))})</span>
                 </td>
                 <td className="valor-cel">
                   {num(resumo.periferia_periferia)} <span className="muted-pequeno">
-                    ({num1((resumo.periferia_periferia / totalIntra) * 100)}%)</span>
+                    ({d.rm.pct(num1((resumo.periferia_periferia / totalIntra) * 100))})</span>
                 </td>
               </tr>
             </tbody>
           </table>
 
-          <h3 className="secao-titulo">Saldo intra-RM por município</h3>
+          <h3 className="secao-titulo">{d.rm.mig.saldoPorMunicipio}</h3>
           <RankingDivergente itens={rankingSaldo} rotuloValor={sinal} />
 
-          <h3 className="secao-titulo">Principais fluxos intra-RM</h3>
+          <h3 className="secao-titulo">{d.rm.mig.principaisFluxos}</h3>
           <p className="muted-pequeno explicacao">
-            Clique em uma linha para ver o perfil completo dos migrantes deste par.
+            {d.rm.mig.cliquePerfil}
           </p>
           <TabelaFluxosRM fluxos={fluxosIntra} aoClicar={aoSelecionarFluxo} />
           <ul className="perfil-legenda">
-            {TIPOLOGIA_INTRA_RM.categorias.map((c) => (
+            {tipologiaIntraRM(d).categorias.map((c) => (
               <li key={c.chave}>
                 <span className="amostra pequena" style={{ background: cor(c.cor, escuro) }} /> {c.rotulo}
               </li>
@@ -344,30 +357,28 @@ export function PainelRM({
 
           {recursos.pendular && (
           <>
-          <h3 className="secao-titulo">Migrantes e trabalho</h3>
+          <h3 className="secao-titulo">{d.rm.migTrab.titulo}</h3>
           {migResumo && (
             <div className="kpis">
-              <Kpi rotulo="Migrantes ocupados" valor={num(migResumo.mig_ocupados)} />
-              <Kpi rotulo="Fazem pendular"
+              <Kpi rotulo={d.rm.migTrab.ocupados} valor={num(migResumo.mig_ocupados)} />
+              <Kpi rotulo={d.rm.migTrab.fazemPendular}
                    valor={migResumo.mig_ocupados > 0
-                     ? `${num1((migResumo.mig_pendulares / migResumo.mig_ocupados) * 100)}%`
+                     ? d.rm.pct(num1((migResumo.mig_pendulares / migResumo.mig_ocupados) * 100))
                      : "—"}
                    detalhe={num(migResumo.mig_pendulares)} />
-              <Kpi rotulo="Voltam a trabalhar na origem"
+              <Kpi rotulo={d.rm.migTrab.voltamOrigem}
                    valor={migResumo.mig_ocupados > 0
-                     ? `${num1((migResumo.pendular_para_origem / migResumo.mig_ocupados) * 100)}%` : "—"} />
-              <Kpi rotulo="Trabalham no núcleo"
+                     ? d.rm.pct(num1((migResumo.pendular_para_origem / migResumo.mig_ocupados) * 100)) : "—"} />
+              <Kpi rotulo={d.rm.migTrab.trabalhamNucleo}
                    valor={migResumo.mig_ocupados > 0
-                     ? `${num1((migResumo.pendular_para_nucleo / migResumo.mig_ocupados) * 100)}%` : "—"} />
-              <Kpi rotulo="Trabalham onde moram"
+                     ? d.rm.pct(num1((migResumo.pendular_para_nucleo / migResumo.mig_ocupados) * 100)) : "—"} />
+              <Kpi rotulo={d.rm.migTrab.trabalhamOndeMoram}
                    valor={migResumo.mig_ocupados > 0
-                     ? `${num1((migResumo.trabalha_onde_mora / migResumo.mig_ocupados) * 100)}%` : "—"} />
+                     ? d.rm.pct(num1((migResumo.trabalha_onde_mora / migResumo.mig_ocupados) * 100)) : "—"} />
             </div>
           )}
           <p className="muted-pequeno explicacao">
-            Morava em ({anoOrigem}) → mora em ({anoDestino}) → trabalha em ({anoDestino}), para os 12
-            maiores caminhos da RM com destino de trabalho conhecido; o restante aparece agregado em
-            "Outros municípios".
+            {d.rm.migTrab.explicacao(anoOrigem, anoDestino, TOP_SANKEY, d.comum.sankeyResidual.municipios)}
           </p>
           {sankeyDados && sankeyDados.links.length > 0 ? (
             <>
@@ -376,17 +387,17 @@ export function PainelRM({
                 {(["origem", "nucleo", "outro"] as const).map((k) => (
                   <li key={k}>
                     <span className="amostra pequena" style={{ background: cor(CLASSE_TRAB[k].cor, escuro) }} />
-                    {CLASSE_TRAB[k].rotulo}
+                    {rotuloClasseTrab(k, d)}
                   </li>
                 ))}
               </ul>
               <details className="tabela-alternativa">
-                <summary>Ver como tabela</summary>
+                <summary>{d.rm.migTrab.verTabela}</summary>
                 <table className="tabela-fluxos">
                   <thead>
-                    <tr><th>Origem ({anoOrigem})</th><th>Residência ({anoDestino})</th>
-                        <th>Trabalho ({anoDestino})</th>
-                        <th>Classe</th><th>Total</th><th>Faixa de n</th></tr>
+                    <tr><th>{d.rm.migTrab.colOrigem(anoOrigem)}</th><th>{d.rm.migTrab.colResidencia(anoDestino)}</th>
+                        <th>{d.rm.migTrab.colTrabalho(anoDestino)}</th>
+                        <th>{d.rm.migTrab.colClasse}</th><th>{d.rm.migTrab.colTotal}</th><th>{d.rm.migTrab.colFaixaN}</th></tr>
                   </thead>
                   <tbody>
                     {sankeyDados.caminhos.map((c, i) => (
@@ -394,7 +405,7 @@ export function PainelRM({
                         <td>{c.origem}</td>
                         <td>{c.residencia}</td>
                         <td>{c.trabalho}</td>
-                        <td>{(CLASSE_TRAB as Record<string, { rotulo: string }>)[c.classe]?.rotulo ?? c.classe}</td>
+                        <td>{rotuloClasseTrab(c.classe, d)}</td>
                         <td className="valor-cel">{num(c.total)}</td>
                         <td className="muted-pequeno">{c.n_faixa}</td>
                       </tr>
@@ -404,9 +415,9 @@ export function PainelRM({
               </details>
             </>
           ) : sankeyDados == null ? (
-            <p className="muted">Carregando o diagrama…</p>
+            <p className="muted">{d.rm.migTrab.carregandoDiagrama}</p>
           ) : (
-            <p className="muted">Caminhos insuficientes para o diagrama nesta RM.</p>
+            <p className="muted">{d.rm.migTrab.caminhosInsuficientes}</p>
           )}
           </>
           )}
@@ -416,37 +427,37 @@ export function PainelRM({
       {recursos.pendular && aba === "trab" && (
         <>
           <div className="kpis">
-            <Kpi rotulo="Ocupados" valor={num(resumo.ocupados)} />
-            <Kpi rotulo={<Termo chave="pendular_conceito">Pendulares</Termo>} valor={num(resumo.pendulares)}
-                 detalhe={resumo.pct_pendular != null ? `${num1(resumo.pct_pendular)}% dos ocupados` : undefined} />
+            <Kpi rotulo={d.rm.trab.ocupados} valor={num(resumo.ocupados)} />
+            <Kpi rotulo={<Termo chave="pendular_conceito">{d.rm.trab.pendulares}</Termo>} valor={num(resumo.pendulares)}
+                 detalhe={resumo.pct_pendular != null ? d.rm.trab.pctDosOcupados(num1(resumo.pct_pendular)) : undefined} />
             {recursos.tempoMinutos && (
-              <Kpi rotulo={<Termo chave="pendular_tempo_mediano">Tempo mediano</Termo>} valor={resumo.tempo_mediano != null ? `${num(resumo.tempo_mediano)} min` : "—"} />
+              <Kpi rotulo={<Termo chave="pendular_tempo_mediano">{d.rm.trab.tempoMediano}</Termo>} valor={resumo.tempo_mediano != null ? d.rm.min(num(resumo.tempo_mediano)) : "—"} />
             )}
             {ed.rotuloRetorno != null && (
-              <Kpi rotulo={<Termo chave="pendular_retorno_diario">Retorno diário</Termo>} valor={resumo.pct_diario != null ? `${num1(resumo.pct_diario)}%` : "—"}
-                   detalhe={ed.rotuloRetorno} />
+              <Kpi rotulo={<Termo chave="pendular_retorno_diario">{d.rm.trab.retornoDiario}</Termo>} valor={resumo.pct_diario != null ? d.rm.pct(num1(resumo.pct_diario)) : "—"}
+                   detalhe={rotuloRetornoCenso(ed.nome, d)} />
             )}
             {recursos.modo && (
-              <Kpi rotulo={<Termo chave="pendular_pct_coletivo">Transporte coletivo</Termo>} valor={resumo.pct_coletivo != null ? `${num1(resumo.pct_coletivo)}%` : "—"} />
+              <Kpi rotulo={<Termo chave="pendular_pct_coletivo">{d.rm.trab.transporteColetivo}</Termo>} valor={resumo.pct_coletivo != null ? d.rm.pct(num1(resumo.pct_coletivo)) : "—"} />
             )}
           </div>
 
-          <h3 className="secao-titulo"><Termo chave="pendular_taxa_saida">Maior taxa de saída pendular</Termo></h3>
+          <h3 className="secao-titulo"><Termo chave="pendular_taxa_saida">{d.rm.trab.maiorTaxaSaida}</Termo></h3>
           <RankingDivergente
             itens={rankingTaxaSaida.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.taxa_saida_pendular ?? 0 }))}
-            rotuloValor={(v) => `${num1(v)}%`} />
+            rotuloValor={(v) => d.rm.pct(num1(v))} />
 
-          <h3 className="secao-titulo"><Termo chave="pendular_indice_atracao">Maior índice de atração</Termo></h3>
+          <h3 className="secao-titulo"><Termo chave="pendular_indice_atracao">{d.rm.trab.maiorIndiceAtracao}</Termo></h3>
           <RankingDivergente
             itens={rankingAtracao.map((r) => ({ nome: `${r.nm_mun}/${r.uf_sigla}`, valor: r.indice_atracao ?? 0 }))}
             rotuloValor={(v) => num1(v)} />
 
-          <h3 className="secao-titulo">Principais fluxos pendulares</h3>
-          <p className="muted-pequeno explicacao">Clique em uma linha para ver a caracterização do fluxo.</p>
+          <h3 className="secao-titulo">{d.rm.trab.principaisFluxos}</h3>
+          <p className="muted-pequeno explicacao">{d.rm.trab.cliqueCaracterizacao}</p>
           <TabelaFluxosRM fluxos={pendularTrab.filter((f) => !f.cruza)} aoClicar={aoSelecionarFluxo} />
           {cruzar && pendularTrab.some((f) => f.cruza) && (
             <>
-              <h4 className="muted-pequeno">Fluxos que cruzam o limite da RM</h4>
+              <h4 className="muted-pequeno">{d.rm.painel.cruzamLimite}</h4>
               <TabelaFluxosRM fluxos={pendularTrab.filter((f) => f.cruza)} aoClicar={aoSelecionarFluxo} />
             </>
           )}
@@ -456,8 +467,8 @@ export function PainelRM({
       {recursos.pendular && aba === "estudo" && (
         <>
           <div className="kpis">
-            <Kpi rotulo="Estudantes pendulares da RM" valor={num(estudoResumo?.saida_estudo ?? 0)} />
-            <Kpi rotulo="Entradas por estudo" valor={num(estudoResumo?.entrada_estudo ?? 0)} />
+            <Kpi rotulo={d.rm.estudo.estudantesPendulares} valor={num(estudoResumo?.saida_estudo ?? 0)} />
+            <Kpi rotulo={d.rm.estudo.entradasPorEstudo} valor={num(estudoResumo?.entrada_estudo ?? 0)} />
           </div>
 
           {/* 2000 e 1980 têm um único quesito "trabalha ou estuda?", com precedência do
@@ -467,47 +478,46 @@ export function PainelRM({
               2000 e comparabilidade" / "Edição Censo 1980 e comparabilidade". */}
           {ed.pendularCampoUnico && (
             <p className="muted-pequeno explicacao">
-              Piso, não estimativa do total: esta edição tem um único quesito de trabalho/estudo,
-              com precedência do trabalho, e por isso este fluxo cobre só estudantes não ocupados.
+              {d.rm.estudo.piso}
             </p>
           )}
 
-          <h3 className="secao-titulo">Principais fluxos pendulares de estudo</h3>
-          <p className="muted-pequeno explicacao">Clique em uma linha para ver a caracterização do fluxo.</p>
+          <h3 className="secao-titulo">{d.rm.estudo.principaisFluxos}</h3>
+          <p className="muted-pequeno explicacao">{d.rm.trab.cliqueCaracterizacao}</p>
           <TabelaFluxosRM fluxos={pendularEstudo.filter((f) => !f.cruza)} aoClicar={aoSelecionarFluxo} />
           {cruzar && pendularEstudo.some((f) => f.cruza) && (
             <>
-              <h4 className="muted-pequeno">Fluxos que cruzam o limite da RM</h4>
+              <h4 className="muted-pequeno">{d.rm.painel.cruzamLimite}</h4>
               <TabelaFluxosRM fluxos={pendularEstudo.filter((f) => f.cruza)} aoClicar={aoSelecionarFluxo} />
             </>
           )}
 
-          <h3 className="secao-titulo">Migrantes intra-RM que estudam em outro município</h3>
+          <h3 className="secao-titulo">{d.rm.estudo.migEstudamOutro}</h3>
           {migEstudo.length > 0 ? (
             <BarraPerfil
-              titulo="Onde estudam"
+              titulo={d.rm.estudo.ondeEstudam}
               categorias={migEstudo.map((m) => ({
                 chave: m.classe_estudo,
-                rotulo: (CLASSE_ESTUDO as Record<string, { rotulo: string }>)[m.classe_estudo]?.rotulo ?? m.classe_estudo,
+                rotulo: rotuloClasseEstudo(m.classe_estudo, d),
                 cor: (CLASSE_ESTUDO as Record<string, { cor: { claro: string; escuro: string } }>)[m.classe_estudo]?.cor
                   ?? { claro: "#c3c2b7", escuro: "#52514e" },
               }))}
               series={[{
-                rotulo: "Migrantes que estudam",
+                rotulo: d.rm.estudo.migrantesQueEstudam,
                 valores: Object.fromEntries(migEstudo.map((m) => [m.classe_estudo, m.total])),
                 destaque: true,
               } satisfies SeriePerfil]}
               escuro={escuro}
             />
           ) : (
-            <p className="muted">Sem dados suficientes.</p>
+            <p className="muted">{d.rm.semDados}</p>
           )}
         </>
       )}
 
       <details className="comparativo-toggle" open={comparativoAberto}
                 onToggle={(e) => aoAlternarComparativo((e.target as HTMLDetailsElement).open)}>
-        <summary>Comparativo entre as 20 maiores regiões metropolitanas</summary>
+        <summary>{d.rm.painel.comparativoTitulo}</summary>
         {comparativoAberto && <ComparativoRM rms={rms} ativa={cdRm} censo={censo} aoEscolher={aoEscolherRM} />}
       </details>
     </aside>

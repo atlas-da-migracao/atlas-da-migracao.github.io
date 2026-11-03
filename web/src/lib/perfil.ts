@@ -7,7 +7,8 @@
  *  chave fora da paleta cai nesse mesmo residual. Descartá-las renormalizava as barras sobre
  *  o que sobrou e inflava todos os percentuais (setor de atividade pendular: mediana de 19% de
  *  massa escondida em 2022, 26,7% em 1980). */
-import { CATEGORIA_OUTROS, type Categoria } from "./paletas";
+import { categoriaOutros, type Categoria } from "./paletas";
+import { pt, type Dicionario } from "../i18n/pt";
 
 export interface SerieComValores { valores: Record<string, number> }
 
@@ -21,7 +22,9 @@ export interface PerfilPreparado {
   total: (s: SerieComValores) => number;
 }
 
-export function prepararPerfil(categorias: readonly Categoria[], series: readonly SerieComValores[]): PerfilPreparado {
+export function prepararPerfil(
+  categorias: readonly Categoria[], series: readonly SerieComValores[], d: Dicionario = pt,
+): PerfilPreparado {
   const chavesDaPaleta = new Set(categorias.map((c) => c.chave));
   /** massa da série em chaves que a paleta não conhece -- vai para o residual `outros` */
   const foraDaPaleta = (s: SerieComValores) =>
@@ -31,7 +34,7 @@ export function prepararPerfil(categorias: readonly Categoria[], series: readonl
   // acrescenta o residual genérico, para o denominador não perder essa parcela
   const todas: readonly Categoria[] =
     !chavesDaPaleta.has("outros") && series.some((s) => foraDaPaleta(s) > 0)
-      ? [...categorias, CATEGORIA_OUTROS] : categorias;
+      ? [...categorias, categoriaOutros(d)] : categorias;
   const valor = (s: SerieComValores, c: Categoria) => {
     const v = s.valores[c.chave] ?? 0;
     return (v > 0 ? v : 0) + (c.chave === "outros" ? foraDaPaleta(s) : 0);
