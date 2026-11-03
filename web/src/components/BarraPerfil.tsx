@@ -13,6 +13,7 @@
 import type { Categoria } from "../lib/paletas";
 import { cor } from "../lib/paletas";
 import { prepararPerfil } from "../lib/perfil";
+import { useT } from "../i18n";
 import { num1 } from "../lib/format";
 import { corTextoLegivel } from "../lib/contraste";
 
@@ -36,7 +37,8 @@ interface Props {
 }
 
 export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVazio }: Props) {
-  const { usadas, valor: valorDe, total: totalDe } = prepararPerfil(categorias, series);
+  const d = useT();
+  const { usadas, valor: valorDe, total: totalDe } = prepararPerfil(categorias, series, d);
   if (usadas.length === 0) return null;
 
   return (
@@ -52,7 +54,7 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVa
           return (
             <div className="perfil-linha" key={s.rotulo}>
               <div className="perfil-rotulo">{s.rotulo}</div>
-              <div className="perfil-vazio">{motivoVazio?.(s) ?? "sem dado publicável"}</div>
+              <div className="perfil-vazio">{motivoVazio?.(s) ?? d.paineis.barra.semDado}</div>
             </div>
           );
         }
@@ -60,8 +62,8 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVa
           <div className={`perfil-linha${s.destaque ? " destaque" : ""}`} key={s.rotulo}>
             <div className="perfil-rotulo">{s.rotulo}</div>
             <div className="perfil-barra" role="img"
-                 aria-label={`${s.rotulo}: ${usadas.map((c) =>
-                   `${c.rotulo} ${num1((valorDe(s, c) / total) * 100)}%`).join(", ")}`}>
+                 aria-label={d.paineis.barra.aria(s.rotulo, usadas.map((c) =>
+                   d.paineis.barra.segmento(c.rotulo, num1((valorDe(s, c) / total) * 100))))}>
               {usadas.map((c) => {
                 const pct = (valorDe(s, c) / total) * 100;
                 if (pct <= 0) return null;
@@ -69,7 +71,7 @@ export function BarraPerfil({ titulo, nota, categorias, series, escuro, motivoVa
                 return (
                   <span key={c.chave} className="perfil-seg"
                         style={{ width: `${pct}%`, background: fundo }}
-                        title={`${c.rotulo}: ${num1(pct)}%`}>
+                        title={d.paineis.barra.titulo(c.rotulo, num1(pct))}>
                     {/* F6 leva 2: cor do texto escolhida por contraste (WCAG >= 4,5:1), não fixa em
                         branco -- o fundo muda por categoria/tema e alguns segmentos claros só
                         passavam com texto escuro (ver lib/contraste.ts). */}

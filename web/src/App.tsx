@@ -3,6 +3,7 @@ import { feature, merge, mesh } from "topojson-client";
 import type { Feature, FeatureCollection, MultiPolygon } from "geojson";
 import type { GeometryCollection, MultiPolygon as TopoMultiPolygon, Polygon as TopoPolygon, Topology } from "topojson-specification";
 import { MapaAtlas, type ValorMapa } from "./map/MapaAtlas";
+import { SeletorIdioma } from "./components/SeletorIdioma";
 import { PainelMunicipio } from "./components/PainelMunicipio";
 import { PainelFluxo } from "./components/PainelFluxo";
 import { CapaNacional } from "./components/CapaNacional";
@@ -11,6 +12,7 @@ import { EstadoDados } from "./components/EstadoDados";
 import { tourJaVisto } from "./lib/tour";
 import { Busca, type ItemBusca } from "./components/Busca";
 import { Filtro } from "./components/Filtro";
+import { TextoRico } from "./components/TextoRico";
 import { SeletorRM } from "./components/SeletorRM";
 import { carregarMunicipios, carregarUnidades, centroidesDaRM, centroidesDeMunicipios,
          centroidesDeUnidades, fluxosDaUnidade, fluxosDoMunicipio, fluxosEntreUFs, fluxosIntraDaRM,
@@ -23,9 +25,10 @@ import { num } from "./lib/format";
 import { ANCORA_ESPIGA_MUNICIPIO } from "./lib/espigas";
 import { bboxDeCentroides, bboxDeGeometria, prioridadeFoco, uniaoDeBboxes, type Bbox } from "./lib/rm";
 import type { FluxoUF } from "./lib/acordes";
-import { cor as corPaleta, FLUXO_MAPA, hexParaRgb, TIPOLOGIA_INTRA_RM } from "./lib/paletas";
+import { cor as corPaleta, FLUXO_MAPA, hexParaRgb, TIPOLOGIA_INTRA_RM, tipologiaIntraRM } from "./lib/paletas";
+import { useT, type Dicionario } from "./i18n";
 import { useStore, usarModoEscuro, type Nivel } from "./state/store";
-import { basePath, CENSOS, edicao, type Censo } from "./lib/edicoes";
+import { basePath, CENSOS, edicao, rotuloCenso, subtituloCenso, type Censo } from "./lib/edicoes";
 import { EDICOES_SERIE, type NivelSerie } from "./lib/serie";
 import type { Fluxo, Meta, Metrica, Municipio } from "./lib/types";
 import type { UnidadeSerieSel } from "./state/url";
@@ -47,12 +50,6 @@ const PainelUnidade = lazy(() => import("./components/PainelUnidade").then((m) =
 const PainelFluxoUnidade = lazy(() => import("./components/PainelFluxoUnidade").then((m) => ({ default: m.PainelFluxoUnidade })));
 
 const CAMPO_ID: Record<Nivel, string> = { mun: "CD_MUN", rgi: "cd_rgi", rgint: "cd_rgint", uf: "cd_uf" };
-const ROTULO_NIVEL: Record<Nivel, string> = {
-  mun: "Município", rgi: "Reg. imediata", rgint: "Reg. intermediária", uf: "UF",
-};
-const PLACEHOLDER_BUSCA: Record<Nivel, string> = {
-  mun: "Buscar município…", rgi: "Buscar região imediata…", rgint: "Buscar região intermediária…", uf: "Buscar UF…",
-};
 
 /** Arquivo enxuto usado só na primeira pintura do mapa. */
 interface MunicipiosMapa {
@@ -62,14 +59,14 @@ interface MunicipiosMapa {
 }
 import "./styles/tokens.css";
 import "./styles/app.css";
+import { textoDado } from "./i18n/dados";
 
-const METRICAS: { valor: Metrica; rotulo: string }[] = [
-  { valor: "saldo", rotulo: "Saldo" },
-  { valor: "tlm", rotulo: "Taxa líquida" },
-  { valor: "imig", rotulo: "Imigrantes" },
-  { valor: "emig", rotulo: "Emigrantes" },
-  { valor: "iem", rotulo: "Eficácia" },
-];
+/** ordem das métricas no seletor; o rótulo de cada uma vem de `d.app.metricas` */
+const METRICAS: Metrica[] = ["saldo", "tlm", "imig", "emig", "iem"];
+
+/** Mensagem de erro de carga guardada como função do dicionário: assim ela é escrita no idioma
+ *  ativo na hora de exibir, e não no do momento em que a consulta falhou. */
+type MensagemErro = (d: Dicionario) => string;
 
 const CORES_TIPOLOGIA = new Map<string, [number, number, number]>(
   TIPOLOGIA_INTRA_RM.categorias.map((c) => [c.chave, hexParaRgb(c.cor.claro)]));
@@ -98,6 +95,7 @@ interface BaseMunicipal { censo: Censo; malha: FeatureCollection; topo: Topology
 interface MunicipiosDaEdicao { censo: Censo | null; lista: Municipio[]; completo: boolean }
 
 export default function App() {
+  const d = useT();
   const [baseMun, setBaseMun] = useState<BaseMunicipal | null>(null);
   // filtro cruzado mapa <-> diagrama de acordes (nível UF)
   const [ufSobMapa, setUfSobMapa] = useState<string | null>(null);
@@ -113,7 +111,7 @@ export default function App() {
   // Erros POR ORIGEM (chave = qual consulta falhou): cada efeito limpa o seu ao recomeçar e ao
   // dar certo, então uma mensagem nunca sobrevive à troca de edição/nível/seleção que a tornou
   // obsoleta -- e o sucesso de uma consulta não apaga o erro de outra, que continua valendo.
-  const [erros, setErros] = useState<Record<string, string>>({});
+  const [erros, setErros] = useState<Record<string, MensagemErro>>({});
   // "tentar de novo": entra nas dependências de todos os efeitos de dados.
   const [tentativa, setTentativa] = useState(0);
   const [comparativoAberto, setComparativoAberto] = useState(false);
@@ -127,9 +125,9 @@ export default function App() {
   const topoMun = baseMun?.censo === censo ? baseMun.topo : null;
   const municipios = municipiosDe.censo === censo ? municipiosDe.lista : SEM_MUNICIPIOS;
   const meta = metaPorCenso[censo] ?? null;
-  const erro = Object.values(erros)[0] ?? null;
+  const erro = Object.values(erros)[0]?.(d) ?? null;
   const registrarErro = useCallback(
-    (chave: string, mensagem: string) => setErros((e) => ({ ...e, [chave]: mensagem })), []);
+    (chave: string, mensagem: MensagemErro) => setErros((e) => ({ ...e, [chave]: mensagem })), []);
   const limparErro = useCallback((chave: string) => setErros((e) => {
     if (!(chave in e)) return e;
     const resto = { ...e };
@@ -207,7 +205,7 @@ export default function App() {
       const fc = feature(topo, topo.objects[chave]) as unknown as FeatureCollection;
       setMalhaNivel((m) => ({ ...m, [k]: fc }));
       setTopoNivel((t) => ({ ...t, [k]: topo }));
-    }).catch((e) => { if (vivo) registrarErro("malhaNivel", `Falha ao carregar a malha (${n}): ${(e as Error).message}`); });
+    }).catch((e) => { const det = (e as Error).message; if (vivo) registrarErro("malhaNivel", (dic) => dic.app.erros.malhaNivel(n, det)); });
     return () => { vivo = false; };
   }, [nivelEfetivo, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -218,14 +216,14 @@ export default function App() {
     const k = chaveCache(n);
     let vivo = true;
     carregarUnidades(n).then((u) => { if (vivo) setUnidadesNivel((m) => ({ ...m, [k]: u })); })
-      .catch((e) => { if (vivo) registrarErro("unidades", `Falha ao consultar as unidades (${n}): ${(e as Error).message}`); });
+      .catch((e) => { const det = (e as Error).message; if (vivo) registrarErro("unidades", (dic) => dic.app.erros.unidades(n, det)); });
     return () => { vivo = false; };
   }, [nivelEfetivo, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const aoMudarNivel = (n: Nivel) => {
     const limpou = setNivel(n);
     if (limpou) {
-      setAvisoNivel("O recorte por característica só existe no nível município; foi limpo ao trocar de nível.");
+      setAvisoNivel(d.app.avisoNivelRecorte);
       setTimeout(() => setAvisoNivel(null), 6000);
     }
   };
@@ -291,7 +289,7 @@ export default function App() {
     let vivo = true;
     fetch(`${basePath(censo)}meta.json`).then((r) => r.json() as Promise<Meta>).then((m) => {
       if (vivo) setMetaPorCenso((x) => ({ ...x, [censo]: m }));
-    }).catch((e) => { if (vivo) registrarErro("meta", `Falha ao carregar os metadados: ${(e as Error).message}`); });
+    }).catch((e) => { const det = (e as Error).message; if (vivo) registrarErro("meta", (dic) => dic.app.erros.meta(det)); });
     return () => { vivo = false; };
   }, [censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -333,7 +331,8 @@ export default function App() {
         setMunicipiosDe((atual) => (atual.censo === censo && atual.completo ? atual
           : { censo, lista: stub, completo: false }));
       } catch (e) {
-        if (vivo) registrarErro("malha", `Falha ao carregar a malha: ${(e as Error).message}`);
+        const det = (e as Error).message;
+        if (vivo) registrarErro("malha", (dic) => dic.app.erros.malha(det));
       }
     })();
     return () => { vivo = false; };
@@ -351,7 +350,8 @@ export default function App() {
         if (vivo) setMunicipiosDe({ censo, lista: m, completo: true });
       } catch (e) {
         console.error(e);
-        if (vivo) registrarErro("municipios", `Falha ao consultar os dados: ${(e as Error).message}`);
+        const det = (e as Error).message;
+        if (vivo) registrarErro("municipios", (dic) => dic.app.erros.municipios(det));
       }
     })();
     return () => { vivo = false; };
@@ -476,7 +476,7 @@ export default function App() {
       setRmNucleo(muns.find((m) => m.nucleo)?.cd_mun ?? null);
       // F10: enquadramento em metros (Albers).
       setRmFoco(bboxDeCentroides(cent.map((p) => ({ lon: p.x_albers, lat: p.y_albers }))));
-    }).catch((e) => { if (vivo) registrarErro("rm", `Falha ao carregar a RM: ${(e as Error).message}`); });
+    }).catch((e) => { const det = (e as Error).message; if (vivo) registrarErro("rm", (dic) => dic.app.erros.rm(det)); });
     return () => { vivo = false; };
   }, [rm, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -502,20 +502,18 @@ export default function App() {
   const legendaRM = useMemo(() => {
     if (aba === "mig") {
       return {
-        titulo: "Migração dentro da região metropolitana",
-        categorias: TIPOLOGIA_INTRA_RM.categorias.map((c) => ({ rotulo: c.rotulo, cor: c.cor.claro })),
-        nota: "A cor identifica a posição das duas pontas na RM (núcleo ou periferia); a direção é lida pela forma.",
+        titulo: d.app.legendaRM.migTitulo,
+        categorias: tipologiaIntraRM(d).categorias.map((c) => ({ rotulo: c.rotulo, cor: c.cor.claro })),
+        nota: d.app.legendaRM.migNota,
       };
     }
-    const destino = aba === "trab" ? "trabalho" : "estudo";
+    const trabalho = aba === "trab";
     return {
-      titulo: `Deslocamento pendular para ${destino}`,
-      categorias: [{ rotulo: `Residência → ${destino}`, cor: corPaleta(FLUXO_MAPA, escuro) }],
-      nota: cruzar
-        ? "Cor única: todo fluxo vai da residência ao destino. Os fluxos esmaecidos atravessam o limite da RM."
-        : "Cor única: todo fluxo vai da residência ao destino.",
+      titulo: d.app.legendaRM.pendularTitulo(trabalho),
+      categorias: [{ rotulo: d.app.legendaRM.pendularCategoria(trabalho), cor: corPaleta(FLUXO_MAPA, escuro) }],
+      nota: d.app.legendaRM.pendularNota(cruzar),
     };
-  }, [aba, cruzar, escuro]);
+  }, [aba, cruzar, escuro, d]);
 
   /** Volumes dos fluxos carregados, em ordem -- base do slider de tamanho. */
   const volumesFluxo = useMemo(
@@ -599,11 +597,11 @@ export default function App() {
     // o vigente (`vivo`) e desliga o sinal SÓ se vigente -- sem isso, uma consulta cancelada
     // desligava o "carregando" da nova (ou, se a nova era o ramo sem consulta, deixava ligado
     // para sempre).
-    const aplicar = (consulta: Promise<ArcoApp[]>, mensagem: string, rotuloDev?: string) => {
+    const aplicar = (consulta: Promise<ArcoApp[]>, falha: (dic: Dicionario, detalhe: string) => string, rotuloDev?: string) => {
       setCarregandoFluxos(true);
       consulta
         .then((f) => { if (vivo) setArcos(f); })
-        .catch((e) => { if (vivo) registrarErro("fluxos", `${mensagem}: ${(e as Error).message}`); })
+        .catch((e) => { const det = (e as Error).message; if (vivo) registrarErro("fluxos", (dic) => falha(dic, det)); })
         .finally(() => {
           if (!vivo) return;
           setCarregandoFluxos(false);
@@ -624,17 +622,17 @@ export default function App() {
           // listas de maiores fluxos sem direção conhecida (ver MapaAtlas.tsx).
           : pendularDaRM(rm, aba === "trab" ? "pendular_trab" : "pendular_estudo", topNStore, cruzar)
               .then((f) => f.map((x) => ({ ...x, direcao: "saida" as const }))),
-        "Falha ao consultar fluxos da RM", "troca de RM/aba");
+        (dic, det) => dic.app.erros.fluxosRM(det), "troca de RM/aba");
     } else if (nivelEfetivo !== "mun") {
       const n = nivelEfetivo as NivelAgregado;
       aplicar(selecao ? fluxosDaUnidade(n, selecao, topNStore) : maioresFluxosNivel(n, TOP_FLUXOS_NIVEL),
-        `Falha ao consultar fluxos (${n})`, `troca de nível (${n})`);
+        (dic, det) => dic.app.erros.fluxosNivel(n, det), `troca de nível (${n})`);
     } else if (!municipio) {
-      if (municipios.length) aplicar(maioresFluxos(TOP_FLUXOS_MUNICIPIO, filtro), "Falha ao consultar os maiores fluxos");
+      if (municipios.length) aplicar(maioresFluxos(TOP_FLUXOS_MUNICIPIO, filtro), (dic, det) => dic.app.erros.maioresFluxos(det));
       else setCarregandoFluxos(false);
     } else {
       aplicar(filtro ? fluxosPorCategoria(municipio, filtro, topNStore) : fluxosDoMunicipio(municipio, topNStore),
-        "Falha ao consultar fluxos");
+        (dic, det) => dic.app.erros.fluxos(det));
     }
     return () => { vivo = false; };
   }, [municipio, selecao, nivelEfetivo, topNStore, filtro, municipios.length, rm, aba, cruzar, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -651,7 +649,7 @@ export default function App() {
     saldoPorCategoria(filtro)
       .then((linhas) => { if (vivo) setRecorte(new Map(
         linhas.map((l) => [l.cd_mun, { imig: l.imig, emig: l.emig, saldo: l.saldo }]))); })
-      .catch((e) => { if (vivo) registrarErro("recorte", `Falha ao aplicar o recorte: ${(e as Error).message}`); });
+      .catch((e) => { const det = (e as Error).message; if (vivo) registrarErro("recorte", (dic) => dic.app.erros.recorte(det)); });
     return () => { vivo = false; };
   }, [filtro, municipios.length, censo, tentativa]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -762,8 +760,8 @@ export default function App() {
     if (metrica !== "tlm" && metrica !== "iem") return null;
     const valores: ValorMapa[] = nivelEfetivo === "mun" ? municipiosVisiveis : (unidadesAtivas ?? VAZIO);
     if (!valores.some((m) => (metrica === "tlm" ? m.tlm : m.iem) == null)) return null;
-    return recorte && nivelEfetivo === "mun" ? "sem dado publicado para o recorte" : "sem dado";
-  }, [metrica, nivelEfetivo, municipiosVisiveis, unidadesAtivas, recorte]);
+    return recorte && nivelEfetivo === "mun" ? d.app.semDadoRecorte : d.app.semDado;
+  }, [metrica, nivelEfetivo, municipiosVisiveis, unidadesAtivas, recorte, d]);
 
   // F5 (mapa-representação): âncora da escala das espigas, para a legenda mostrar os MESMOS
   // números que o mapa usa (MapaAtlas.tsx calcula isto de novo a partir de `porCodigo`/
@@ -792,7 +790,7 @@ export default function App() {
   const municipioNaoEncontrado = municipios.length > 0 && Boolean(municipio) && !selecionado;
   const unidadeNaoEncontrada = nivelEfetivo !== "mun" && unidadesNivel[chaveCache(nivelEfetivo)] != null
     && Boolean(selecao) && !unidadeSelecionada;
-  const aoSelecionarFluxo = useCallback((o: string, d: string) => selecionarFluxo(o, d), [selecionarFluxo]);
+  const aoSelecionarFluxo = useCallback((o: string, dest: string) => selecionarFluxo(o, dest), [selecionarFluxo]);
 
   // F13: unidade que o atalho "Ver a série completa"/"Ao longo dos censos" leva ao modo censos
   // -- deriva da seleção atual do MAPA (município, unidade agregada ou RM), nunca da URL do
@@ -826,34 +824,34 @@ export default function App() {
   // malha (simplificada a 1%) ainda faz sentido.
   const ZOOM_MAXIMO_MUNICIPIO = -8.25;
   const zoomMaximo = fluxoFoco ? undefined : selecaoFoco && nivelEfetivo === "mun" ? ZOOM_MAXIMO_MUNICIPIO : undefined;
-  const rotuloReenquadrar = fluxoFoco ? "Ver o fluxo"
-    : selecaoFoco ? `Ver ${nivelEfetivo === "mun" ? "o município" : nivelEfetivo === "uf" ? "a UF" : "a região"}`
-    : rm ? "Ver a RM" : "Ver o Brasil";
+  const rotuloReenquadrar = fluxoFoco ? d.app.verFluxo
+    : selecaoFoco ? d.comum.niveis[nivelEfetivo].ver
+    : rm ? d.comum.niveis.rm.ver : d.app.verBrasil;
 
   // F6 leva 2: título da aba reflete a seleção atual, para o histórico e leitores de tela
   useEffect(() => {
-    const base = "Atlas da migração interna";
+    const t = d.app.tituloAba;
     if (modo === "censos") {
-      document.title = "Ao longo dos censos — Atlas da migração interna no Brasil";
+      document.title = t.censos;
       return;
     }
     if (origem && destino) {
-      const o = porCodigo.get(origem)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === origem)?.nome;
-      const d = porCodigo.get(destino)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === destino)?.nome;
-      document.title = o && d ? `${o} → ${d} — ${base}` : base;
+      const nomeOrigem = porCodigo.get(origem)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === origem)?.nome;
+      const nomeDestino = porCodigo.get(destino)?.nm_mun ?? (unidadesAtivas ?? []).find((u) => u.codigo === destino)?.nome;
+      document.title = nomeOrigem && nomeDestino ? t.fluxo(nomeOrigem, nomeDestino) : t.base;
     } else if (selecionado) {
-      document.title = `${selecionado.nm_mun}/${selecionado.uf_sigla} — ${base}`;
+      document.title = t.comNome(`${selecionado.nm_mun}/${selecionado.uf_sigla}`);
     } else if (unidadeSelecionada) {
-      document.title = `${unidadeSelecionada.nome} — ${base}`;
+      document.title = t.comNome(unidadeSelecionada.nome);
     } else if (rm) {
       const nomeRM = rmsCabecalho.find((r) => r.cd_rm === rm)?.nm_rm;
-      document.title = nomeRM ? `${nomeRM} — ${base}` : base;
+      document.title = nomeRM ? t.comNome(nomeRM) : t.base;
     } else {
-      document.title = base;
+      document.title = t.base;
     }
-  }, [modo, origem, destino, selecionado, unidadeSelecionada, rm, rmsCabecalho, porCodigo, unidadesAtivas]);
+  }, [modo, origem, destino, selecionado, unidadeSelecionada, rm, rmsCabecalho, porCodigo, unidadesAtivas, d]);
 
-  const fallbackPainel = <aside className="painel"><p className="muted">Carregando…</p></aside>;
+  const fallbackPainel = <aside className="painel"><p className="muted">{d.comum.ui.carregando}</p></aside>;
 
   const painelDireita = rm ? (
     origem && destino ? (
@@ -914,76 +912,77 @@ export default function App() {
   // F6 leva 2: descrição textual do mapa para quem não enxerga o canvas do deck.gl --
   // os mesmos números já estão nas tabelas do painel ao lado.
   const descricaoMapa = rm
-    ? "Mapa da região metropolitana selecionada, com destaque para o núcleo e a periferia."
-    : `Mapa coroplético do Brasil por ${nivelEfetivo === "mun" ? "município" : ROTULO_NIVEL[nivelEfetivo].toLowerCase()}, colorido pela métrica "${METRICAS.find((m) => m.valor === metrica)?.rotulo}", com arcos indicando os principais fluxos migratórios.`;
+    ? d.app.descricaoMapa.rm
+    : d.app.descricaoMapa.nacional(d.comum.niveis[nivelEfetivo].curto, d.app.metricas[metrica]);
 
   return (
     <div className="app">
-      <a className="pular-conteudo" href="#conteudo-principal">Pular para o conteúdo</a>
+      <a className="pular-conteudo" href="#conteudo-principal">{d.app.pularConteudo}</a>
 
       <header className="cabecalho">
         <div className="cabecalho-linha1">
           <div className="marca">
-            <h1>Atlas da migração interna no Brasil</h1>
+            <h1>{d.app.titulo}</h1>
             {modo === "censos" ? (
-              <span className="muted marca-subtitulo-completo"> · Ao longo dos censos, 1980–2022</span>
+              <span className="muted marca-subtitulo-completo"> · {d.app.cabecalho.subtituloCensos}</span>
             ) : (
               <>
-                <span className="muted marca-subtitulo-completo"> · {edicao(censo).subtitulo}</span>
-                <span className="muted marca-subtitulo-curto"> · {edicao(censo).rotulo}</span>
+                <span className="muted marca-subtitulo-completo"> · {subtituloCenso(censo, d)}</span>
+                <span className="muted marca-subtitulo-curto"> · {rotuloCenso(censo, d)}</span>
               </>
             )}
           </div>
           <div className="utilidades">
             {modo === "mapa" && CENSOS.length > 1 && (
-              <div className="segmentado segmentado-censo" role="group" aria-label="Edição do Censo">
+              <div className="segmentado segmentado-censo" role="group" aria-label={d.app.cabecalho.edicaoCenso}>
                 {CENSOS.map((c) => (
                   <button key={c} className={censo === c ? "ativo" : ""} aria-pressed={censo === c}
                           onClick={() => setCenso(c)}>
-                    {edicao(c).rotulo}
+                    {rotuloCenso(c, d)}
                   </button>
                 ))}
               </div>
             )}
-            <button className="link-util" onClick={abrirMetodologia}>Metodologia</button>
-            <button className="link-util" onClick={() => setMostrarTour(true)}>Como usar</button>
+            <button className="link-util" onClick={abrirMetodologia}>{d.app.cabecalho.metodologia}</button>
+            <button className="link-util" onClick={() => setMostrarTour(true)}>{d.app.cabecalho.comoUsar}</button>
+            <SeletorIdioma />
             <button className="tema" onClick={() => setTema(escuro ? "claro" : "escuro")}
-                    aria-label={escuro ? "Mudar para tema claro" : "Mudar para tema escuro"}>
+                    aria-label={escuro ? d.app.cabecalho.mudarParaClaro : d.app.cabecalho.mudarParaEscuro}>
               {escuro ? "☀" : "☾"}
             </button>
           </div>
         </div>
 
         <div className="cabecalho-linha2">
-          <div className="barra-ferramentas" role="toolbar" aria-label="Modo e nível do mapa">
-            <div className="segmentado" role="group" aria-label="Modo do atlas" data-tour="modo-rm">
+          <div className="barra-ferramentas" role="toolbar" aria-label={d.app.barra.modoENivel}>
+            <div className="segmentado" role="group" aria-label={d.app.barra.modoAtlas} data-tour="modo-rm">
               <button className={modo === "mapa" && !rm && !pedindoRM ? "ativo" : ""}
                       aria-pressed={modo === "mapa" && !rm && !pedindoRM}
                       onClick={() => { setPedindoRM(false); sairModoRM(); setModo("mapa"); }}>
-                Brasil
+                {d.app.barra.brasil}
               </button>
               {recursos.rm && (
                 <button className={modo === "mapa" && (Boolean(rm) || pedindoRM) ? "ativo" : ""}
                         aria-pressed={modo === "mapa" && (Boolean(rm) || pedindoRM)}
                         onClick={() => { setModo("mapa"); setPedindoRM(true); }}>
-                  Regiões metropolitanas
+                  {d.app.barra.regioesMetropolitanas}
                 </button>
               )}
               <button className={modo === "censos" ? "ativo" : ""} aria-pressed={modo === "censos"}
                       data-tour="modo-censos"
                       onClick={() => { setPedindoRM(false); entrarModoCensos(unidadeDaSelecao ?? unidadeSerie); }}>
-                Ao longo dos censos
+                {d.app.barra.aoLongoDosCensos}
               </button>
             </div>
             {modo === "mapa" && recursos.rm && (pedindoRM || rm) && (
               <SeletorRM rms={rmsCabecalho} ativa={rm} aoEscolher={(cd) => { setPedindoRM(false); entrarModoRM(cd); }} />
             )}
             {modo === "mapa" && !rm && (
-              <div className="segmentado" role="group" aria-label="Nível de agregação">
+              <div className="segmentado" role="group" aria-label={d.app.barra.nivelAgregacao}>
                 {(["mun", "rgi", "rgint", "uf"] as Nivel[]).map((n) => (
                   <button key={n} className={nivel === n ? "ativo" : ""} aria-pressed={nivel === n}
                           onClick={() => aoMudarNivel(n)}>
-                    {ROTULO_NIVEL[n]}
+                    {d.comum.niveis[n].curto}
                   </button>
                 ))}
               </div>
@@ -991,7 +990,7 @@ export default function App() {
             {modo === "mapa" && !rm && (
               <button type="button" className="botao-filtros" onClick={() => setFiltrosAbertos(true)}
                       aria-haspopup="dialog" aria-expanded={filtrosAbertos} aria-controls="folha-filtros">
-                Filtros{filtro ? " •" : ""}
+                {d.app.barra.filtros(Boolean(filtro))}
               </button>
             )}
           </div>
@@ -1001,22 +1000,22 @@ export default function App() {
               <div className={`filtros-backdrop${filtrosAbertos ? " aberto" : ""}`}
                    onClick={() => setFiltrosAbertos(false)} aria-hidden="true" />
               <div id="folha-filtros" className={`grupo-filtros${filtrosAbertos ? " aberto" : ""}`}
-                   role="dialog" aria-modal="true" aria-label="Filtros do mapa">
+                   role="dialog" aria-modal="true" aria-label={d.app.barra.filtrosDoMapa}>
                 <button type="button" className="filtros-fechar" onClick={() => setFiltrosAbertos(false)}>
-                  Fechar
+                  {d.app.barra.fechar}
                 </button>
                 <div className="separador-controle" aria-hidden="true" />
                 <div data-tour="busca">
-                  <Busca itens={itensBusca} placeholder={PLACEHOLDER_BUSCA[nivelEfetivo]}
+                  <Busca itens={itensBusca} placeholder={d.app.placeholderBusca[nivelEfetivo]}
                          aoEscolher={(cd) => { aoSelecionarNoMapa(cd); setFiltrosAbertos(false); }} />
                 </div>
                 {nivelEfetivo === "mun" && <Filtro valor={filtro} aoMudar={setFiltro} escuro={escuro} />}
                 <div className="separador-controle" aria-hidden="true" />
-                <div className="segmentado" role="group" aria-label="Métrica do mapa" data-tour="metrica">
+                <div className="segmentado" role="group" aria-label={d.app.barra.metricaDoMapa} data-tour="metrica">
                   {METRICAS.map((m) => (
-                    <button key={m.valor} className={metrica === m.valor ? "ativo" : ""}
-                            aria-pressed={metrica === m.valor} onClick={() => setMetrica(m.valor)}>
-                      {m.rotulo}
+                    <button key={m} className={metrica === m ? "ativo" : ""}
+                            aria-pressed={metrica === m} onClick={() => setMetrica(m)}>
+                      {d.app.metricas[m]}
                     </button>
                   ))}
                 </div>
@@ -1036,11 +1035,11 @@ export default function App() {
       ) : (
       <main className="conteudo" id="conteudo-principal">
         <div className="mapa" data-tour="mapa">
-          {!malhaAtiva && !erro && <div className="carregando">Carregando o mapa…</div>}
+          {!malhaAtiva && !erro && <div className="carregando">{d.comum.ui.carregandoMapa}</div>}
           {erro && (
             <div className="erro" role="alert">
               {erro}{" "}
-              <button type="button" className="link-metodologia" onClick={tentarDeNovo}>tentar de novo</button>
+              <button type="button" className="link-metodologia" onClick={tentarDeNovo}>{d.app.erros.tentarDeNovo}</button>
             </div>
           )}
           <MapaAtlas
@@ -1059,11 +1058,11 @@ export default function App() {
             <div className="mapa-controles-linha">
               <button type="button" className="botao-fluxos" aria-pressed={mostrarFluxos}
                       onClick={() => setMostrarFluxos(!mostrarFluxos)}>
-                {mostrarFluxos ? "Fluxos: ligados" : "Fluxos: desligados"}
+                {d.app.mapa.fluxos(mostrarFluxos)}
               </button>
               <button type="button" className="botao-fluxos" aria-pressed={mostrarSatelite}
                       onClick={() => setMostrarSatelite(!mostrarSatelite)}>
-                {mostrarSatelite ? "Satélite: ligado" : "Satélite: desligado"}
+                {d.app.mapa.satelite(mostrarSatelite)}
               </button>
             </div>
             {/* Filtro de TAMANHO dos fluxos. Só aparece quando há fluxos desenhados e mais de
@@ -1074,27 +1073,25 @@ export default function App() {
                 compreensível mesmo com a distribuição bem assimétrica dos volumes. */}
             {mostrarFluxos && faixaFluxos && faixaFluxos.max > faixaFluxos.min && (
               <div className="filtro-fluxo">
-                <label htmlFor="filtro-fluxo-slider">Tamanho mínimo do fluxo</label>
+                <label htmlFor="filtro-fluxo-slider">{d.app.mapa.tamanhoMinimoFluxo}</label>
                 <input id="filtro-fluxo-slider" type="range" min={0} max={1} step={0.01}
                        value={limiarFluxo}
                        onChange={(e) => setLimiarFluxo(Number(e.target.value))}
-                       aria-valuetext={`a partir de ${num(Math.round(corteFluxo))} pessoas, `
-                         + `${arcosVisiveis.length} de ${arcos.length} fluxos`} />
+                       aria-valuetext={d.app.mapa.corteAria(num(Math.round(corteFluxo)),
+                         num(arcosVisiveis.length), num(arcos.length))} />
                 <span className="filtro-fluxo-valor">
-                  a partir de <strong>{num(Math.round(corteFluxo))}</strong> pessoas
-                  {" "}· {num(arcosVisiveis.length)} de {num(arcos.length)} fluxos
+                  <TextoRico texto={d.app.mapa.corteVisivel(num(Math.round(corteFluxo)),
+                    num(arcosVisiveis.length), num(arcos.length))} />
                 </span>
               </div>
             )}
             {mostrarSatelite && (
-              <p className="atribuicao-satelite">
-                Imagem de satélite: NASA Visible Earth, Blue Marble.
-              </p>
+              <p className="atribuicao-satelite">{d.app.mapa.atribuicaoSatelite}</p>
             )}
             {porCodigoAtivo.size > 0 && !rm && (
               <Legenda metrica={metrica} quebras={quebras} escuro={escuro} maiorFluxo={ancoraFluxos}
                        maiorAbsolutoMetrica={maiorAbsolutoMetrica}
-                       notaNivel={nivelEfetivo !== "mun" ? ROTULO_NIVEL[nivelEfetivo] : undefined}
+                       notaNivel={nivelEfetivo !== "mun" ? d.comum.niveis[nivelEfetivo].curto : undefined}
                        fluxosLigados={mostrarFluxos} semDado={rotuloSemDado}
                        menorFluxo={menorFluxoExibido}
                        escopoFluxos={municipio || selecao ? "selecao" : "pais"}
@@ -1119,12 +1116,12 @@ export default function App() {
 
       {meta && (
         <footer className="rodape">
-          <p>{meta.aviso} Dados {modo === "censos" ? "dos Censos Demográficos 1980–2022" : `de ${meta.versao_dados}`}. <button className="link-metodologia" onClick={abrirMetodologia}>Metodologia</button></p>
+          <p>{textoDado(`aviso.${meta.edicao}`, meta.aviso)} {modo === "censos" ? d.app.rodape.dadosCensos : d.app.rodape.dadosDe(meta.versao_dados)} <button className="link-metodologia" onClick={abrirMetodologia}>{d.app.rodape.metodologia}</button></p>
           {meta.citacao && (
             <p className="rodape-citacao">
-              Como citar: {meta.citacao.autor} <em>(<a href={meta.citacao.autor_orcid}>ORCID</a>)</em>.
-              Atlas da migração interna no Brasil. Dados do Censo Demográfico {edicao(censo).nome} (IBGE).
-              DOI:{" "}
+              {d.app.rodape.comoCitar} {meta.citacao.autor} <em>(<a href={meta.citacao.autor_orcid}>{d.app.rodape.orcid}</a>)</em>.
+              {" "}{d.app.rodape.citacaoAtlas(edicao(censo).nome)}
+              {" "}{d.app.rodape.doi}{" "}
               <a href={`https://doi.org/${meta.citacao.doi_conceito}`}>{meta.citacao.doi_conceito}</a>.
             </p>
           )}

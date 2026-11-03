@@ -76,3 +76,4 @@ Duas convenções convivem no repo:
 - Códigos de município/UF sempre como `VARCHAR` com zero-padding (7 e 2 dígitos) — nunca `INTEGER` (perde zeros à esquerda).
 - Toda tabela de saída em `data/processed` inclui `n` (contagem amostral não ponderada) e, quando aplicável, `se`/`cv`.
 - Web: TypeScript estrito, componentes funcionais, estado da seleção (`origem`, `destino`, `metrica`, `nivel`, `filtros`) refletido na URL.
+- Web em quatro idiomas (pt-BR referência, en, fr, es; `?lang=`): nenhum texto visível fica no componente — vai para `web/src/i18n/pt/<namespace>.ts` **e** para `en/`, `fr/`, `es/`, seguindo `web/src/i18n/LEIAME.md` e `web/src/i18n/TERMINOLOGIA.md`. Prosa nova em `meta.json`/`comparabilidade.json` exige entrada em `web/src/i18n/dados.json`; o glossário mora em `web/src/i18n/glossario/<lang>.json` (lido também por `pipeline/build_paginas.py`).

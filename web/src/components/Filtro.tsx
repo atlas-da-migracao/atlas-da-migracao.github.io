@@ -1,7 +1,8 @@
 /** Filtro por característica do migrante.
  *  Recorta mapa, arcos e tabelas a um subgrupo -- por exemplo, só quem tem superior
  *  completo, ou só quem voltou ao município natal. */
-import { CATEGORIAS_OCULTAS_NO_RECORTE, DIMENSOES, type NomeDimensao, cor } from "../lib/paletas";
+import { CATEGORIAS_OCULTAS_NO_RECORTE, DIMENSOES, dimensao, type NomeDimensao, cor } from "../lib/paletas";
+import { useT } from "../i18n";
 import { edicao } from "../lib/edicoes";
 import { useStore } from "../state/store";
 
@@ -15,6 +16,7 @@ export function Filtro({ valor, aoMudar, escuro }: {
 }) {
   // "status" é a única dimensão cujo vocabulário difere por edição (ver docs/METODOLOGIA.md,
   // "Edição Censo 2010 e comparabilidade") -- as demais categorias existem em todas.
+  const d = useT();
   const censo = useStore((s) => s.censo);
   const ed = edicao(censo);
   const statusValidos = new Set(ed.statusCategorias);
@@ -28,24 +30,27 @@ export function Filtro({ valor, aoMudar, escuro }: {
 
   return (
     <div className="filtro">
-      <label htmlFor="filtro-sel">Recorte:</label>
+      <label htmlFor="filtro-sel">{d.controles.filtro.rotulo}</label>
       <select id="filtro-sel" value={valor ?? ""} onChange={(e) => aoMudar(e.target.value || null)}>
-        <option value="">Todos os migrantes</option>
-        {dimensoesAtivas.map((dim) => (
-          <optgroup key={dim} label={DIMENSOES[dim].titulo}>
-            {DIMENSOES[dim].categorias
+        <option value="">{d.controles.filtro.todos}</option>
+        {dimensoesAtivas.map((dim) => {
+          const dimLocal = dimensao(dim, d);
+          return (
+          <optgroup key={dim} label={dimLocal.titulo}>
+            {dimLocal.categorias
               .filter((c) => !OCULTAS.has(c.chave))
               .filter((c) => dim !== "status" || statusValidos.has(c.chave))
               .map((c) => (
                 <option key={c.chave} value={`${dim}__${c.chave}`}>{c.rotulo}</option>
               ))}
           </optgroup>
-        ))}
+          );
+        })}
       </select>
       {atual && (
         <span className="filtro-marca">
           <span className="amostra pequena" style={{ background: cor(atual.cor, escuro) }} />
-          <button onClick={() => aoMudar(null)} aria-label="Limpar recorte">limpar</button>
+          <button onClick={() => aoMudar(null)} aria-label={d.controles.filtro.limparAria}>{d.controles.filtro.limpar}</button>
         </span>
       )}
     </div>

@@ -51,6 +51,11 @@
    sozinho já é mais largo que a viewport). Em vez de quebrar o "pill" em duas linhas (feio
    num controle segmentado), deixamos ele rolar horizontalmente dentro do próprio limite. */
 .segmentado-censo { max-width: 100%; min-width: 0; overflow-x: auto; }
+/* i18n: em en/fr/es os rótulos dos outros segmentados (nível, modo, abas) ficam bem mais
+   largos que em PT ("State (UF)", "Régions métropolitaines", "Au fil des recensements"); a
+   mesma regra vale para todos, senão o último botão é cortado por `overflow: hidden` sem aviso
+   nas larguras intermediárias. */
+.segmentado { max-width: 100%; min-width: 0; overflow-x: auto; }
 .segmentado button {
   padding: 5px 11px; background: transparent; border: 0; cursor: pointer;
   color: var(--ink-secondary); font-size: 13px; white-space: nowrap;
@@ -58,6 +63,7 @@
 .segmentado button + button { border-left: 1px solid var(--border); }
 .segmentado button:hover { background: var(--plane); }
 .segmentado button.ativo { background: var(--acento-ativo); color: #fff; }
+.segmentado-idioma button { padding: 5px 8px; font-size: 12px; letter-spacing: 0.02em; }
 .tema { background: transparent; border: 1px solid var(--border); border-radius: var(--radius);
         width: 30px; height: 28px; cursor: pointer; }
 .como-usar { background: transparent; border: 1px solid var(--border); border-radius: var(--radius);

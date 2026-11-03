@@ -1,5 +1,6 @@
 /** Tooltip explicativo reutilizável: envolve um rótulo já existente com um botão "ⓘ" que abre
- *  um popover com a definição/interpretação/limitações do termo, lidas de `lib/glossario.ts`.
+ *  um popover com a definição/interpretação/limitações do termo, lidas do glossário do idioma
+ *  ativo (`i18n/glossario/<lang>.json`, via `termo(chave, d)` de `lib/glossario.ts`).
  *
  *  Abre ao clicar OU focar o botão (não só hover -- precisa funcionar em touch e teclado);
  *  fecha com Escape, clique fora, ou blur do botão (a menos que o foco tenha ido para dentro
@@ -10,11 +11,12 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { termo } from "../lib/glossario";
+import { useT } from "../i18n";
 
 const MARGEM_VIEWPORT = 8;
 
 interface Props {
-  /** Chave de `GLOSSARIO`. Se não existir, renderiza só `children`, sem o ícone. */
+  /** Chave do glossário (`ChaveGlossario`). Se não existir, renderiza só `children`, sem o ícone. */
   chave: string;
   /** Rótulo visível (o texto do KPI/coluna/label) -- nunca alterado pelo componente. Opcional
    *  para o caso de o ícone precisar ficar como irmão de outro elemento clicável (nunca dentro
@@ -25,7 +27,8 @@ interface Props {
 }
 
 export function Termo({ chave, children, className }: Props) {
-  const def = termo(chave);
+  const d = useT();
+  const def = termo(chave, d);
   const [aberto, setAberto] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const botaoRef = useRef<HTMLButtonElement>(null);
@@ -34,7 +37,7 @@ export function Termo({ chave, children, className }: Props) {
   useLayoutEffect(() => {
     if (!def && chave) {
       // eslint-disable-next-line no-console
-      console.warn(`Termo: chave "${chave}" não existe em GLOSSARIO`);
+      console.warn(`Termo: chave "${chave}" não existe no glossário`);
     }
   }, [def, chave]);
 
@@ -110,7 +113,7 @@ export function Termo({ chave, children, className }: Props) {
         ref={botaoRef}
         type="button"
         className="termo-botao"
-        aria-label={`O que é ${def.termo}`}
+        aria-label={d.comum.glossarioUi.ariaOQueE(def.termo)}
         aria-expanded={aberto}
         // onClick e onFocus both abrem (nunca fecham): um clique dispara focus + click em
         // sequência (dois eventos distintos, não plotados no mesmo batch do React), e um
@@ -136,16 +139,16 @@ export function Termo({ chave, children, className }: Props) {
         >
           <div id={tituloId} className="termo-popover-titulo">{def.termo}</div>
           <div className="termo-popover-secao">
-            <strong>O que é</strong>
+            <strong>{d.comum.glossarioUi.oQueE}</strong>
             <p>{def.definicao}</p>
           </div>
           <div className="termo-popover-secao">
-            <strong>Como interpretar</strong>
+            <strong>{d.comum.glossarioUi.comoInterpretar}</strong>
             <p>{def.interpretacao}</p>
           </div>
           {def.limitacoes && (
             <div className="termo-popover-secao">
-              <strong>Limitações</strong>
+              <strong>{d.comum.glossarioUi.limitacoes}</strong>
               <p>{def.limitacoes}</p>
             </div>
           )}

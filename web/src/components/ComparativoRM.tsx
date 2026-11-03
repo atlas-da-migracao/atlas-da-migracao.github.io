@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import type { ResumoRM } from "../db/queries";
 import { edicao, type Censo } from "../lib/edicoes";
 import { num, num1, sinal } from "../lib/format";
+import { useT } from "../i18n";
 import { Termo } from "./Termo";
 
 interface Props {
@@ -18,16 +19,18 @@ interface Props {
 
 type Coluna = "pop" | "mig_intra" | "saldo_externo" | "pct_pendular" | "tempo_mediano" | "pct_coletivo";
 
-const TODAS_COLUNAS: { chave: Coluna; rotulo: string; glossario?: string }[] = [
-  { chave: "pop", rotulo: "População" },
-  { chave: "mig_intra", rotulo: "Migração intra-RM", glossario: "rm_migracao_intra" },
-  { chave: "saldo_externo", rotulo: "Saldo externo", glossario: "rm_saldo_externo" },
-  { chave: "pct_pendular", rotulo: "% pendular", glossario: "pendular_taxa_saida" },
-  { chave: "tempo_mediano", rotulo: "Tempo mediano", glossario: "pendular_tempo_mediano" },
-  { chave: "pct_coletivo", rotulo: "% coletivo", glossario: "pendular_pct_coletivo" },
+/** o rótulo de cada coluna mora em `d.rm.comparativo.colunas[chave]` */
+const TODAS_COLUNAS: { chave: Coluna; glossario?: string }[] = [
+  { chave: "pop" },
+  { chave: "mig_intra", glossario: "rm_migracao_intra" },
+  { chave: "saldo_externo", glossario: "rm_saldo_externo" },
+  { chave: "pct_pendular", glossario: "pendular_taxa_saida" },
+  { chave: "tempo_mediano", glossario: "pendular_tempo_mediano" },
+  { chave: "pct_coletivo", glossario: "pendular_pct_coletivo" },
 ];
 
 export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
+  const d = useT();
   const recursos = edicao(censo).recursos;
   const COLUNAS = TODAS_COLUNAS.filter((c) =>
     (c.chave !== "pct_pendular" || recursos.pendular) &&
@@ -58,11 +61,11 @@ export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
         <table className="tabela-comparativo">
           <thead>
             <tr>
-              <th>Região metropolitana</th>
+              <th>{d.comum.niveis.rm.titulo}</th>
               {COLUNAS.map((c) => (
                 <th key={c.chave}>
                   <button className="th-ordenar" onClick={() => alternarOrdem(c.chave)}>
-                    {c.rotulo}{ordem.col === c.chave ? (ordem.dir === 1 ? " ↑" : " ↓") : ""}
+                    {d.rm.comparativo.colunas[c.chave]}{ordem.col === c.chave ? (ordem.dir === 1 ? " ↑" : " ↓") : ""}
                   </button>
                   {/* Termo/ⓘ como irmão do botão de ordenar, nunca dentro dele -- <button>
                       dentro de <button> não é HTML válido. */}
@@ -76,13 +79,13 @@ export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
               <tr key={r.cd_rm} className={r.cd_rm === ativa ? "ativa" : ""}
                   onClick={() => aoEscolher(r.cd_rm)}
                   tabIndex={0} role="button" aria-pressed={r.cd_rm === ativa}
-                  aria-label={`Ver ${r.nm_rm}`}
+                  aria-label={d.rm.comparativo.ver(r.nm_rm)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); aoEscolher(r.cd_rm); }
                   }}>
                 <td>
                   <strong>{r.nm_rm}</strong>
-                  <span className="muted-pequeno"> · {r.nm_nucleo} · {r.n_municipios} mun.</span>
+                  <span className="muted-pequeno"> · {r.nm_nucleo} · {d.rm.comparativo.nMunicipios(r.n_municipios)}</span>
                 </td>
                 <td className="valor-cel">{num(r.pop)}</td>
                 <td className="valor-cel">{num(r.mig_intra)}</td>
@@ -98,18 +101,18 @@ export function ComparativoRM({ rms, ativa, censo, aoEscolher }: Props) {
                     <div className="barra-embutida">
                       <span style={{ width: `${((r.pct_pendular ?? 0) / maxPendular) * 100}%` }} />
                     </div>
-                    <span className="valor-inline">{r.pct_pendular != null ? `${num1(r.pct_pendular)}%` : "—"}</span>
+                    <span className="valor-inline">{r.pct_pendular != null ? d.rm.pct(num1(r.pct_pendular)) : "—"}</span>
                   </td>
                 )}
                 {recursos.tempoMinutos && (
-                  <td className="valor-cel">{r.tempo_mediano != null ? `${num(r.tempo_mediano)} min` : "—"}</td>
+                  <td className="valor-cel">{r.tempo_mediano != null ? d.rm.min(num(r.tempo_mediano)) : "—"}</td>
                 )}
                 {recursos.modo && (
                   <td className="barra-cel-comp">
                     <div className="barra-embutida">
                       <span style={{ width: `${((r.pct_coletivo ?? 0) / maxColetivo) * 100}%` }} />
                     </div>
-                    <span className="valor-inline">{r.pct_coletivo != null ? `${num1(r.pct_coletivo)}%` : "—"}</span>
+                    <span className="valor-inline">{r.pct_coletivo != null ? d.rm.pct(num1(r.pct_coletivo)) : "—"}</span>
                   </td>
                 )}
               </tr>

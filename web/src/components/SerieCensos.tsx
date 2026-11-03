@@ -10,22 +10,22 @@
  *  comparativo do Bloco 1 em `MapaSerieCensos.tsx`; aqui ficam as tabelas, a frase e os Blocos 3-4.
  */
 import { useEffect, useState } from "react";
-import { GLOSSARIO } from "../lib/glossario";
+import { useT } from "../i18n";
 import { Termo } from "./Termo";
 import {
   serieDaUnidade, serieDosPares, serieDoSistema, serieFilhosDoMunicipio, seriePerfil,
 } from "../db/queries";
 import {
   carregarComparabilidade, edicaoAnterior, estadoDaCelula, filhosNoIntervalo, filtrarEdicoes,
-  formatarIem, fraseSintese, geometriaSpark, maeDaSerie, normalizarLinhaUnidade,
-  ordenarPorPostoRecente, perfilStatusDaEdicao, pontosDaSerie, ressalvasDoBloco, ROTULO_NIVEL_PLURAL, rotuloEdicao,
-  rotuloIntervalo, tipoFluxoPredominante, tramaDoEstado, PALAVRA_ESTADO,
+  formatarIem, fraseSintese, geometriaSpark, maeDaSerie, normalizarLinhaUnidade, notaComparabilidade,
+  ordenarPorPostoRecente, palavraEstado, perfilStatusDaEdicao, pontosDaSerie, ressalvasDoBloco,
+  rotuloEdicao, rotuloIntervalo, tipoFluxoPredominante, tramaDoEstado,
   type Comparabilidade, type EdicaoSerie, type EntradaFrase, type EstadoCelula,
   type FilhoMunicipio, type NivelSerie,
 } from "../lib/serie";
 import { num, num1, num2, sinal, sinal1 } from "../lib/format";
 import { BarraPerfil, type SeriePerfil } from "./BarraPerfil";
-import { DIMENSOES } from "../lib/paletas";
+import { dimensao } from "../lib/paletas";
 import { MapaSerieCensos } from "./MapaSerieCensos";
 import { GraficosSistema } from "./GraficosSistema";
 
@@ -38,10 +38,6 @@ const CHAVES_GLOSSARIO_SERIE = [
   "status_migratorio", "escolaridade", "renda_domiciliar", "idade_sexo",
 ] as const;
 
-
-export const ROTULO_NIVEL: Record<NivelSerie, string> = {
-  mun: "município", rgi: "região imediata", rgint: "região intermediária", uf: "UF", rm: "região metropolitana",
-};
 
 interface LinhaUnidadeSerie {
   edicao: EdicaoSerie;
@@ -69,8 +65,9 @@ function estadoDoPonto(l: LinhaUnidadeSerie | undefined): EstadoCelula {
 interface RessalvaCelula { estado: "comparavel_com_ressalva" | "nao_comparavel"; texto: string }
 
 function MarcaRessalva({ texto }: { texto: string }) {
+  const d = useT();
   return (
-    <span role="img" aria-label={`Ressalva: ${texto}`} title={texto}
+    <span role="img" aria-label={d.serie.celula.ariaRessalva(texto)} title={texto}
           style={{ cursor: "help", marginLeft: 3, fontSize: "0.85em", color: "var(--ink-muted-texto)" }}>
       ⓘ
     </span>
@@ -92,19 +89,20 @@ function Celula({ valor, estado, formatar, ressalva }: {
   valor: number | null; estado: EstadoCelula; formatar: (v: number) => string;
   ressalva?: RessalvaCelula | null;
 }) {
+  const d = useT();
   if (estado === "numero" && ressalva?.estado === "nao_comparavel") {
-    return <td className="serie-celula-vazia" title={ressalva.texto}>{PALAVRA_ESTADO.nao_comparavel}</td>;
+    return <td className="serie-celula-vazia" title={ressalva.texto}>{palavraEstado("nao_comparavel", d)}</td>;
   }
   if (estado === "numero" && valor == null) {
-    return <td className="serie-celula-vazia trama-cruzada" title="Não foi possível calcular esta medida para esta unidade/edição.">
-      não publicado
+    return <td className="serie-celula-vazia trama-cruzada" title={d.serie.celula.naoCalculavel}>
+      {d.serie.celula.naoPublicado}
     </td>;
   }
   if (estado !== "numero" || valor == null) {
     const trama = tramaDoEstado(estado);
     return (
       <td className={`serie-celula-vazia${trama ? ` trama-${trama}` : ""}`}>
-        {PALAVRA_ESTADO[estado]}
+        {palavraEstado(estado, d)}
       </td>
     );
   }
@@ -143,8 +141,9 @@ function LinhaSpark({ valores, edicoes }: { valores: (number | null)[]; edicoes:
 }
 
 interface MedidaTabela {
-  chave: string;
-  rotulo: string;
+  /** Também a chave do nome da medida em `d.serie.medidas`. */
+  chave: "tlm" | "iem" | "tbi" | "tbe" | "imig" | "emig" | "saldo" | "turnover" | "distancia_media"
+    | "pct_interestadual" | "gini_linha";
   unidade: string;
   campo: keyof LinhaUnidadeSerie;
   formatar: (v: number) => string;
@@ -156,30 +155,31 @@ interface MedidaTabela {
 }
 
 const MEDIDAS_BLOCO1: MedidaTabela[] = [
-  { chave: "tlm", rotulo: "Taxa líquida de migração", unidade: "‰", campo: "tlm", formatar: (v) => `${sinal1(v)}‰`, glossario: "taxa_liquida", medidaComp: "tlm" },
-  { chave: "iem", rotulo: "Índice de eficácia migratória", unidade: "", campo: "iem", formatar: formatarIem, glossario: "eficacia_iem", medidaComp: "iem" },
-  { chave: "tbi", rotulo: "Taxa bruta de imigração", unidade: "‰", campo: "tbi", formatar: num1, medidaComp: "tbi" },
-  { chave: "tbe", rotulo: "Taxa bruta de emigração", unidade: "‰", campo: "tbe", formatar: num1, medidaComp: "tbe" },
-  { chave: "imig", rotulo: "Imigrantes", unidade: "", campo: "imig", formatar: num, glossario: "imigrantes", medidaComp: "imig" },
-  { chave: "emig", rotulo: "Emigrantes", unidade: "", campo: "emig", formatar: num, glossario: "emigrantes", medidaComp: "emig" },
-  { chave: "saldo", rotulo: "Saldo", unidade: "", campo: "saldo", formatar: sinal, glossario: "saldo", medidaComp: "saldo" },
-  { chave: "turnover", rotulo: "Rotatividade (entr.+saíd.)", unidade: "", campo: "turnover", formatar: num, glossario: "rotatividade", medidaComp: "rotatividade" },
+  { chave: "tlm", unidade: "‰", campo: "tlm", formatar: (v) => `${sinal1(v)}‰`, glossario: "taxa_liquida", medidaComp: "tlm" },
+  { chave: "iem", unidade: "", campo: "iem", formatar: formatarIem, glossario: "eficacia_iem", medidaComp: "iem" },
+  { chave: "tbi", unidade: "‰", campo: "tbi", formatar: num1, medidaComp: "tbi" },
+  { chave: "tbe", unidade: "‰", campo: "tbe", formatar: num1, medidaComp: "tbe" },
+  { chave: "imig", unidade: "", campo: "imig", formatar: num, glossario: "imigrantes", medidaComp: "imig" },
+  { chave: "emig", unidade: "", campo: "emig", formatar: num, glossario: "emigrantes", medidaComp: "emig" },
+  { chave: "saldo", unidade: "", campo: "saldo", formatar: sinal, glossario: "saldo", medidaComp: "saldo" },
+  { chave: "turnover", unidade: "", campo: "turnover", formatar: num, glossario: "rotatividade", medidaComp: "rotatividade" },
   // `distancia_media`/`distancia_mediana` são gravadas em METROS (distância euclidiana em Albers
   // -- ver pipeline/medidas.py::distancia_media_ponderada); converte para km só na exibição.
-  { chave: "distancia_media", rotulo: "Distância média (km)", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000), glossario: "distancia_media", medidaComp: "distancia_media" },
+  { chave: "distancia_media", unidade: "km", campo: "distancia_media", formatar: (v) => num(v / 1000), glossario: "distancia_media", medidaComp: "distancia_media" },
   // `pct_interestadual` já chega aqui em PERCENTUAL (0-100): `normalizarLinhaUnidade` converte a
   // fração do parquet uma única vez, na leitura.
-  { chave: "pct_interestadual", rotulo: "% que cruza a UF", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%`, glossario: "pct_interestadual", medidaComp: "pct_interestadual" },
+  { chave: "pct_interestadual", unidade: "%", campo: "pct_interestadual", formatar: (v) => `${num1(v)}%`, glossario: "pct_interestadual", medidaComp: "pct_interestadual" },
   // Correção: `gini_linha` mede a concentração dos DESTINOS de quem sai da unidade (agrupa por
   // origem = a própria unidade, Gini sobre os destinos) -- o rótulo antigo ("origens") estava
   // trocado com `gini_coluna`. Ver pipeline/medidas.py::gini_linha e comparabilidade_regras.py.
-  { chave: "gini_linha", rotulo: "Concentração destinos (Gini)", unidade: "", campo: "gini_linha", formatar: num2, glossario: "gini", medidaComp: "gini_linha" },
+  { chave: "gini_linha", unidade: "", campo: "gini_linha", formatar: num2, glossario: "gini", medidaComp: "gini_linha" },
 ];
 
 function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
   nivel: NivelSerie; codigo: string; linhas: LinhaUnidadeSerie[]; escuro: boolean;
   edicoes: readonly EdicaoSerie[]; comp: Comparabilidade | null;
 }) {
+  const d = useT();
   const porEdicao = new Map(linhas.map((l) => [l.edicao, l]));
   const edicoesComNumero = new Set(edicoes.filter((e) => estadoDoPonto(porEdicao.get(e)) === "numero"));
   /** Nota de ressalva da célula (medida x edição x nível), lida da matriz de comparabilidade. */
@@ -187,19 +187,30 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
     if (!comp) return null;
     const regra = estadoDaCelula(comp, medidaComp, e, nivel);
     if (!regra || regra.estado === "comparavel") return null;
-    return { estado: regra.estado, texto: regra.nota ? (comp.notas[regra.nota] ?? regra.nota) : "Comparabilidade limitada nesta edição." };
+    return {
+      estado: regra.estado,
+      texto: regra.nota
+        ? (notaComparabilidade(regra.nota, comp.notas, d) ?? regra.nota)
+        : d.serie.celula.ressalvaPadrao,
+    };
   };
-  const ressalvas = comp ? ressalvasDoBloco(comp, nivel, MEDIDAS_BLOCO1, edicoes, edicoesComNumero) : [];
+  const ressalvas = comp
+    ? ressalvasDoBloco(
+        comp, nivel, MEDIDAS_BLOCO1.map((m) => ({ medidaComp: m.medidaComp, rotulo: d.serie.medidas[m.chave] })),
+        edicoes, edicoesComNumero, d,
+      )
+    : [];
+  const b1 = d.serie.bloco1;
   return (
     <section className="secao serie-bloco" id="bloco-1" aria-labelledby="bloco-1-titulo">
-      <h3 id="bloco-1-titulo">Bloco 1 · A migração de {ROTULO_NIVEL[nivel]}, censo a censo</h3>
+      <h3 id="bloco-1-titulo">{b1.titulo(d.comum.niveis[nivel].demonstrativo)}</h3>
       <div className="tabela-scroll">
         <table className="tabela-serie">
           <thead>
             <tr>
-              <th>Medida</th>
-              <th>tend.</th>
-              {edicoes.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}
+              <th>{b1.colMedida}</th>
+              <th>{b1.colTendencia}</th>
+              {edicoes.map((e) => <th key={e}>{rotuloEdicao(e, d)}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -212,7 +223,7 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
               });
               return (
                 <tr key={m.chave}>
-                  <td>{m.glossario ? <Termo chave={m.glossario}>{m.rotulo}</Termo> : m.rotulo}</td>
+                  <td>{m.glossario ? <Termo chave={m.glossario}>{d.serie.medidas[m.chave]}</Termo> : d.serie.medidas[m.chave]}</td>
                   <LinhaSpark valores={valores} edicoes={edicoes} />
                   {edicoes.map((e, i) => (
                     <Celula key={e} valor={valores[i]} estado={estadoDoPonto(porEdicao.get(e))}
@@ -222,7 +233,7 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
               );
             })}
             <tr>
-              <td><Termo chave="tipo_fluxo_predominante">Tipo de fluxo predominante</Termo></td>
+              <td><Termo chave="tipo_fluxo_predominante">{b1.tipoFluxo}</Termo></td>
               <td className="serie-spark-cel">—</td>
               {edicoes.map((e) => {
                 const l = porEdicao.get(e);
@@ -231,16 +242,16 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
                   const trama = tramaDoEstado(estado);
                   return (
                     <td key={e} className={`serie-celula-vazia${trama ? ` trama-${trama}` : ""}`}>
-                      {PALAVRA_ESTADO[estado]}
+                      {palavraEstado(estado, d)}
                     </td>
                   );
                 }
-                const tipo = tipoFluxoPredominante(l?.distancia_media, l?.pct_interestadual);
+                const tipo = tipoFluxoPredominante(l?.distancia_media, l?.pct_interestadual, d);
                 if (!tipo) {
                   return (
                     <td key={e} className="serie-celula-vazia trama-cruzada"
-                        title="Não foi possível calcular esta medida para esta unidade/edição.">
-                      não publicado
+                        title={d.serie.celula.naoCalculavel}>
+                      {d.serie.celula.naoPublicado}
                     </td>
                   );
                 }
@@ -251,17 +262,19 @@ function BlocoUnidade({ nivel, codigo, linhas, escuro, edicoes, comp }: {
         </table>
       </div>
       <p className="muted-pequeno">
-        Coluna "tend." = sparkline {rotuloIntervalo(edicoes)}; posição tracejada = sem número naquela edição.
-        {edicoes.includes("1980") && " 1980 leva o selo de proxy (ver aviso no topo da seção)."}
-        {comp && ressalvas.length > 0 && " ⓘ = ressalva de comparabilidade (passe o mouse; o texto completo está abaixo)."}
+        {[
+          b1.notaTendencia(rotuloIntervalo(edicoes)),
+          edicoes.includes("1980") && b1.nota1980,
+          comp && ressalvas.length > 0 && b1.notaRessalva,
+        ].filter(Boolean).join(" ")}
       </p>
       {ressalvas.length > 0 && (
         <details className="serie-ressalvas">
-          <summary>Ressalvas de comparabilidade ({ressalvas.length})</summary>
+          <summary>{b1.ressalvasResumo(ressalvas.length)}</summary>
           <ul className="muted-pequeno">
             {ressalvas.map((r) => (
               <li key={r.nota}>
-                <strong>{r.medidas.join(", ")} ({r.edicoes.map(rotuloEdicao).join(", ")}):</strong> {r.texto}
+                <strong>{b1.ressalvaItem(r.medidas, r.edicoes.map((e) => rotuloEdicao(e, d)))}</strong> {r.texto}
               </li>
             ))}
           </ul>
@@ -285,6 +298,7 @@ function BlocoNaoCalculado({ id, titulo, children }: { id: string; titulo: strin
 }
 
 function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly EdicaoSerie[] }) {
+  const d = useT();
   const [linhas, setLinhas] = useState<Record<string, unknown>[] | null>(null);
   useEffect(() => {
     let vivo = true;
@@ -292,17 +306,14 @@ function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly
     return () => { vivo = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nivel, edicoes.join(",")]);
-  if (!linhas) return <p className="muted">Carregando o sistema…</p>;
+  if (!linhas) return <p className="muted">{d.serie.bloco2.carregando}</p>;
   const linhasFiltradas = filtrarEdicoes(
     linhas as (Record<string, unknown> & { edicao: string })[], edicoes,
   );
   return (
     <section className="secao serie-bloco" id="bloco-2" aria-labelledby="bloco-2-titulo">
-      <h3 id="bloco-2-titulo">Bloco 2 · O sistema de {ROTULO_NIVEL_PLURAL[nivel]} em que esta unidade está</h3>
-      <p className="muted-pequeno">
-        Estes números descrevem o conjunto de unidades do nível, não a unidade selecionada. Eles
-        mudam com o número de unidades e só podem ser comparados dentro do mesmo nível.
-      </p>
+      <h3 id="bloco-2-titulo">{d.serie.bloco2.titulo(d.comum.niveis[nivel].plural)}</h3>
+      <p className="muted-pequeno">{d.serie.bloco2.nota}</p>
       {nivel !== "rm" && <GraficosSistema nivel={nivel} linhasSistema={linhasFiltradas} edicoes={edicoes} />}
       {(() => {
         const duncans = linhasFiltradas
@@ -310,22 +321,24 @@ function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly
             const anterior = edicaoAnterior(l.edicao as EdicaoSerie);
             return l.duncan_d_ant != null && anterior != null && edicoes.includes(anterior);
           })
-          .map((l) => `${rotuloEdicao(l.edicao as EdicaoSerie)} ${num2(l.duncan_d_ant as number)}`);
-        return duncans.length > 0 ? (
+          .map((l) => `${rotuloEdicao(l.edicao as EdicaoSerie, d)} ${num2(l.duncan_d_ant as number)}`);
+        if (duncans.length === 0) return null;
+        const frase = d.serie.bloco2.duncanFrase(duncans.join(" · "));
+        return (
           <p className="muted-pequeno">
-            Quanto a estrutura dos fluxos mudou entre censos (<Termo chave="duncan_d">Duncan D</Termo>, comparado à edição anterior): {duncans.join(" · ")}.
+            {frase.antes}<Termo chave="duncan_d">{frase.termo}</Termo>{frase.depois}
           </p>
-        ) : null;
+        );
       })()}
       <div className="tabela-scroll">
         <table className="tabela-serie">
           <thead>
-            <tr><th>Edição</th><th><Termo chave="n_unidades">n unidades</Termo></th>
+            <tr><th>{d.serie.bloco2.colEdicao}</th><th><Termo chave="n_unidades">{d.serie.bloco2.colNUnidades}</Termo></th>
                 <th><Termo chave="cmi">CMI</Termo> (%)</th><th><Termo chave="smi">SMI</Termo> (%)</th>
                 <th><Termo chave="mei_agregado">MEI</Termo> (%)</th>
                 <th><Termo chave="anmr">ANMR</Termo> (%)</th>
                 <th><Termo chave="beta_fielding">β Fielding</Termo></th>
-                <th><Termo chave="duncan_d">Duncan D</Termo> (ant.)</th></tr>
+                <th><Termo chave="duncan_d">{d.serie.bloco2.colDuncan.termo}</Termo>{d.serie.bloco2.colDuncan.depois}</th></tr>
           </thead>
           <tbody>
             {linhasFiltradas.map((l) => {
@@ -333,7 +346,7 @@ function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly
               const anteriorMarcada = anterior != null && edicoes.includes(anterior);
               return (
                 <tr key={String(l.edicao)}>
-                  <td>{rotuloEdicao(l.edicao as EdicaoSerie)}</td>
+                  <td>{rotuloEdicao(l.edicao as EdicaoSerie, d)}</td>
                   <td>{num(l.n_unidades as number)}</td>
                   <td>{num1(l.cmi as number)}</td>
                   <td>{num1(l.smi as number)}</td>
@@ -343,7 +356,7 @@ function BlocoSistema({ nivel, edicoes }: { nivel: NivelSerie; edicoes: readonly
                   <td>{
                     l.duncan_d_ant == null ? "—"
                       : !anteriorMarcada
-                        ? <span title={`A edição anterior (${anterior}) não está marcada.`}>—</span>
+                        ? <span title={d.serie.bloco2.anteriorNaoMarcada(String(anterior))}>—</span>
                         : num2(l.duncan_d_ant as number)
                   }</td>
                 </tr>
@@ -384,8 +397,10 @@ type Parceiros = Map<string, { nome: string; linhas: Record<EdicaoSerie, Record<
 function TabelaParceiros({ titulo, porParceiro, edicoes }: {
   titulo: string; porParceiro: Parceiros; edicoes: readonly EdicaoSerie[];
 }) {
+  const d = useT();
+  const b3 = d.serie.bloco3;
   const [todos, setTodos] = useState(false);
-  if (porParceiro.size === 0) return <p className="muted-pequeno">{titulo}: nenhum par publicado.</p>;
+  if (porParceiro.size === 0) return <p className="muted-pequeno">{b3.nenhumPar(titulo)}</p>;
   // Ordena ANTES de cortar: pelo posto na edição mais recente marcada, desempatando pelas
   // anteriores (design 3.3-a). A ordem de chegada da consulta é edição mais antiga primeiro, e
   // cortar nela descartava o principal parceiro de 2022.
@@ -399,7 +414,7 @@ function TabelaParceiros({ titulo, porParceiro, edicoes }: {
     <div className="tabela-scroll">
       <table className="tabela-serie">
         <thead>
-          <tr><th>{titulo}</th>{edicoes.map((e) => <th key={e}>{rotuloEdicao(e)}</th>)}</tr>
+          <tr><th>{titulo}</th>{edicoes.map((e) => <th key={e}>{rotuloEdicao(e, d)}</th>)}</tr>
         </thead>
         <tbody>
           {visiveis.map(({ codigo: codigoParceiro, nome, linhas }) => (
@@ -409,14 +424,14 @@ function TabelaParceiros({ titulo, porParceiro, edicoes }: {
                 const p = linhas[e];
                 if (!p || p.posto == null) {
                   const motivo = p?.motivo_ausencia as string | undefined;
-                  const rotuloMotivo = motivo === "suprimido" ? "▒ supr."
-                    : motivo === "nao_existia" ? "░ não exist."
-                    : motivo === "nao_medido" ? "não medido" : "—";
+                  const rotuloMotivo = motivo === "suprimido" ? b3.motivoSuprimido
+                    : motivo === "nao_existia" ? b3.motivoNaoExistia
+                    : motivo === "nao_medido" ? b3.motivoNaoMedido : b3.motivoOutro;
                   const trama = motivo === "suprimido" ? "trama-cruzada"
                     : motivo === "nao_medido" ? "trama-pontilhada" : "trama-diagonal";
                   return <td key={e} className={`serie-celula-vazia ${trama}`}>{rotuloMotivo}</td>;
                 }
-                return <td key={e}>{num(p.posto as number)}º · {num(p.total as number)}</td>;
+                return <td key={e}>{b3.postoTotal(num(p.posto as number), num(p.total as number))}</td>;
               })}
             </tr>
           ))}
@@ -424,11 +439,9 @@ function TabelaParceiros({ titulo, porParceiro, edicoes }: {
       </table>
       {(fora > 0 || todos) && (
         <p className="muted-pequeno">
-          {fora > 0
-            ? `Mais ${num(fora)} parceiro${fora > 1 ? "s" : ""} que já esteve${fora > 1 ? "ram" : ""} entre os 10 primeiros em alguma edição não aparece${fora > 1 ? "m" : ""} aqui. `
-            : ""}
+          {fora > 0 ? `${b3.foraDaLista(fora, num(fora))} ` : ""}
           <button className="link-serie" onClick={() => setTodos(!todos)}>
-            {todos ? `Mostrar só os ${LIMITE_PARCEIROS} primeiros` : "Mostrar todos"}
+            {todos ? b3.mostrarPrimeiros(LIMITE_PARCEIROS) : b3.mostrarTodos}
           </button>
         </p>
       )}
@@ -452,6 +465,7 @@ function filtrarParceirosDestaque(porParceiro: Parceiros, edicoes: readonly Edic
 }
 
 function BlocoFluxos({ nivel, codigo, edicoes }: { nivel: NivelSerie; codigo: string; edicoes: readonly EdicaoSerie[] }) {
+  const d = useT();
   const [origens, setOrigens] = useState<Record<string, unknown>[] | null>(null);
   const [destinos, setDestinos] = useState<Record<string, unknown>[] | null>(null);
   useEffect(() => {
@@ -465,39 +479,35 @@ function BlocoFluxos({ nivel, codigo, edicoes }: { nivel: NivelSerie; codigo: st
       .catch(() => { if (vivo) setDestinos([]); });
     return () => { vivo = false; };
   }, [nivel, codigo]);
-  if (!origens || !destinos) return <p className="muted">Carregando fluxos…</p>;
+  if (!origens || !destinos) return <p className="muted">{d.comum.ui.carregandoFluxos}</p>;
   const origensFiltradas = filtrarEdicoes(origens as (Record<string, unknown> & { edicao: string })[], edicoes);
   const destinosFiltradas = filtrarEdicoes(destinos as (Record<string, unknown> & { edicao: string })[], edicoes);
   const porOrigem = filtrarParceirosDestaque(agruparPorParceiro(origensFiltradas, "origem"), edicoes);
   const porDestino = filtrarParceirosDestaque(agruparPorParceiro(destinosFiltradas, "destino"), edicoes);
+  const nota = d.serie.bloco3.notaPosto(rotuloEdicao(edicoes[edicoes.length - 1], d));
   return (
     <section className="secao serie-bloco" id="bloco-3" aria-labelledby="bloco-3-titulo">
-      <h3 id="bloco-3-titulo">Bloco 3 · De onde vieram e para onde foram</h3>
-      <TabelaParceiros titulo="Principais origens" porParceiro={porOrigem} edicoes={edicoes} />
-      <TabelaParceiros titulo="Principais destinos" porParceiro={porDestino} edicoes={edicoes} />
+      <h3 id="bloco-3-titulo">{d.serie.bloco3.titulo}</h3>
+      <TabelaParceiros titulo={d.serie.bloco3.origens} porParceiro={porOrigem} edicoes={edicoes} />
+      <TabelaParceiros titulo={d.serie.bloco3.destinos} porParceiro={porDestino} edicoes={edicoes} />
       <p className="muted-pequeno">
-        <Termo chave="posto">Posto</Termo> e volume por edição, ordenado pelo posto em {rotuloEdicao(edicoes[edicoes.length - 1])}
-        (a edição marcada mais recente), desempatando pelas anteriores.
+        {nota.antes}<Termo chave="posto">{nota.termo}</Termo>{nota.depois}
       </p>
     </section>
   );
 }
 
-/** Texto no lugar da barra quando a edição não tem perfil desenhável. O motivo vem do ESTADO da
- *  unidade na edição (`unidades_serie`: existia / estado_cobertura) e do que o perfil publica --
- *  nunca do rótulo da edição (a versão anterior escrevia "não medido" para toda barra vazia de
- *  1980, embora o status migratório seja medido em todas as edições). */
-const MOTIVO_VAZIO_PERFIL: Partial<Record<EstadoCelula, string>> = {
-  nao_existia: "não existia nesta edição",
-  sem_cobertura: "sem cobertura nesta edição",
-  cobertura_insuficiente: "cobertura insuficiente nesta edição",
-  suprimido: "suprimido (abaixo do limiar de divulgação)",
-};
+/** Texto no lugar da barra quando a edição não tem perfil desenhável (`d.serie.bloco4.motivoVazio`,
+ *  com `palavraEstado` de reserva). O motivo vem do ESTADO da unidade na edição (`unidades_serie`:
+ *  existia / estado_cobertura) e do que o perfil publica -- nunca do rótulo da edição (a versão
+ *  anterior escrevia "não medido" para toda barra vazia de 1980, embora o status migratório seja
+ *  medido em todas as edições). */
 
 function BlocoPerfil({ nivel, codigo, escuro, edicoes, linhasUnidade }: {
   nivel: NivelSerie; codigo: string; escuro: boolean; edicoes: readonly EdicaoSerie[];
   linhasUnidade: readonly LinhaUnidadeSerie[];
 }) {
+  const d = useT();
   const [linhas, setLinhas] = useState<Awaited<ReturnType<typeof seriePerfil>> | null>(null);
   useEffect(() => {
     let vivo = true;
@@ -505,7 +515,7 @@ function BlocoPerfil({ nivel, codigo, escuro, edicoes, linhasUnidade }: {
       .catch(() => { if (vivo) setLinhas([]); });
     return () => { vivo = false; };
   }, [nivel, codigo]);
-  if (!linhas) return <p className="muted">Carregando perfil…</p>;
+  if (!linhas) return <p className="muted">{d.serie.bloco4.carregando}</p>;
 
   const unidadePorEdicao = new Map(linhasUnidade.map((l) => [l.edicao, l]));
   const motivos = new Map<string, string>();
@@ -520,20 +530,23 @@ function BlocoPerfil({ nivel, codigo, escuro, edicoes, linhasUnidade }: {
     const { valores, motivo } = perfilStatusDaEdicao(
       brutos, edicao, estadoDoPonto(unidadePorEdicao.get(edicao)),
     );
-    const rotulo = rotuloEdicao(edicao);
-    if (motivo) motivos.set(rotulo, MOTIVO_VAZIO_PERFIL[motivo] ?? PALAVRA_ESTADO[motivo]);
+    const rotulo = rotuloEdicao(edicao, d);
+    if (motivo) {
+      const motivoVazio = d.serie.bloco4.motivoVazio as Partial<Record<EstadoCelula, string>>;
+      motivos.set(rotulo, motivoVazio[motivo] ?? palavraEstado(motivo, d));
+    }
     return { rotulo, valores };
   });
 
   return (
     <section className="secao serie-bloco" id="bloco-4" aria-labelledby="bloco-4-titulo">
-      <h3 id="bloco-4-titulo">Bloco 4 · Quem migra (chegaram)</h3>
+      <h3 id="bloco-4-titulo">{d.serie.bloco4.titulo}</h3>
       <BarraPerfil
-        titulo={<><Termo chave="status_migratorio">Status migratório</Termo>, por edição</>}
-        categorias={DIMENSOES.status.categorias}
+        titulo={<><Termo chave="status_migratorio">{dimensao("status", d).titulo}</Termo>{d.serie.bloco4.tituloBarraDepois}</>}
+        categorias={dimensao("status", d).categorias}
         series={series}
         escuro={escuro}
-        motivoVazio={(s) => motivos.get(s.rotulo) ?? "sem dado publicável"}
+        motivoVazio={(s) => motivos.get(s.rotulo) ?? d.serie.bloco4.semDado}
       />
     </section>
   );
@@ -549,6 +562,7 @@ interface Props {
 }
 
 export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, edicoes }: Props) {
+  const d = useT();
   const [linhas, setLinhas] = useState<LinhaUnidadeSerie[] | null>(null);
   // null = carregando. Só se monta a frase com as DUAS consultas terminadas: sem os filhos a
   // frase de município-mãe sairia sem o prefixo e trocaria de texto no meio da leitura.
@@ -583,43 +597,40 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, e
     mae: maeDaSerie(linhas, edicoes),
     filhos: filhosNoIntervalo(filhos, edicoes),
   } : null;
-  const frase = entrada ? fraseSintese(entrada) : "";
+  const frase = entrada ? fraseSintese(entrada, d) : "";
 
   return (
     <div className="serie-conteudo">
-      <nav className="serie-indice" aria-label="Blocos da série">
-        <a href="#bloco-1">Bloco 1</a><a href="#bloco-2">Bloco 2</a>
-        <a href="#bloco-3">Bloco 3</a><a href="#bloco-4">Bloco 4</a>
+      <nav className="serie-indice" aria-label={d.serie.secao.indiceAria}>
+        <a href="#bloco-1">{d.serie.secao.bloco(1)}</a><a href="#bloco-2">{d.serie.secao.bloco(2)}</a>
+        <a href="#bloco-3">{d.serie.secao.bloco(3)}</a><a href="#bloco-4">{d.serie.secao.bloco(4)}</a>
       </nav>
       {!pronto ? (
-        <p className="muted">Carregando a série…</p>
+        <p className="muted">{d.comum.ui.carregandoSerie}</p>
       ) : linhas.length === 0 ? (
-        <p className="muted">Não há série publicada para esta unidade.</p>
+        <p className="muted">{d.serie.secao.semSerie}</p>
       ) : (
         <>
           {edicoes.includes("1980") && (
             <div className="aviso aviso-proxy" role="note">
               <p className="aviso-proxy-resumo">
-                <strong>Selo proxy (1980).</strong>{" "}
-                {comp?.notas.proxy_1980_volume
-                  ?? "O Censo 1980 não tem quesito de data fixa: a migração publicada é estimada por um proxy calibrado, não medida diretamente."}
+                <strong>{d.serie.secao.selo1980}</strong>{" "}
+                {notaComparabilidade("proxy_1980_volume", comp?.notas, d) ?? d.serie.secao.aviso1980Padrao}
               </p>
             </div>
           )}
           <p className="serie-frase serie-frase-completa">{frase}</p>
           <BlocoUnidade nivel={nivel} codigo={codigo} linhas={linhas} escuro={escuro} edicoes={edicoes} comp={comp} />
           {nivel === "rm" ? (
-            <BlocoNaoCalculado id="bloco-2" titulo="Bloco 2 · O sistema de regiões metropolitanas">
-              Não calculado para regiões metropolitanas: a série publicada traz o sistema (CMI, MEI, ANMR,
-              β de Fielding, Duncan D) só para municípios, regiões imediatas, regiões intermediárias e UFs.
+            <BlocoNaoCalculado id="bloco-2" titulo={d.serie.bloco2.tituloRM}>
+              {d.serie.bloco2.naoCalculadoRM}
             </BlocoNaoCalculado>
           ) : (
             <BlocoSistema nivel={nivel} edicoes={edicoes} />
           )}
           {nivel === "rm" ? (
-            <BlocoNaoCalculado id="bloco-3" titulo="Bloco 3 · De onde vieram e para onde foram">
-              Não calculado para regiões metropolitanas: os fluxos entre pares de unidades são publicados
-              na série só para municípios, regiões imediatas, regiões intermediárias e UFs.
+            <BlocoNaoCalculado id="bloco-3" titulo={d.serie.bloco3.titulo}>
+              {d.serie.bloco3.naoCalculadoRM}
             </BlocoNaoCalculado>
           ) : (
             <BlocoFluxos nivel={nivel} codigo={codigo} edicoes={edicoes} />
@@ -628,10 +639,10 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, e
         </>
       )}
       <section className="secao">
-        <h3>Glossário</h3>
+        <h3>{d.serie.secao.glossario}</h3>
         <dl className="serie-glossario">
           {CHAVES_GLOSSARIO_SERIE.map((chave) => {
-            const t = GLOSSARIO[chave];
+            const t = d.glossario[chave];
             if (!t) return null;
             return (
               <div key={chave} className="serie-glossario-item">
@@ -647,7 +658,9 @@ export function SerieCensos({ nivel, codigo, nome, escuro, aoAbrirMetodologia, e
           })}
         </dl>
         <p className="muted-pequeno">
-          Metodologia completa: <button className="link-serie" onClick={aoAbrirMetodologia}>metodologia completa</button>.
+          {d.serie.secao.metodologia.antes}
+          <button className="link-serie" onClick={aoAbrirMetodologia}>{d.serie.secao.metodologia.botao}</button>
+          {d.serie.secao.metodologia.depois}
         </p>
       </section>
     </div>

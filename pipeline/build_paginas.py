@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Gera páginas HTML estáticas e indexáveis do Atlas da Migração Interna (SEO orgânico).
+"""Gera páginas HTML estáticas e indexáveis do Atlas da Migração Interna (SEO orgânico), em
+quatro idiomas (pt-BR na raiz; en, fr e es sob /en/, /fr/ e /es/).
 
 Lê exclusivamente as tabelas já publicadas em data/processed (aprovadas pelo gate de
 revelação R1-R9: supressão, arredondamento a múltiplos de 5, contagens amostrais só em
 faixas). Não recalcula nenhuma estatística que não esteja diretamente nessas tabelas --
 no máximo formata, soma ou tira intervalo de confiança (valor +/- 1.96*se) a partir de
 colunas já publicadas, exatamente como o app interativo faz (ver web/src/lib/format.ts).
+
+Os textos de cada idioma ficam em pipeline/i18n_paginas/{pt,en,fr,es}.py (terminologia em
+web/src/i18n/TERMINOLOGIA.md); o glossário vem de web/src/i18n/glossario/<lang>.json e a prosa
+de meta.json (aviso, fonte) de web/src/i18n/dados.json. As URLs mantêm os slugs em português
+(`/fr/municipio/<slug>/`); a chave de uma página é o seu caminho em português, e o hreflang
+recíproco é montado a partir dela.
 
 Uso:
     python pipeline/build_paginas.py --producao      # exige SITE_URL no ambiente
@@ -17,7 +24,7 @@ Escreve em web/dist/ (precisa rodar depois de `npm run build`, ver web/package.j
 from __future__ import annotations
 
 import argparse
-import io
+import html as _html
 import json
 import os
 import pathlib
@@ -31,15 +38,20 @@ import duckdb
 import jinja2
 from markupsafe import Markup
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from i18n_paginas import (  # noqa: E402
+    LANGS, LANG_PADRAO, LANG_SPA, OG_LOCALE, SELETOR, SEPARADORES, agrupar, catalogo, decimal, url_lang,
+)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROCESSED = ROOT / "data/processed"
 DIST = ROOT / "web/dist"
 ASSETS = ROOT / "pipeline/assets"  # fontes da imagem OG (ver pipeline/assets/README.md)
+I18N_WEB = ROOT / "web/src/i18n"   # glossário e dados.json compartilhados com o SPA
 
-NOME_SITE = "Atlas da migração interna no Brasil"
-DESCRICAO_SITE = ("Saldos e fluxos migratórios entre os municípios brasileiros no "
-                   "quinquênio 2017-2022, a partir dos microdados da amostra do Censo "
-                   "Demográfico 2022 do IBGE.")
+_PT = catalogo(LANG_PADRAO)
+NOME_SITE = _PT.NOME_SITE
+DESCRICAO_SITE = _PT.DESCRICAO_SITE
 
 # ============================== autoria e licenças (F7) ==============================
 # Decisões do titular do projeto (ver plano F7): autoria, repositório GitHub, e as duas
@@ -59,10 +71,7 @@ DOI_CONCEITO = "10.5281/zenodo.22469791"  # resolve sempre para a versão mais r
 DOI_VERSAO = "10.5281/zenodo.23074215"      # esta versão (v2.1.0)
 DOI_PLACEHOLDER = f"https://doi.org/{DOI_CONCEITO}"  # usado no texto de "como citar"
 AUTOR_ORCID = "https://orcid.org/0000-0002-6632-3991"
-ATRIBUICAO_PADRAO = (
-    "Fonte primária: IBGE, Censo Demográfico 2022, microdados da amostra (acesso "
-    "controlado). Estimativas: Daniel Pessini Sobreira, Atlas da migração interna no Brasil."
-)
+ATRIBUICAO_PADRAO = _PT.ATRIBUICAO_PADRAO
 
 # ============================== metadados públicos ==============================
 META = json.loads((PROCESSED / "meta.json").read_text(encoding="utf-8"))
@@ -73,20 +82,33 @@ AVISO = META["aviso"]
 FONTE = META["fonte"]
 VERSAO_DADOS = META["versao_dados"]
 SALARIO_MINIMO = META["salario_minimo_referencia"]
+EDICAO = str(META.get("edicao", "2022"))
 
-ROTULO_PRECISAO = {
-    "boa": "boa", "cautela": "usar com cautela", "baixa": "baixa precisão",
-    "sem_estimativa": "sem estimativa",
-}
+ROTULO_PRECISAO = _PT.ROTULO_PRECISAO
+TIPOLOGIA_ROTULO = _PT.TIPOLOGIA_ROTULO
 
-# Rótulos da tipologia do fluxo intra-RM (chave de rm_fluxos_intra.tipologia) -- os mesmos de
-# TIPOLOGIA_INTRA_RM em web/src/lib/paletas.ts, para a página estática e o atlas interativo
-# nomearem igual; antes a tabela das páginas de RM mostrava a chave crua ("nucleo_periferia").
-TIPOLOGIA_ROTULO = {
-    "nucleo_periferia": "Núcleo → periferia",
-    "periferia_nucleo": "Periferia → núcleo",
-    "periferia_periferia": "Periferia → periferia",
-}
+_DADOS_I18N: dict[str, dict[str, str]] | None = None
+
+
+def texto_dado(chave: str, origem: str, lang: str) -> str:
+    """Tradução da prosa de meta.json (web/src/i18n/dados.json). Só vale se o texto atual do dado
+    for IDÊNTICO a `origem` (o texto PT em que a tradução se baseia); se o pipeline mudou o texto e
+    a tradução não acompanhou, publica-se o português em vez de uma tradução velha."""
+    global _DADOS_I18N
+    if lang == LANG_PADRAO or origem is None:
+        return origem
+    if _DADOS_I18N is None:
+        _DADOS_I18N = json.loads((I18N_WEB / "dados.json").read_text(encoding="utf-8"))
+    e = _DADOS_I18N.get(chave)
+    return e[LANG_SPA[lang]] if e and e.get("origem") == origem else origem
+
+
+def aviso_de(lang: str) -> str:
+    return texto_dado(f"aviso.{EDICAO}", AVISO, lang)
+
+
+def fonte_de(lang: str) -> str:
+    return texto_dado(f"fonte.{EDICAO}", FONTE, lang)
 
 
 # ============================== utilidades ==============================
@@ -116,22 +138,32 @@ def precisao_de(cv: float | None) -> str:
     return "baixa"
 
 
-def _limite_ic(x: float, piso_zero: bool) -> str:
-    """Um limite do IC em inteiro pt-BR. Com `piso_zero` (contagens) o limite inferior nunca passa
-    de 0 -- uma contagem de pessoas não é negativa, e "-120 a 340" imigrantes não significa nada;
-    sem ele (saldo, que pode ser negativo) o sinal sai com o "−" tipográfico, como em `fmt_sinal`."""
+def cortar(s: str, n: int = 160) -> str:
+    """Corta uma descrição em `n` caracteres no limite de uma palavra (com reticências)."""
+    if len(s) <= n:
+        return s
+    corte = s[: n - 1].rsplit(" ", 1)[0].rstrip(",;:.-")
+    return corte + "…"
+
+
+def _limite_ic(x: float, piso_zero: bool, lang: str = LANG_PADRAO) -> str:
+    """Um limite do IC em inteiro no formato do idioma. Com `piso_zero` (contagens) o limite
+    inferior nunca passa de 0 -- uma contagem de pessoas não é negativa, e "-120 a 340" imigrantes
+    não significa nada; sem ele (saldo, que pode ser negativo) o sinal sai com o "−" tipográfico,
+    como em `fmt_sinal`."""
     v = int(round(x))
     if piso_zero:
         v = max(v, 0)
-    return f"−{fmt_int(-v)}" if v < 0 else fmt_int(v)
+    return f"−{fmt_int(-v, lang)}" if v < 0 else fmt_int(v, lang)
 
 
-def ic95(valor: float | None, se: float | None, piso_zero: bool = True) -> str | None:
+def ic95(valor: float | None, se: float | None, piso_zero: bool = True, lang: str = LANG_PADRAO) -> str | None:
     """IC 95% = valor ± 1,96 × erro-padrão. `piso_zero=False` só para grandezas com sinal (saldo)."""
     if valor is None or se is None:
         return None
     m = 1.96 * se
-    return f"{_limite_ic(valor - m, piso_zero)} a {_limite_ic(valor + m, piso_zero)}"
+    sep = catalogo(lang).SEP_INTERVALO
+    return f"{_limite_ic(valor - m, piso_zero, lang)} {sep} {_limite_ic(valor + m, piso_zero, lang)}"
 
 
 _RE_TABELA = re.compile(r"<table\b.*?</table>", re.S)
@@ -146,50 +178,56 @@ def envolver_tabelas(html: str) -> str:
     return _RE_TABELA.sub(lambda m: f'<div class="rolagem" tabindex="0">{m.group(0)}</div>', html)
 
 
-def fmt_int(x: Any) -> str:
+# ---- formatação numérica por idioma (en 1,234.5; fr 1 234,5 com U+202F; es 1.234,5; pt 1.234,5) ----
+def fmt_int(x: Any, lang: str = LANG_PADRAO) -> str:
+    sem = catalogo(lang).SEM_ESTIMATIVA
     if x is None:
-        return "sem estimativa"
+        return sem
     try:
         v = int(round(float(x)))
     except (TypeError, ValueError):
-        return "sem estimativa"
-    return f"{v:,}".replace(",", ".")
+        return sem
+    return agrupar(v, lang)
 
 
-def fmt_sinal(x: Any) -> str:
+def fmt_sinal(x: Any, lang: str = LANG_PADRAO) -> str:
     if x is None:
-        return "sem estimativa"
+        return catalogo(lang).SEM_ESTIMATIVA
     v = float(x)
     sinal = "+" if v > 0 else ("−" if v < 0 else "")
-    return f"{sinal}{fmt_int(abs(v))}"
+    return f"{sinal}{fmt_int(abs(v), lang)}"
 
 
-def fmt_dec(x: Any, casas: int = 1) -> str:
+def fmt_dec(x: Any, casas: int = 1, lang: str = LANG_PADRAO) -> str:
     if x is None:
-        return "sem estimativa"
-    s = f"{float(x):,.{casas}f}"
-    s = s.replace(",", "§").replace(".", ",").replace("§", ".")
-    return s
+        return catalogo(lang).SEM_ESTIMATIVA
+    return decimal(float(x), casas, lang)
 
 
-def fmt_pct100(x: Any, casas: int = 1) -> str:
+def fmt_pct100(x: Any, casas: int = 1, lang: str = LANG_PADRAO) -> str:
     """Formata um valor já expresso em pontos percentuais (0-100)."""
     if x is None:
-        return "sem estimativa"
-    return f"{fmt_dec(x, casas)}%"
+        return catalogo(lang).SEM_ESTIMATIVA
+    return f"{fmt_dec(x, casas, lang)}{SEPARADORES[lang][2]}"
 
 
-def rotulo(dim: str, cat: str) -> str:
-    """Rótulo público de uma categoria (meta.json); usa a chave crua se não houver rótulo
-    (ex.: variantes residuais de sexo não binário/ignorado, publicadas mas sem rótulo
-    dedicado em meta.json -- tratadas como 'não determinado')."""
+def rotulo(dim: str, cat: str, lang: str = LANG_PADRAO) -> str:
+    """Rótulo público de uma categoria. Em português vale o de meta.json; nos outros idiomas, o do
+    catálogo (i18n_paginas/<lang>.py, chaves = as de meta.json). Sem rótulo, usa-se a chave
+    "outros" (variantes residuais de sexo não binário/ignorado, publicadas mas sem rótulo dedicado,
+    tratadas como 'não determinado') e, na falta dela, a chave crua."""
+    cat_t = catalogo(lang)
+    if dim == "idade_sexo" and cat.endswith("_I"):
+        faixa = cat[:-2]
+        if faixa in cat_t.FAIXAS_IDADE:
+            return cat_t.idade_indeterminado(faixa)
+    d_lang = cat_t.ROTULOS.get(dim, {})
+    if cat in d_lang:
+        return d_lang[cat]
     d = ROTULOS.get(dim, {})
     if cat in d:
-        return d[cat]
-    if dim == "idade_sexo" and cat.endswith("_I"):
-        faixa = cat[:-2].replace("_", " a ")
-        return f"{faixa} anos, sexo não determinado"
-    return d.get("outros", cat)
+        return d[cat]  # português (meta.json): referência e fallback
+    return d_lang.get("outros") or d.get("outros", cat)
 
 
 # ============================== carga de dados (DuckDB, tabelas já publicadas) =========
@@ -278,9 +316,12 @@ def carregar_dados() -> dict[str, Any]:
     )
 
 
+
 # ============================== templates (Jinja2, autoescape ligado) ==============================
+# Os cinco templates são comuns aos quatro idiomas: todo texto vem do catálogo (`t`, módulo de
+# i18n_paginas) e todo caminho interno passa por `x.u()` (prefixo do idioma). `x` é o `Ctx`.
 _BASE = """<!doctype html>
-<html lang="{{ lang|default('pt-BR') }}">
+<html lang="{{ lang_html }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -295,11 +336,14 @@ _BASE = """<!doctype html>
 <meta property="og:title" content="{{ title }}">
 <meta property="og:description" content="{{ description }}">
 <meta property="og:url" content="{{ canonical }}">
-<meta property="og:image" content="{{ site_url }}/og.png">
+<meta property="og:locale" content="{{ og_locale }}">
+{% for l in og_alt %}<meta property="og:locale:alternate" content="{{ l }}">
+{% endfor -%}
+<meta property="og:image" content="{{ site_url }}{{ og_img }}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{{ title }}">
 <meta name="twitter:description" content="{{ description }}">
-<meta name="twitter:image" content="{{ site_url }}/og.png">
+<meta name="twitter:image" content="{{ site_url }}{{ og_img }}">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/static.css">
 {% for o in jsonld_objs|default([]) -%}
@@ -307,24 +351,24 @@ _BASE = """<!doctype html>
 {% endfor -%}
 </head>
 <body>
-<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+<a class="pular" href="#conteudo">{{ t.PULAR }}</a>
 <header class="cab">
-  <div class="marca"><a href="/">{{ nome_site }}</a> <span class="sub">Censo 2022 &middot; 2017-2022</span></div>
-  <nav aria-label="Navegação principal" class="nav-topo">
-    <a href="/municipios/">Municípios</a>
-    <a href="/regioes-metropolitanas/">RMs</a>
-    <a href="/ufs/">UFs</a>
-    <a href="/regioes/">Regiões</a>
-    <a href="/achados/">Achados</a>
-    <a href="/metodologia/">Metodologia</a>
-    <a href="/glossario/">Glossário</a>
-    <a href="/dados/">Dados</a>
-    <a href="/en/">EN</a>
-    <a class="app" href="{{ app_link|default('/') }}">Abrir no atlas interativo &rarr;</a>
+  <div class="marca"><a href="{{ x.u('/') }}">{{ nome_site }}</a> <span class="sub">{{ t.SUB_MARCA }}</span></div>
+  <nav aria-label="{{ t.ARIA_NAV }}" class="nav-topo">
+    <a href="{{ x.u('/municipios/') }}">{{ t.NAV.municipios }}</a>
+    <a href="{{ x.u('/regioes-metropolitanas/') }}">{{ t.NAV.rms }}</a>
+    <a href="{{ x.u('/ufs/') }}">{{ t.NAV.ufs }}</a>
+    <a href="{{ x.u('/regioes/') }}">{{ t.NAV.regioes }}</a>
+    <a href="{{ x.u('/achados/') }}">{{ t.NAV.achados }}</a>
+    <a href="{{ x.u('/metodologia/') }}">{{ t.NAV.metodologia }}</a>
+    <a href="{{ x.u('/glossario/') }}">{{ t.NAV.glossario }}</a>
+    <a href="{{ x.u('/dados/') }}">{{ t.NAV.dados }}</a>
+    {{ seletor }}
+    <a class="app" href="{{ app_link|default(x.app('')) }}">{{ t.NAV.abrir }}</a>
   </nav>
 </header>
 {% if breadcrumbs %}
-<nav aria-label="Caminho de navegação" class="migalhas">
+<nav aria-label="{{ t.ARIA_MIGALHAS }}" class="migalhas">
   <ol>
   {% for label, href in breadcrumbs %}<li>{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}<span aria-current="page">{{ label }}</span>{% endif %}</li>
   {% endfor %}</ol>
@@ -335,7 +379,8 @@ _BASE = """<!doctype html>
 </main>
 <footer class="rod">
   <p class="aviso">{{ aviso }}</p>
-  <p>Fonte: {{ fonte }}. Dados de {{ versao_dados }}. <a href="/metodologia/">Metodologia</a> &middot; <a href="/dados/">Dados</a> &middot; <a href="/sobre/">Sobre</a></p>
+  {% if t.AVISO_TRADUCAO %}<p class="traducao">{{ t.AVISO_TRADUCAO }}</p>
+  {% endif %}<p>{{ t.rodape(x, fonte, versao_dados) }}</p>
 </footer>
 </body>
 </html>
@@ -346,7 +391,7 @@ _MACROS = """
 {% if linhas %}
 <table class="perfil">
   <caption>{{ titulo }}{% if nota %} <span class="nota-caption">({{ nota }})</span>{% endif %}</caption>
-  <thead><tr><th scope="col">Categoria</th><th scope="col" class="num">Estimativa</th><th scope="col" class="num">Participação</th><th scope="col">Amostra</th></tr></thead>
+  <thead><tr><th scope="col">{{ t.TH_CATEGORIA }}</th><th scope="col" class="num">{{ t.TH_ESTIMATIVA }}</th><th scope="col" class="num">{{ t.TH_PARTICIPACAO }}</th><th scope="col">{{ t.TH_AMOSTRA }}</th></tr></thead>
   <tbody>
   {% for l in linhas %}
     <tr><th scope="row">{{ l.rotulo }}</th><td class="num tabular">{{ l.valor|fmtint }}</td><td class="num tabular">{{ l.pct }}</td><td>{{ l.n_faixa }}</td></tr>
@@ -354,67 +399,59 @@ _MACROS = """
   </tbody>
 </table>
 {% else %}
-<p class="muted">{{ titulo }}: sem estimativa publicada para este recorte.</p>
+<p class="muted">{{ t.sem_perfil(titulo) }}</p>
 {% endif %}
 {% endmacro %}
 """
 
 _MUNICIPIO = """{% extends "_base.html" %}
-{% from "_macros.html" import tabela_perfil %}
+{% from "_macros.html" import tabela_perfil with context %}
 {% block content %}
 <article>
-<h1>Migração em {{ m.nome }}/{{ m.uf_sigla }} (2017-2022)</h1>
+<h1>{{ t.h1_mun(m) }}</h1>
 
 <p class="abertura">
-  {{ m.nome }}/{{ m.uf_sigla }} tinha uma população de referência (5 anos ou mais em 2022) de
-  {{ m.pop5|fmtint }} pessoas. No quinquênio 2017-2022, o município recebeu
-  {{ m.imig|fmtint }} imigrantes e perdeu {{ m.emig|fmtint }} emigrantes para outros
-  municípios do Brasil, resultando em saldo migratório de {{ m.saldo|fmtsinal }} pessoas
-  ({{ m.tlm|fmtdec(2) }} por mil habitantes) e índice de eficácia migratória de
-  {{ m.iem|fmtdec(3) if m.iem is not none else "sem estimativa" }}. Isso classifica o
-  município, no período, como de <strong>{{ m.classificacao }}</strong> migratória.
-  {% if m.imig_ni or m.imig_int %}Além disso, {{ m.imig_ni|fmtint }} chegaram com origem não
-  informada e {{ m.imig_int|fmtint }} vieram do exterior.{% endif %}
+  {{ t.abertura_mun(x, m) }}
 </p>
 
 <section class="secao">
-<h2>Indicadores</h2>
+<h2>{{ t.H_INDICADORES }}</h2>
 <table class="indicadores">
-  <caption>Indicadores migratórios de {{ m.nome }}/{{ m.uf_sigla }}, 2017-2022</caption>
-  <thead><tr><th scope="col">Indicador</th><th scope="col" class="num">Estimativa</th><th scope="col" class="num">IC 95%</th><th scope="col">Precisão</th></tr></thead>
+  <caption>{{ t.cap_indicadores(m) }}</caption>
+  <thead><tr><th scope="col">{{ t.TH_INDICADOR }}</th><th scope="col" class="num">{{ t.TH_ESTIMATIVA }}</th><th scope="col" class="num">{{ t.TH_IC }}</th><th scope="col">{{ t.TH_PRECISAO }}</th></tr></thead>
   <tbody>
-    <tr><th scope="row">Imigrantes</th><td class="num tabular">{{ m.imig|fmtint }}</td><td class="num tabular">{{ m.ic_imig or "sem estimativa" }}</td><td>{{ m.precisao_imig_rotulo }}</td></tr>
-    <tr><th scope="row">Emigrantes</th><td class="num tabular">{{ m.emig|fmtint }}</td><td class="num tabular">{{ m.ic_emig or "sem estimativa" }}</td><td>{{ m.precisao_emig_rotulo }}</td></tr>
-    <tr><th scope="row">Saldo migratório</th><td class="num tabular">{{ m.saldo|fmtsinal }}</td><td class="num tabular">{{ m.ic_saldo or "sem estimativa" }}</td><td>sem classificação</td></tr>
-    <tr><th scope="row">Taxa líquida de migração (por mil hab.)</th><td class="num tabular">{{ m.tlm|fmtdec(2) if m.tlm is not none else "sem estimativa" }}</td><td class="num">-</td><td>-</td></tr>
-    <tr><th scope="row">Índice de eficácia migratória</th><td class="num tabular">{{ m.iem|fmtdec(3) if m.iem is not none else "sem estimativa" }}</td><td class="num">-</td><td>-</td></tr>
+    <tr><th scope="row">{{ t.L_IMIGRANTES }}</th><td class="num tabular">{{ m.imig|fmtint }}</td><td class="num tabular">{{ m.ic_imig or t.SEM_ESTIMATIVA }}</td><td>{{ m.precisao_imig_rotulo }}</td></tr>
+    <tr><th scope="row">{{ t.L_EMIGRANTES }}</th><td class="num tabular">{{ m.emig|fmtint }}</td><td class="num tabular">{{ m.ic_emig or t.SEM_ESTIMATIVA }}</td><td>{{ m.precisao_emig_rotulo }}</td></tr>
+    <tr><th scope="row">{{ t.L_SALDO }}</th><td class="num tabular">{{ m.saldo|fmtsinal }}</td><td class="num tabular">{{ m.ic_saldo or t.SEM_ESTIMATIVA }}</td><td>{{ t.SEM_CLASSIFICACAO }}</td></tr>
+    <tr><th scope="row">{{ t.L_TLM }}</th><td class="num tabular">{{ m.tlm|fmtdec(2) if m.tlm is not none else t.SEM_ESTIMATIVA }}</td><td class="num">-</td><td>-</td></tr>
+    <tr><th scope="row">{{ t.L_IEM }}</th><td class="num tabular">{{ m.iem|fmtdec(3) if m.iem is not none else t.SEM_ESTIMATIVA }}</td><td class="num">-</td><td>-</td></tr>
   </tbody>
 </table>
-<p class="nota">Amostra de imigrantes: {{ m.n_imig_faixa }} observações. Amostra de emigrantes: {{ m.n_emig_faixa }} observações. Intervalo de confiança de 95% calculado como estimativa &plusmn; 1,96 &times; erro-padrão.</p>
+<p class="nota">{{ t.nota_amostra(m) }}</p>
 </section>
 
 <section class="secao">
-<h2>Principais origens e destinos</h2>
+<h2>{{ t.H_ORIGENS_DESTINOS }}</h2>
 <div class="colunas-2">
 <table>
-  <caption>10 principais origens dos imigrantes de {{ m.nome }}/{{ m.uf_sigla }}</caption>
-  <thead><tr><th scope="col">Origem</th><th scope="col" class="num">Pessoas</th><th scope="col">Precisão</th></tr></thead>
+  <caption>{{ t.cap_origens(m) }}</caption>
+  <thead><tr><th scope="col">{{ t.TH_ORIGEM }}</th><th scope="col" class="num">{{ t.TH_PESSOAS }}</th><th scope="col">{{ t.TH_PRECISAO }}</th></tr></thead>
   <tbody>
   {% for f in top_origens %}
-    <tr><td><a href="/municipio/{{ f.slug }}/">{{ f.nome }}/{{ f.uf }}</a> &middot; <a href="{{ app_link_par(f.cd, m.cd) }}">ver par no atlas</a></td><td class="num tabular">{{ f.total|fmtint }}</td><td>{{ rotulo_precisao(f.precisao) }}</td></tr>
+    <tr><td><a href="{{ x.u('/municipio/' ~ f.slug ~ '/') }}">{{ f.nome }}/{{ f.uf }}</a> &middot; <a href="{{ app_link_par(f.cd, m.cd) }}">{{ t.VER_PAR }}</a></td><td class="num tabular">{{ f.total|fmtint }}</td><td>{{ rotulo_precisao(f.precisao) }}</td></tr>
   {% else %}
-    <tr><td colspan="3">Sem fluxos de entrada publicados individualmente (abaixo do limiar de revelação).</td></tr>
+    <tr><td colspan="3">{{ t.SEM_FLUXO_ENTRADA }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
 <table>
-  <caption>10 principais destinos dos emigrantes de {{ m.nome }}/{{ m.uf_sigla }}</caption>
-  <thead><tr><th scope="col">Destino</th><th scope="col" class="num">Pessoas</th><th scope="col">Precisão</th></tr></thead>
+  <caption>{{ t.cap_destinos(m) }}</caption>
+  <thead><tr><th scope="col">{{ t.TH_DESTINO }}</th><th scope="col" class="num">{{ t.TH_PESSOAS }}</th><th scope="col">{{ t.TH_PRECISAO }}</th></tr></thead>
   <tbody>
   {% for f in top_destinos %}
-    <tr><td><a href="/municipio/{{ f.slug }}/">{{ f.nome }}/{{ f.uf }}</a> &middot; <a href="{{ app_link_par(m.cd, f.cd) }}">ver par no atlas</a></td><td class="num tabular">{{ f.total|fmtint }}</td><td>{{ rotulo_precisao(f.precisao) }}</td></tr>
+    <tr><td><a href="{{ x.u('/municipio/' ~ f.slug ~ '/') }}">{{ f.nome }}/{{ f.uf }}</a> &middot; <a href="{{ app_link_par(m.cd, f.cd) }}">{{ t.VER_PAR }}</a></td><td class="num tabular">{{ f.total|fmtint }}</td><td>{{ rotulo_precisao(f.precisao) }}</td></tr>
   {% else %}
-    <tr><td colspan="3">Sem fluxos de saída publicados individualmente (abaixo do limiar de revelação).</td></tr>
+    <tr><td colspan="3">{{ t.SEM_FLUXO_SAIDA }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -422,55 +459,50 @@ _MUNICIPIO = """{% extends "_base.html" %}
 </section>
 
 <section class="secao">
-<h2>Perfil dos migrantes e dos residentes</h2>
-{% for direcao, titulo_dir in [("imig","Imigrantes (quem chegou)"), ("emig","Emigrantes (quem saiu)"), ("residente","Residentes não migrantes")] %}
+<h2>{{ t.H_PERFIL }}</h2>
+{% for direcao, titulo_dir in t.DIRECOES %}
 <h3>{{ titulo_dir }}</h3>
-{{ tabela_perfil("Status migratório", None, perfil_linhas(direcao, "status")) if direcao != "residente" else "" }}
-{{ tabela_perfil("Escolaridade", "pessoas de 25 anos ou mais", perfil_linhas(direcao, "edu")) }}
-{{ tabela_perfil("Renda domiciliar per capita", "salários mínimos de 2022", perfil_linhas(direcao, "renda")) }}
-{{ tabela_perfil("Idade e sexo", None, perfil_linhas(direcao, "idade_sexo")) }}
+{% set pt_ = t.PERFIL_TITULOS %}
+{{ tabela_perfil(pt_.status[0], pt_.status[1], perfil_linhas(direcao, "status")) if direcao != "residente" else "" }}
+{{ tabela_perfil(pt_.edu[0], pt_.edu[1], perfil_linhas(direcao, "edu")) }}
+{{ tabela_perfil(pt_.renda[0], pt_.renda[1], perfil_linhas(direcao, "renda")) }}
+{{ tabela_perfil(pt_.idade_sexo[0], pt_.idade_sexo[1], perfil_linhas(direcao, "idade_sexo")) }}
 {% endfor %}
 </section>
 
 <section class="secao">
-<h2>Deslocamento pendular (trabalho e estudo)</h2>
+<h2>{{ t.H_PENDULAR_MUN }}</h2>
 {% if pend %}
 <table class="indicadores">
-  <caption>Indicadores pendulares de {{ m.nome }}/{{ m.uf_sigla }}</caption>
+  <caption>{{ t.cap_pendular(m) }}</caption>
   <tbody>
-    <tr><th scope="row">Pessoas ocupadas (10 anos ou mais)</th><td class="num tabular">{{ pend.ocupados|fmtint }}</td></tr>
-    <tr><th scope="row">Saem para trabalhar em outro município</th><td class="num tabular">{{ pend.saida_trab|fmtint }}</td></tr>
-    <tr><th scope="row">Vêm de outro município para trabalhar aqui</th><td class="num tabular">{{ pend.entrada_trab|fmtint }}</td></tr>
-    <tr><th scope="row">Saldo pendular</th><td class="num tabular">{{ pend.saldo_pendular|fmtsinal }}</td></tr>
-    <tr><th scope="row">Taxa de saída pendular (%)</th><td class="num tabular">{{ pend.taxa_saida_pendular|fmtdec(2) if pend.taxa_saida_pendular is not none else "sem estimativa" }}</td></tr>
-    <tr><th scope="row">Índice de atração pendular</th><td class="num tabular">{{ pend.indice_atracao|fmtdec(3) if pend.indice_atracao is not none else "sem estimativa" }}</td></tr>
-    <tr><th scope="row">Tempo mediano de deslocamento</th><td class="num tabular">{{ pend.tempo_mediano|fmtdec(0) ~ " min" if pend.tempo_mediano is not none else "sem estimativa" }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.ocupados }}</th><td class="num tabular">{{ pend.ocupados|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.saida_trab }}</th><td class="num tabular">{{ pend.saida_trab|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.entrada_trab }}</th><td class="num tabular">{{ pend.entrada_trab|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.saldo }}</th><td class="num tabular">{{ pend.saldo_pendular|fmtsinal }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.taxa_saida }}</th><td class="num tabular">{{ pend.taxa_saida_pendular|fmtdec(2) if pend.taxa_saida_pendular is not none else t.SEM_ESTIMATIVA }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.atracao }}</th><td class="num tabular">{{ pend.indice_atracao|fmtdec(3) if pend.indice_atracao is not none else t.SEM_ESTIMATIVA }}</td></tr>
+    <tr><th scope="row">{{ t.PEND.tempo_mediano }}</th><td class="num tabular">{{ pend.tempo_mediano|fmtdec(0) ~ " " ~ t.MIN if pend.tempo_mediano is not none else t.SEM_ESTIMATIVA }}</td></tr>
   </tbody>
 </table>
 {% else %}
-<p class="muted">Sem estimativa pendular publicada para este município.</p>
+<p class="muted">{{ t.SEM_PEND }}</p>
 {% endif %}
-{% if m.nm_rm %}<p><a href="/regiao-metropolitana/{{ rm_slug }}/">Este município integra a {{ m.nm_rm }} &rarr; ver a página da região metropolitana</a></p>{% endif %}
+{% if m.nm_rm %}<p>{{ t.link_rm(x, m, x.u('/regiao-metropolitana/' ~ rm_slug ~ '/')) }}</p>{% endif %}
 </section>
 
-<p class="cta"><a href="/?mun={{ m.cd }}">Abrir {{ m.nome }}/{{ m.uf_sigla }} no atlas interativo &rarr;</a></p>
+<p class="cta"><a href="{{ x.app('mun=' ~ m.cd) }}">{{ t.cta_mun(m) }}</a></p>
 
 <section class="secao nota-metodologica">
-<h2>Nota metodológica</h2>
+<h2>{{ t.H_NOTA_MET }}</h2>
 <p>
-  Estimativas a partir dos microdados da amostra do Censo Demográfico 2022 (IBGE, acesso
-  controlado), quesito de migração de data fixa (residência em 31/07/2017 comparada à de
-  31/07/2022). Toda estimativa é arredondada a múltiplos de 5 e passou pelo controle
-  estatístico de revelação (nenhuma célula com menos de 5 pessoas ou 3 domicílios amostrais).
-  Ver <a href="/metodologia/">metodologia completa</a> e <a href="/glossario/">glossário</a>.
+  {{ t.nota_metodologica(x) }}
 </p>
 </section>
 
 <section class="secao">
-<h2>Como citar esta página</h2>
-<p class="citacao">{{ autor_placeholder }}. <em>{{ nome_site }}</em>: {{ m.nome }}/{{ m.uf_sigla }}.
-Dados do Censo Demográfico 2022 (IBGE). Versão dos dados: {{ versao_dados }}. Disponível em: {{ canonical }}.
-DOI do conjunto de dados: <a href="{{ doi_url }}">{{ doi_url }}</a>.</p>
+<h2>{{ t.H_CITAR }}</h2>
+<p class="citacao">{{ t.citacao_mun(m, cit) }}</p>
 </section>
 </article>
 {% endblock %}
@@ -479,58 +511,50 @@ DOI do conjunto de dados: <a href="{{ doi_url }}">{{ doi_url }}</a>.</p>
 _UNIDADE = """{% extends "_base.html" %}
 {% block content %}
 <article>
-<h1>Migração em {{ u.nome }} (2017-2022)</h1>
+<h1>{{ t.titulo_unidade(u.nome) }}</h1>
 <p class="abertura">
-  {{ u.rotulo_nivel }} com {{ u.n_municipios }} municípios e população de referência de
-  {{ u.pop5|fmtint }} pessoas. No quinquênio 2017-2022, a unidade recebeu
-  {{ u.imig|fmtint }} imigrantes e perdeu {{ u.emig|fmtint }} emigrantes vindos de/para fora
-  de suas fronteiras, saldo de {{ u.saldo|fmtsinal }} ({{ u.tlm|fmtdec(2) if u.tlm is not none else "sem estimativa" }}
-  por mil habitantes).
+  {{ t.abertura_unidade(x, u) }}
 </p>
 <p class="nota">
-  Migração entre municípios da mesma {{ u.rotulo_nivel_min }} não é contabilizada aqui -- só
-  os fluxos que cruzam a fronteira da unidade. Os indicadores desta página são somas diretas
-  dos fluxos municipais publicados (excluídos os pares suprimidos pelo controle de revelação),
-  não uma nova estimativa amostral: por isso não há erro-padrão nem intervalo de confiança
-  neste nível de agregação.
+  {{ t.nota_unidade(u) }}
 </p>
 
 <section class="secao">
-<h2>Principais origens e destinos</h2>
+<h2>{{ t.H_ORIGENS_DESTINOS }}</h2>
 <div class="colunas-2">
 <table>
-  <caption>10 principais origens dos imigrantes</caption>
-  <thead><tr><th scope="col">Origem</th><th scope="col" class="num">Pessoas</th></tr></thead>
+  <caption>{{ t.CAP_ORIGENS_UNID }}</caption>
+  <thead><tr><th scope="col">{{ t.TH_ORIGEM }}</th><th scope="col" class="num">{{ t.TH_PESSOAS }}</th></tr></thead>
   <tbody>
   {% for f in u.top_origens %}<tr><td><a href="{{ f.href }}">{{ f.nome }}</a></td><td class="num tabular">{{ f.total|fmtint }}</td></tr>
-  {% else %}<tr><td colspan="2">Sem fluxos publicados individualmente.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="2">{{ t.SEM_FLUXO_UNID }}</td></tr>{% endfor %}
   </tbody>
 </table>
 <table>
-  <caption>10 principais destinos dos emigrantes</caption>
-  <thead><tr><th scope="col">Destino</th><th scope="col" class="num">Pessoas</th></tr></thead>
+  <caption>{{ t.CAP_DESTINOS_UNID }}</caption>
+  <thead><tr><th scope="col">{{ t.TH_DESTINO }}</th><th scope="col" class="num">{{ t.TH_PESSOAS }}</th></tr></thead>
   <tbody>
   {% for f in u.top_destinos %}<tr><td><a href="{{ f.href }}">{{ f.nome }}</a></td><td class="num tabular">{{ f.total|fmtint }}</td></tr>
-  {% else %}<tr><td colspan="2">Sem fluxos publicados individualmente.</td></tr>{% endfor %}
+  {% else %}<tr><td colspan="2">{{ t.SEM_FLUXO_UNID }}</td></tr>{% endfor %}
   </tbody>
 </table>
 </div>
 </section>
 
 <section class="secao">
-<h2>Municípios de {{ u.nome }}</h2>
+<h2>{{ t.h_municipios_de(u.nome) }}</h2>
 <table>
-  <caption>{{ u.n_municipios }} municípios, com saldo migratório 2017-2022</caption>
-  <thead><tr><th scope="col">Município</th><th scope="col" class="num">Saldo</th></tr></thead>
+  <caption>{{ t.cap_municipios_unid(u.n_municipios) }}</caption>
+  <thead><tr><th scope="col">{{ t.TH_MUNICIPIO }}</th><th scope="col" class="num">{{ t.TH_SALDO }}</th></tr></thead>
   <tbody>
   {% for mu in u.municipios %}
-    <tr><td><a href="/municipio/{{ mu.slug }}/">{{ mu.nm_mun }}/{{ mu.uf_sigla }}</a></td><td class="num tabular">{{ mu.saldo|fmtsinal }}</td></tr>
+    <tr><td><a href="{{ x.u('/municipio/' ~ mu.slug ~ '/') }}">{{ mu.nm_mun }}/{{ mu.uf_sigla }}</a></td><td class="num tabular">{{ mu.saldo|fmtsinal }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </section>
 
-<p class="cta"><a href="{{ u.app_link }}">Abrir {{ u.nome }} no atlas interativo &rarr;</a></p>
+<p class="cta"><a href="{{ u.app_link }}">{{ t.cta_unidade(u.nome) }}</a></p>
 </article>
 {% endblock %}
 """
@@ -538,88 +562,88 @@ _UNIDADE = """{% extends "_base.html" %}
 _RM = """{% extends "_base.html" %}
 {% block content %}
 <article>
-<h1>Migração na {{ r.nome }} (2017-2022)</h1>
+<h1>{{ t.titulo_rm(r.nome) }}</h1>
 <p class="abertura">
-  {{ r.tipo_extenso }} composta por {{ r.n_municipios }} municípios, núcleo em
-  {{ r.nm_nucleo }}, população de referência de {{ r.pop_total|fmtint }} pessoas. No quinquênio
-  2017-2022 houve {{ r.mig_intra|fmtint }} migrações internas à própria região (entre seus
-  municípios) e saldo migratório externo (com o resto do país) de {{ r.saldo_externo|fmtsinal }}.
+  {{ t.abertura_rm(x, r) }}
 </p>
 
 <section class="secao">
-<h2>Matriz núcleo &times; periferia (migração intrametropolitana)</h2>
+<h2>{{ t.H_MATRIZ }}</h2>
 <table class="indicadores">
   <tbody>
-    <tr><th scope="row">Núcleo &rarr; periferia</th><td class="num tabular">{{ r.nucleo_periferia|fmtint }}</td></tr>
-    <tr><th scope="row">Periferia &rarr; núcleo</th><td class="num tabular">{{ r.periferia_nucleo|fmtint }}</td></tr>
-    <tr><th scope="row">Periferia &rarr; periferia</th><td class="num tabular">{{ r.periferia_periferia|fmtint }}</td></tr>
-    <tr><th scope="row">Entradas externas (resto do país)</th><td class="num tabular">{{ r.entradas_externas|fmtint }}</td></tr>
-    <tr><th scope="row">Saídas externas (resto do país)</th><td class="num tabular">{{ r.saidas_externas|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MATRIZ.np }}</th><td class="num tabular">{{ r.nucleo_periferia|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MATRIZ.pn }}</th><td class="num tabular">{{ r.periferia_nucleo|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MATRIZ.pp }}</th><td class="num tabular">{{ r.periferia_periferia|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MATRIZ.ent }}</th><td class="num tabular">{{ r.entradas_externas|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MATRIZ.sai }}</th><td class="num tabular">{{ r.saidas_externas|fmtint }}</td></tr>
   </tbody>
 </table>
 
-<h3>10 maiores fluxos migratórios intra-RM</h3>
+<h3>{{ t.H_TOP_INTRA }}</h3>
 <table>
-  <thead><tr><th scope="col">Origem</th><th scope="col">Destino</th><th scope="col">Tipologia</th><th scope="col" class="num">Pessoas</th></tr></thead>
+  <thead><tr><th scope="col">{{ t.TH_ORIGEM }}</th><th scope="col">{{ t.TH_DESTINO }}</th><th scope="col">{{ t.TH_TIPOLOGIA }}</th><th scope="col" class="num">{{ t.TH_PESSOAS }}</th></tr></thead>
   <tbody>
   {% for f in r.top_intra %}
-    <tr><td><a href="/municipio/{{ f.slug_o }}/">{{ f.nome_o }}</a></td><td><a href="/municipio/{{ f.slug_d }}/">{{ f.nome_d }}</a></td><td>{{ f.tipologia }}</td><td class="num tabular">{{ f.total|fmtint }}</td></tr>
-  {% else %}<tr><td colspan="4">Sem fluxos intra-RM publicados individualmente.</td></tr>{% endfor %}
+    <tr><td><a href="{{ x.u('/municipio/' ~ f.slug_o ~ '/') }}">{{ f.nome_o }}</a></td><td><a href="{{ x.u('/municipio/' ~ f.slug_d ~ '/') }}">{{ f.nome_d }}</a></td><td>{{ f.tipologia }}</td><td class="num tabular">{{ f.total|fmtint }}</td></tr>
+  {% else %}<tr><td colspan="4">{{ t.SEM_FLUXO_INTRA }}</td></tr>{% endfor %}
   </tbody>
 </table>
 </section>
 
 <section class="secao">
-<h2>Deslocamento pendular</h2>
+<h2>{{ t.H_PENDULAR_RM }}</h2>
 <table class="indicadores">
   <tbody>
-    <tr><th scope="row">Ocupados na região</th><td class="num tabular">{{ r.ocupados|fmtint }}</td></tr>
-    <tr><th scope="row">Pendulares (trabalham fora do município de residência)</th><td class="num tabular">{{ r.pendulares|fmtint }}</td></tr>
-    <tr><th scope="row">% de pendulares entre os ocupados</th><td class="num tabular">{{ r.pct_pendular|fmtdec(1) if r.pct_pendular is not none else "sem estimativa" }}</td></tr>
-    <tr><th scope="row">Tempo mediano de deslocamento</th><td class="num tabular">{{ (r.tempo_mediano|fmtdec(0) ~ " min") if r.tempo_mediano is not none else "sem estimativa" }}</td></tr>
-    <tr><th scope="row">% em transporte coletivo</th><td class="num tabular">{{ r.pct_coletivo|fmtdec(1) if r.pct_coletivo is not none else "sem estimativa" }}</td></tr>
+    <tr><th scope="row">{{ t.RM_PEND.ocupados }}</th><td class="num tabular">{{ r.ocupados|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_PEND.pendulares }}</th><td class="num tabular">{{ r.pendulares|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_PEND.pct_pendular }}</th><td class="num tabular">{{ r.pct_pendular|fmtdec(1) if r.pct_pendular is not none else t.SEM_ESTIMATIVA }}</td></tr>
+    <tr><th scope="row">{{ t.RM_PEND.tempo_mediano }}</th><td class="num tabular">{{ (r.tempo_mediano|fmtdec(0) ~ " " ~ t.MIN) if r.tempo_mediano is not none else t.SEM_ESTIMATIVA }}</td></tr>
+    <tr><th scope="row">{{ t.RM_PEND.pct_coletivo }}</th><td class="num tabular">{{ r.pct_coletivo|fmtdec(1) if r.pct_coletivo is not none else t.SEM_ESTIMATIVA }}</td></tr>
   </tbody>
 </table>
 </section>
 
 <section class="secao">
-<h2>Migrantes e trabalho</h2>
-<p class="nota">Soma dos municípios da região (rm_mig_pendular_resumo): entre quem migrou
-dentro da própria região metropolitana e estava ocupado, para onde foi trabalhar.</p>
+<h2>{{ t.H_MIGRANTES_TRABALHO }}</h2>
+<p class="nota">{{ t.NOTA_MIGRANTES_TRABALHO }}</p>
 <table class="indicadores">
   <tbody>
-    <tr><th scope="row">Migrantes intra-RM</th><td class="num tabular">{{ r.mp.migrantes_intra|fmtint }}</td></tr>
-    <tr><th scope="row">... ocupados</th><td class="num tabular">{{ r.mp.mig_ocupados|fmtint }}</td></tr>
-    <tr><th scope="row">... pendulares (trabalham fora de onde passaram a morar)</th><td class="num tabular">{{ r.mp.mig_pendulares|fmtint }}</td></tr>
-    <tr><th scope="row">... voltam a trabalhar na origem de onde saíram</th><td class="num tabular">{{ r.mp.pendular_para_origem|fmtint }}</td></tr>
-    <tr><th scope="row">... passam a trabalhar no núcleo</th><td class="num tabular">{{ r.mp.pendular_para_nucleo|fmtint }}</td></tr>
-    <tr><th scope="row">... trabalham onde passaram a morar</th><td class="num tabular">{{ r.mp.trabalha_onde_mora|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MP.migrantes_intra }}</th><td class="num tabular">{{ r.mp.migrantes_intra|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MP.mig_ocupados }}</th><td class="num tabular">{{ r.mp.mig_ocupados|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MP.mig_pendulares }}</th><td class="num tabular">{{ r.mp.mig_pendulares|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MP.pendular_para_origem }}</th><td class="num tabular">{{ r.mp.pendular_para_origem|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MP.pendular_para_nucleo }}</th><td class="num tabular">{{ r.mp.pendular_para_nucleo|fmtint }}</td></tr>
+    <tr><th scope="row">{{ t.RM_MP.trabalha_onde_mora }}</th><td class="num tabular">{{ r.mp.trabalha_onde_mora|fmtint }}</td></tr>
   </tbody>
 </table>
 </section>
 
 <section class="secao">
-<h2>Municípios da {{ r.nome }}</h2>
+<h2>{{ t.h_municipios_da_rm(r.nome) }}</h2>
 <table>
-  <thead><tr><th scope="col">Município</th><th scope="col">Núcleo</th><th scope="col" class="num">Saldo migratório</th></tr></thead>
+  <thead><tr><th scope="col">{{ t.TH_MUNICIPIO }}</th><th scope="col">{{ t.TH_NUCLEO }}</th><th scope="col" class="num">{{ t.TH_SALDO_MIG }}</th></tr></thead>
   <tbody>
   {% for mu in r.municipios %}
-    <tr><td><a href="/municipio/{{ mu.slug }}/">{{ mu.nm_mun }}/{{ mu.uf_sigla }}</a></td><td>{{ "Sim" if mu.nucleo else "" }}</td><td class="num tabular">{{ mu.saldo|fmtsinal }}</td></tr>
+    <tr><td><a href="{{ x.u('/municipio/' ~ mu.slug ~ '/') }}">{{ mu.nm_mun }}/{{ mu.uf_sigla }}</a></td><td>{{ t.SIM if mu.nucleo else "" }}</td><td class="num tabular">{{ mu.saldo|fmtsinal }}</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </section>
 
-<p class="cta"><a href="/?rm={{ r.cd_rm }}">Abrir {{ r.nome }} no atlas interativo &rarr;</a></p>
+<p class="cta"><a href="{{ x.app('rm=' ~ r.cd_rm) }}">{{ t.cta_rm(r.nome) }}</a></p>
 </article>
 {% endblock %}
 """
 
-
-def _tpl_indice(titulo: str, corpo: str) -> str:
-    return '{% extends "_base.html" %}\n{% block content %}\n<article>\n<h1>' + titulo + \
-        '</h1>\n' + corpo + '\n</article>\n{% endblock %}\n'
-
+# páginas de conteúdo (índices, achados, metodologia...): título + corpo HTML já montado
+_INDICE = """{% extends "_base.html" %}
+{% block content %}
+<article>
+<h1>{{ h1 }}</h1>
+{{ corpo }}
+</article>
+{% endblock %}
+"""
 
 TEMPLATES = {
     "_base.html": _BASE,
@@ -627,10 +651,11 @@ TEMPLATES = {
     "municipio.html": _MUNICIPIO,
     "unidade.html": _UNIDADE,
     "rm.html": _RM,
+    "indice.html": _INDICE,
 }
 
 
-def registrar_env() -> jinja2.Environment:
+def registrar_env(lang: str = LANG_PADRAO) -> jinja2.Environment:
     env = jinja2.Environment(
         loader=jinja2.DictLoader(TEMPLATES),
         autoescape=jinja2.select_autoescape(["html"]),
@@ -642,47 +667,140 @@ def registrar_env() -> jinja2.Environment:
         return Markup(s.replace("</", "<\\/"))
 
     env.filters["jsonld"] = jsonld_filter
-    env.filters["fmtint"] = fmt_int
-    env.filters["fmtsinal"] = fmt_sinal
-    env.filters["fmtdec"] = fmt_dec
-    env.filters["fmtpct"] = fmt_pct100
+    env.filters["fmtint"] = lambda v: fmt_int(v, lang)
+    env.filters["fmtsinal"] = lambda v: fmt_sinal(v, lang)
+    env.filters["fmtdec"] = lambda v, casas=1: fmt_dec(v, casas, lang)
+    env.filters["fmtpct"] = lambda v, casas=1: fmt_pct100(v, casas, lang)
     return env
+
+
+def esc(s: Any) -> str:
+    return _html.escape(str(s), quote=False)
+
+
+def juntar(*partes: Any) -> Markup:
+    """Concatena HTML já montado (str ou Markup) sem reescapar -- `str + Markup` escaparia o str."""
+    return Markup("".join(str(p) for p in partes))
+
+
+class Ctx:
+    """Contexto de idioma que os catálogos (i18n_paginas/*.py) e os templates recebem como `x`:
+    URLs no idioma e números no formato do idioma."""
+
+    def __init__(self, lang: str):
+        self.lang = lang
+
+    def u(self, caminho: str) -> str:
+        """Caminho de página -> caminho no idioma (`/fr/municipio/...`; o português fica na raiz)."""
+        return url_lang(caminho, self.lang)
+
+    def app(self, query: str = "", html: bool = False) -> str:
+        """Link para o SPA. Fora do português acrescenta `lang=xx`. Com `html=True` o `&` sai como
+        `&amp;` (para f-strings de HTML escritas à mão; nos templates o autoescape já o faz)."""
+        partes = [p for p in query.split("&") if p]
+        if self.lang != LANG_PADRAO:
+            partes.append(f"lang={LANG_SPA[self.lang]}")
+        url = "/?" + "&".join(partes) if partes else "/"
+        return url.replace("&", "&amp;") if html else url
+
+    def i(self, v: Any) -> str:
+        return fmt_int(v, self.lang)
+
+    def s(self, v: Any) -> str:
+        return fmt_sinal(v, self.lang)
+
+    def d(self, v: Any, casas: int = 1) -> str:
+        return fmt_dec(v, casas, self.lang)
+
+    def pct(self, v: Any, casas: int = 1) -> str:
+        return fmt_pct100(v, casas, self.lang)
+
+    def num_cru(self, v: float) -> str:
+        """Número sem zeros à direita ("15", "7,5") no formato do idioma (limiares do meta.json)."""
+        return decimal(float(v), 0 if float(v).is_integer() else 1, self.lang)
 
 
 # ============================== geração ==============================
 class Gerador:
-    def __init__(self, site_url: str, dados: dict[str, Any]):
+    """Gera as páginas de UM idioma. A chave de cada página (`chave`) é o caminho em português
+    (`/municipio/<slug>/`), igual nos quatro idiomas; `url_lang` a leva para o caminho do idioma
+    (`/fr/municipio/<slug>/`)."""
+
+    def __init__(self, site_url: str, dados: dict[str, Any], lang: str = LANG_PADRAO):
+        if lang not in LANGS:
+            raise ValueError(f"idioma não suportado: {lang!r}")
         self.site_url = site_url.rstrip("/")
         self.d = dados
-        self.env = registrar_env()
-        self.paginas: list[str] = []  # caminhos relativos (para o sitemap)
+        self.lang = lang
+        self.t = catalogo(lang)
+        self.x = Ctx(lang)
+        self.env = registrar_env(lang)
+        self.aviso = aviso_de(lang)
+        self.fonte = fonte_de(lang)
+        self.paginas: list[str] = []   # caminhos finais, com o prefixo do idioma (para o sitemap)
+        self.chaves: list[str] = []    # chaves independentes de idioma, na mesma ordem
         self.tamanhos: list[int] = []
+
+    # ---- URLs ----
+    def url_lang(self, chave: str) -> str:
+        return url_lang(chave, self.lang)
+
+    u = url_lang
 
     def url(self, caminho: str) -> str:
         return f"{self.site_url}{caminho}"
 
-    def escrever(self, caminho: str, html: str) -> None:
-        """`caminho` sempre termina com '/'; escreve <caminho>/index.html."""
+    def og_img(self) -> str:
+        return "/og.png" if self.lang == LANG_PADRAO else f"/og-{LANG_SPA[self.lang]}.png"
+
+    def hreflang(self, chave: str) -> list[tuple[str, str]]:
+        """Alternates recíprocos (os quatro idiomas, a própria página inclusive) + x-default (pt)."""
+        out = [(l, self.url(url_lang(chave, l))) for l in LANGS]
+        out.append(("x-default", self.url(url_lang(chave, LANG_PADRAO))))
+        return out
+
+    def seletor(self, chave: str) -> Markup:
+        """Seletor PT · EN · FR · ES: a mesma página nos outros idiomas."""
+        itens = []
+        for l in LANGS:
+            sigla, nome = SELETOR[l]
+            if l == self.lang:
+                itens.append(Markup('<span aria-current="true" lang="{lg}" title="{n}">{s}</span>').format(
+                    lg=l, n=nome, s=sigla))
+            else:
+                itens.append(Markup('<a href="{h}" hreflang="{lg}" lang="{lg}" title="{n}">{s}</a>').format(
+                    h=url_lang(chave, l), lg=l, n=nome, s=sigla))
+        return Markup('<span class="idiomas" role="group" aria-label="{a}">{i}</span>').format(
+            a=self.t.ARIA_IDIOMA, i=Markup(" &middot; ").join(itens))
+
+    # ---- escrita ----
+    def escrever(self, caminho: str, html: str, chave: str | None = None) -> None:
+        """`caminho` (já com o prefixo do idioma) sempre termina com '/'; escreve <caminho>/index.html."""
         destino = DIST / caminho.lstrip("/") / "index.html"
         destino.parent.mkdir(parents=True, exist_ok=True)
         html = envolver_tabelas(html)
         destino.write_text(html, encoding="utf-8")
         self.paginas.append(caminho)
+        self.chaves.append(chave or caminho)
         self.tamanhos.append(len(html.encode("utf-8")))
 
-    def base_ctx(self, **extra) -> dict:
+    def base_ctx(self, chave: str, **extra) -> dict:
+        outros = [OG_LOCALE[l] for l in LANGS if l != self.lang]
         ctx = dict(
-            nome_site=NOME_SITE, site_url=self.site_url, aviso=AVISO, fonte=FONTE,
-            versao_dados=VERSAO_DADOS, autor_placeholder=AUTOR_NOME,
-            doi_url=f"https://doi.org/{DOI_CONCEITO}",
+            t=self.t, x=self.x, lang_html=self.lang, og_locale=OG_LOCALE[self.lang], og_alt=outros,
+            og_img=self.og_img(), nome_site=self.t.NOME_SITE, site_url=self.site_url,
+            aviso=self.aviso, fonte=self.fonte, versao_dados=VERSAO_DADOS,
+            seletor=self.seletor(chave), hreflang=self.hreflang(chave),
+            autor_placeholder=AUTOR_NOME, doi_url=f"https://doi.org/{DOI_CONCEITO}",
         )
         ctx.update(extra)
         return ctx
 
-    def render(self, template_nome: str, caminho: str, **ctx) -> None:
+    def render(self, template_nome: str, chave: str, **ctx) -> None:
+        caminho = self.u(chave)
         tpl = self.env.get_template(template_nome)
-        html = tpl.render(**self.base_ctx(canonical=self.url(caminho), **ctx))
-        self.escrever(caminho, html)
+        html = tpl.render(**self.base_ctx(chave, canonical=self.url(caminho), **ctx))
+        self.escrever(caminho, html, chave)
 
     def breadcrumbs_urls(self, itens: list[tuple[str, str | None]], canonical_path: str) -> list[dict]:
         out = []
@@ -693,14 +811,15 @@ class Gerador:
 
     def jsonld_pagina(self, titulo: str, descricao: str, canonical_path: str,
                        about: dict | None = None, breadcrumbs=None, extra: list[dict] | None = None) -> list[dict]:
+        """`canonical_path` e os `href` dos breadcrumbs já vêm com o prefixo do idioma."""
         objs = []
         if breadcrumbs:
             objs.append({"@context": "https://schema.org", "@type": "BreadcrumbList",
                          "itemListElement": self.breadcrumbs_urls(breadcrumbs, canonical_path)})
         webpage = {
             "@context": "https://schema.org", "@type": "WebPage", "name": titulo,
-            "description": descricao, "url": self.url(canonical_path), "inLanguage": "pt-BR",
-            "isPartOf": {"@type": "WebSite", "name": NOME_SITE, "url": self.url("/")},
+            "description": descricao, "url": self.url(canonical_path), "inLanguage": self.lang,
+            "isPartOf": {"@type": "WebSite", "name": self.t.NOME_SITE, "url": self.url(self.u("/"))},
         }
         if about:
             webpage["about"] = about
@@ -709,15 +828,19 @@ class Gerador:
             objs.extend(extra)
         return objs
 
+    def home_bc(self) -> tuple[str, str]:
+        return (self.t.NOME_SITE, self.u("/"))
+
     # ---------------------------- municípios ----------------------------
     def gerar_municipios(self) -> None:
-        d = self.d
+        d, t, x, lang = self.d, self.t, self.x, self.lang
         for cd, m in d["mun_by_cd"].items():
             slug = slug_municipio(m["nm_mun"], m["uf_sigla"], cd)
-            caminho = f"/municipio/{slug}/"
+            chave = f"/municipio/{slug}/"
+            caminho = self.u(chave)
 
             saldo = m["saldo"]
-            classificacao = "equilíbrio" if not saldo else ("atração" if saldo > 0 else "evasão")
+            classificacao = "equilibrio" if not saldo else ("atracao" if saldo > 0 else "evasao")
             ref = d["ref_by_cd"].get(cd, {})
 
             def enriquecer(rows, campo_cd):
@@ -743,10 +866,10 @@ class Gerador:
                     return []
                 total = sum(v for _, v, _ in itens) or 1
                 linhas = []
-                for cat, valor, n_faixa in sorted(itens, key=lambda x: -x[1]):
+                for cat, valor, n_faixa in sorted(itens, key=lambda x_: -x_[1]):
                     linhas.append({
-                        "rotulo": rotulo(dimensao, cat), "valor": valor,
-                        "pct": fmt_pct100(100 * valor / total), "n_faixa": n_faixa,
+                        "rotulo": rotulo(dimensao, cat, lang), "valor": valor,
+                        "pct": fmt_pct100(100 * valor / total, 1, lang), "n_faixa": n_faixa,
                     })
                 return linhas
 
@@ -756,6 +879,7 @@ class Gerador:
                 rm_slug_val = slug_unidade(m["nm_rm"], m["cd_rm"])
 
             precisao_emig = precisao_de(m.get("cv_emig"))
+            rp = t.ROTULO_PRECISAO
 
             ctx_m = dict(
                 cd=cd, nome=m["nm_mun"], uf_sigla=m["uf_sigla"], pop=m["pop"], pop5=m["pop5"],
@@ -763,22 +887,23 @@ class Gerador:
                 saldo=saldo, tlm=m["tlm"], iem=m["iem"], classificacao=classificacao,
                 nm_rm=m.get("nm_rm"),
                 n_imig_faixa=m["n_imig_faixa"], n_emig_faixa=m["n_emig_faixa"],
-                precisao_imig_rotulo=ROTULO_PRECISAO.get(m["precisao_imig"], m["precisao_imig"]),
-                precisao_emig_rotulo=ROTULO_PRECISAO.get(precisao_emig, precisao_emig),
-                ic_imig=ic95(m["imig"], m.get("se_imig")), ic_emig=ic95(m["emig"], m.get("se_emig")),
-                ic_saldo=ic95(saldo, m.get("se_saldo"), piso_zero=False),  # saldo pode ser negativo
+                precisao_imig_rotulo=rp.get(m["precisao_imig"], m["precisao_imig"]),
+                precisao_emig_rotulo=rp.get(precisao_emig, precisao_emig),
+                ic_imig=ic95(m["imig"], m.get("se_imig"), lang=lang),
+                ic_emig=ic95(m["emig"], m.get("se_emig"), lang=lang),
+                ic_saldo=ic95(saldo, m.get("se_saldo"), piso_zero=False, lang=lang),  # saldo pode ser negativo
             )
 
-            titulo = f"Migração em {m['nm_mun']}/{m['uf_sigla']} (2017-2022)"
+            nome_uf = f"{m['nm_mun']}/{m['uf_sigla']}"
+            titulo = t.titulo_mun(nome_uf)
             if len(titulo) > 60:
-                titulo = f"Migração em {m['nm_mun']}/{m['uf_sigla']}"
-            descricao = (f"Saldo migratório, imigrantes, emigrantes e perfil dos migrantes de "
-                         f"{m['nm_mun']}/{m['uf_sigla']} entre 2017 e 2022, a partir do Censo 2022 do IBGE.")[:160]
+                titulo = t.titulo_mun_curto(nome_uf)
+            descricao = cortar(t.descricao_mun(nome_uf))
 
-            breadcrumbs = [(NOME_SITE, "/"), ("Municípios", "/municipios/"),
-                           (m["uf_sigla"], f"/uf/{m['uf_sigla'].lower()}/"), (m["nm_mun"], None)]
+            breadcrumbs = [self.home_bc(), (t.NAV["municipios"], self.u("/municipios/")),
+                           (m["uf_sigla"], self.u(f"/uf/{m['uf_sigla'].lower()}/")), (m["nm_mun"], None)]
             about = {
-                "@type": "AdministrativeArea", "name": f"{m['nm_mun']}/{m['uf_sigla']}",
+                "@type": "AdministrativeArea", "name": nome_uf,
                 "identifier": cd,
                 "containedInPlace": {"@type": "AdministrativeArea", "name": ref.get("uf_nome", m["uf_sigla"]),
                                       "identifier": m["uf"]},
@@ -786,22 +911,23 @@ class Gerador:
             jsonld_objs = self.jsonld_pagina(titulo, descricao, caminho, about, breadcrumbs)
 
             def app_link_par(o, dd):
-                return f"/?o={o}&d={dd}"
+                return x.app(f"o={o}&d={dd}")
 
             self.render(
-                "municipio.html", caminho, title=titulo, description=descricao,
-                breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link=f"/?mun={cd}",
+                "municipio.html", chave, title=titulo, description=descricao,
+                breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link=x.app(f"mun={cd}"),
                 m=ctx_m, top_origens=top_origens, top_destinos=top_destinos,
                 perfil_linhas=perfil_linhas, pend=pend, rm_slug=rm_slug_val,
-                app_link_par=app_link_par, rotulo_precisao=lambda p: ROTULO_PRECISAO.get(p, p),
+                app_link_par=app_link_par, rotulo_precisao=lambda p: rp.get(p, p),
+                cit=dict(autor=AUTOR_NOME, versao=VERSAO_DADOS, canonical=self.url(caminho),
+                         doi_url=f"https://doi.org/{DOI_CONCEITO}"),
             )
 
     # ---------------------------- unidades agregadas (uf/rgi/rgint) ----------------------------
     def gerar_unidades(self, nivel: str) -> None:
-        d = self.d
+        d, t, x = self.d, self.t, self.x
         info = {"uf": d["uf_info"], "rgi": d["rgi_info"], "rgint": d["rgint_info"]}[nivel]
         muns_por = {"uf": d["muns_por_uf"], "rgi": d["muns_por_rgi"], "rgint": d["muns_por_rgint"]}[nivel]
-        rotulo_nivel = {"uf": "Unidade da Federação", "rgi": "Região imediata", "rgint": "Região intermediária"}[nivel]
         prefixo_url = {"uf": "/uf/", "rgi": "/regiao-imediata/", "rgint": "/regiao-intermediaria/"}[nivel]
         fluxos_df = d["fluxos_nivel"][nivel]
 
@@ -812,17 +938,16 @@ class Gerador:
         top_orig = {k: v.to_dict("records") for k, v in fluxos_ord.groupby("destino", sort=False).head(10).groupby("destino")}
 
         for codigo, meta_u in info.items():
-            nome = meta_u["nome"] if nivel != "uf" else meta_u["nome"]
+            nome_completo = meta_u["nome"]
             if nivel == "uf":
-                nome_completo = meta_u["nome"]
                 slug = meta_u["sigla"].lower()
-                caminho = f"{prefixo_url}{slug}/"
-                app_link = f"/?n=uf&sel={codigo}"
+                chave = f"{prefixo_url}{slug}/"
+                app_link = x.app(f"n=uf&sel={codigo}")
             else:
-                nome_completo = nome
-                slug = slug_unidade(nome, codigo)
-                caminho = f"{prefixo_url}{slug}/"
-                app_link = f"/?n={nivel}&sel={codigo}"
+                slug = slug_unidade(nome_completo, codigo)
+                chave = f"{prefixo_url}{slug}/"
+                app_link = x.app(f"n={nivel}&sel={codigo}")
+            caminho = self.u(chave)
 
             municipios_da_unidade = sorted(muns_por.get(codigo, []), key=lambda r: -(r["saldo"] or 0))
             pop5_total = sum(r["pop5"] or 0 for r in municipios_da_unidade)
@@ -830,8 +955,6 @@ class Gerador:
             emig_t = emig_por_codigo.get(codigo, 0.0)
             saldo_t = imig_t - emig_t
             tlm_t = (saldo_t / pop5_total * 1000) if pop5_total else None
-
-            uf_sigla_da_unidade = d["uf_info"].get(meta_u.get("uf", codigo), {}).get("sigla") if nivel != "uf" else meta_u["sigla"]
 
             def enriquecer_unidade(rows, campo):
                 out = []
@@ -841,19 +964,19 @@ class Gerador:
                         oi = d["uf_info"].get(outro)
                         if not oi:
                             continue
-                        href = f"/uf/{oi['sigla'].lower()}/"
+                        href = self.u(f"/uf/{oi['sigla'].lower()}/")
                         nome_o = f"{oi['nome']} ({oi['sigla']})"
                     else:
                         oi = info.get(outro)
                         if not oi:
                             continue
-                        href = f"{prefixo_url}{slug_unidade(oi['nome'], outro)}/"
+                        href = self.u(f"{prefixo_url}{slug_unidade(oi['nome'], outro)}/")
                         nome_o = oi["nome"]
                     out.append({"href": href, "nome": nome_o, "total": r["total"]})
                 return out
 
             u = dict(
-                nome=nome_completo, rotulo_nivel=rotulo_nivel, rotulo_nivel_min=rotulo_nivel.lower(),
+                nome=nome_completo, nivel=nivel,
                 n_municipios=len(municipios_da_unidade), pop5=pop5_total, imig=imig_t, emig=emig_t,
                 saldo=saldo_t, tlm=tlm_t,
                 top_origens=enriquecer_unidade(top_orig.get(codigo, []), "origem"),
@@ -865,29 +988,29 @@ class Gerador:
                 app_link=app_link,
             )
 
-            titulo = f"Migração em {nome_completo} (2017-2022)"
+            titulo = t.titulo_unidade(nome_completo)
             if len(titulo) > 60:
-                titulo = f"Migração em {nome_completo}"[:60]
-            descricao = (f"Saldo migratório e principais fluxos de {nome_completo} entre 2017 e "
-                         f"2022, a partir do Censo Demográfico 2022 do IBGE.")[:160]
-            rotulo_pai = "UFs" if nivel == "uf" else ("Regiões imediatas" if nivel == "rgi" else "Regiões intermediárias")
-            href_pai = "/ufs/" if nivel == "uf" else "/regioes/"
-            breadcrumbs = [(NOME_SITE, "/"), (rotulo_pai, href_pai), (nome_completo, None)]
-            uf_nome_pai = d["uf_info"].get(meta_u.get("uf", codigo), {}).get("nome", "Brasil") if nivel != "uf" else "Brasil"
+                titulo = t.titulo_unidade_curto(nome_completo)[:60]
+            descricao = cortar(t.descricao_unidade(nome_completo))
+            rotulo_pai = t.NIVEL[nivel]["pai"]
+            href_pai = self.u("/ufs/" if nivel == "uf" else "/regioes/")
+            breadcrumbs = [self.home_bc(), (rotulo_pai, href_pai), (nome_completo, None)]
+            uf_nome_pai = d["uf_info"].get(meta_u.get("uf", codigo), {}).get("nome", t.PAIS) if nivel != "uf" else t.PAIS
             about = {"@type": "AdministrativeArea", "name": nome_completo, "identifier": codigo,
                      "containedInPlace": {"@type": ("Country" if nivel == "uf" else "AdministrativeArea"), "name": uf_nome_pai}}
             jsonld_objs = self.jsonld_pagina(titulo, descricao, caminho, about, breadcrumbs)
 
-            self.render("unidade.html", caminho, title=titulo, description=descricao,
+            self.render("unidade.html", chave, title=titulo, description=descricao,
                         breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link=app_link, u=u)
 
     # ---------------------------- regiões metropolitanas ----------------------------
     def gerar_rms(self) -> None:
-        d = self.d
+        d, t, x = self.d, self.t, self.x
         for cd_rm, resumo in d["rm_resumo_by_cd"].items():
             nome = resumo["nm_rm"]
             slug = slug_unidade(nome, cd_rm)
-            caminho = f"/regiao-metropolitana/{slug}/"
+            chave = f"/regiao-metropolitana/{slug}/"
+            caminho = self.u(chave)
             municipios_rm = sorted(d["muns_por_rm"].get(cd_rm, []), key=lambda r: (not r["nucleo"], r["nm_mun"]))
             for r in municipios_rm:
                 r["slug"] = slug_municipio(r["nm_mun"], r["uf_sigla"], r["cd_mun"])
@@ -901,11 +1024,11 @@ class Gerador:
                 top_intra.append({
                     "slug_o": slug_municipio(mo["nm_mun"], mo["uf_sigla"], f["origem"]), "nome_o": f"{mo['nm_mun']}/{mo['uf_sigla']}",
                     "slug_d": slug_municipio(md["nm_mun"], md["uf_sigla"], f["destino"]), "nome_d": f"{md['nm_mun']}/{md['uf_sigla']}",
-                    "tipologia": TIPOLOGIA_ROTULO.get(f["tipologia"], f["tipologia"]), "total": f["total"],
+                    "tipologia": t.TIPOLOGIA_ROTULO.get(f["tipologia"], f["tipologia"]), "total": f["total"],
                 })
 
             mp = d["mig_pend_soma_por_rm"].get(cd_rm, {})
-            tipo_extenso = "Região Integrada de Desenvolvimento (RIDE)" if resumo["tipo"] == "RIDE" else "Região Metropolitana"
+            tipo_extenso = t.TIPO_RM["RIDE" if resumo["tipo"] == "RIDE" else "RM"]
 
             r_ctx = dict(
                 cd_rm=cd_rm, nome=nome, tipo_extenso=tipo_extenso, n_municipios=resumo["n_municipios"],
@@ -918,22 +1041,34 @@ class Gerador:
                 top_intra=top_intra, mp=mp, municipios=municipios_rm,
             )
 
-            titulo = f"Migração na {nome} (2017-2022)"
+            titulo = t.titulo_rm(nome)
             if len(titulo) > 60:
-                titulo = f"Migração na {nome}"[:60]
-            descricao = (f"Migração intrametropolitana, deslocamento pendular e núcleo x "
-                         f"periferia da {nome} entre 2017 e 2022, Censo 2022 (IBGE).")[:160]
-            breadcrumbs = [(NOME_SITE, "/"), ("Regiões metropolitanas", "/regioes-metropolitanas/"), (nome, None)]
+                titulo = t.titulo_rm_curto(nome)[:60]
+            descricao = cortar(t.descricao_rm(nome))
+            breadcrumbs = [self.home_bc(), (t.NAV["rms_extenso"], self.u("/regioes-metropolitanas/")), (nome, None)]
             about = {"@type": "AdministrativeArea", "name": nome, "identifier": cd_rm,
-                     "containedInPlace": {"@type": "Country", "name": "Brasil"}}
+                     "containedInPlace": {"@type": "Country", "name": t.PAIS}}
             jsonld_objs = self.jsonld_pagina(titulo, descricao, caminho, about, breadcrumbs)
 
-            self.render("rm.html", caminho, title=titulo, description=descricao,
-                        breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link=f"/?rm={cd_rm}", r=r_ctx)
+            self.render("rm.html", chave, title=titulo, description=descricao,
+                        breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link=x.app(f"rm={cd_rm}"), r=r_ctx)
 
-    # ---------------------------- índices ----------------------------
+    # ---------------------------- páginas de conteúdo (índices e fixas) ----------------------------
+    def _pagina(self, chave: str, titulo: str, descricao: str, corpo: str, extra_jsonld=None,
+                breadcrumbs=None, bc_titulo: str | None = None, h1: str | None = None) -> None:
+        caminho = self.u(chave)
+        if breadcrumbs is None:
+            breadcrumbs = [self.home_bc(), (bc_titulo or titulo, None)]
+        jsonld_objs = self.jsonld_pagina(titulo, descricao, caminho, None, breadcrumbs, extra=extra_jsonld)
+        tpl = self.env.get_template("indice.html")
+        html = tpl.render(**self.base_ctx(chave, canonical=self.url(caminho), title=titulo, description=descricao,
+                                           breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, h1=h1 or titulo,
+                                           corpo=Markup(corpo)))
+        self.escrever(caminho, html, chave)
+
     def gerar_indices(self) -> None:
-        d = self.d
+        d, t, x = self.d, self.t, self.x
+        u = self.u
 
         # /municipios/ -- lista por UF
         ufs_ordenadas = sorted(d["uf_info"].items(), key=lambda kv: kv[1]["nome"])
@@ -941,40 +1076,34 @@ class Gerador:
         for cd_uf, info in ufs_ordenadas:
             muns = sorted(d["muns_por_uf"].get(cd_uf, []), key=lambda r: r["nm_mun"])
             itens = "".join(
-                f'<li><a href="/municipio/{slug_municipio(m["nm_mun"], m["uf_sigla"], m["cd_mun"])}/">{m["nm_mun"]}</a></li>'
+                f'<li><a href="{u("/municipio/" + slug_municipio(m["nm_mun"], m["uf_sigla"], m["cd_mun"]) + "/")}">{esc(m["nm_mun"])}</a></li>'
                 for m in muns
             )
             blocos.append(
-                f'<section class="secao"><h2 id="uf-{info["sigla"].lower()}">{info["nome"]} ({info["sigla"]}) '
-                f'&middot; <a href="/uf/{info["sigla"].lower()}/">página da UF</a></h2>'
-                f'<details><summary>{len(muns)} municípios</summary><ul class="lista-municipios">{itens}</ul></details></section>'
+                f'<section class="secao"><h2 id="uf-{info["sigla"].lower()}">{esc(info["nome"])} ({info["sigla"]}) '
+                f'&middot; {t.pagina_da_uf(u("/uf/" + info["sigla"].lower() + "/"))}</h2>'
+                f'<details><summary>{t.n_municipios(len(muns))}</summary><ul class="lista-municipios">{itens}</ul></details></section>'
             )
-        corpo = ('<p>Os 5.570 municípios brasileiros publicados no atlas, agrupados por UF. '
-                 'Veja também a <a href="/ufs/">lista de UFs</a> e as '
-                 '<a href="/regioes-metropolitanas/">regiões metropolitanas</a>.</p>' + "".join(blocos))
-        self._pagina_indice("/municipios/", "Municípios do atlas por UF",
-                             "Lista dos 5.570 municípios brasileiros com dados de migração interna publicados, agrupados por UF.",
-                             corpo)
+        idx = t.indice_municipios(x, len(d["mun_by_cd"]))
+        self._pagina("/municipios/", idx["titulo"], idx["descricao"], juntar(idx["intro"], *blocos))
 
         # /ufs/
         itens = "".join(
-            f'<li><a href="/uf/{info["sigla"].lower()}/">{info["nome"]} ({info["sigla"]})</a></li>'
+            f'<li><a href="{u("/uf/" + info["sigla"].lower() + "/")}">{esc(info["nome"])} ({info["sigla"]})</a></li>'
             for _, info in ufs_ordenadas
         )
-        corpo = f'<p>As 27 Unidades da Federação com indicadores agregados de migração interna.</p><ul class="lista-uf">{itens}</ul>'
-        self._pagina_indice("/ufs/", "Unidades da Federação",
-                             "As 27 Unidades da Federação brasileiras com indicadores agregados de migração interna, Censo 2022.", corpo)
+        idx = t.indice_ufs(x)
+        self._pagina("/ufs/", idx["titulo"], idx["descricao"], juntar(idx["intro"], f'<ul class="lista-uf">{itens}</ul>'))
 
         # /regioes-metropolitanas/
         rms_ordenadas = sorted(d["rm_resumo_by_cd"].items(), key=lambda kv: kv[1]["nm_rm"])
         itens = "".join(
-            f'<li><a href="/regiao-metropolitana/{slug_unidade(r["nm_rm"], cd)}/">{r["nm_rm"]}</a> '
-            f'<span class="muted">({r["tipo"]}, {r["n_municipios"]} municípios)</span></li>'
+            f'<li><a href="{u("/regiao-metropolitana/" + slug_unidade(r["nm_rm"], cd) + "/")}">{esc(r["nm_rm"])}</a> '
+            f'<span class="muted">{t.rm_item_extra(r["tipo"], r["n_municipios"])}</span></li>'
             for cd, r in rms_ordenadas
         )
-        corpo = f'<p>As 81 regiões metropolitanas e RIDEs do Brasil, com o módulo de migração intrametropolitana e pendular.</p><ul>{itens}</ul>'
-        self._pagina_indice("/regioes-metropolitanas/", "Regiões metropolitanas e RIDEs",
-                             "As 81 regiões metropolitanas e RIDEs do Brasil com migração intrametropolitana e deslocamento pendular, Censo 2022.", corpo)
+        idx = t.indice_rms(x)
+        self._pagina("/regioes-metropolitanas/", idx["titulo"], idx["descricao"], juntar(idx["intro"], f"<ul>{itens}</ul>"))
 
         # /regioes/ -- RGI e RGInt agrupadas por UF
         rgi_por_uf: dict[str, list] = {}
@@ -987,397 +1116,213 @@ class Gerador:
         def bloco_regiao(mapa, prefixo, titulo_secao):
             partes = [f"<h2>{titulo_secao}</h2>"]
             for cd_uf, info in ufs_ordenadas:
-                lst = sorted(mapa.get(cd_uf, []), key=lambda x: x[1])
+                lst = sorted(mapa.get(cd_uf, []), key=lambda x_: x_[1])
                 if not lst:
                     continue
-                itens = "".join(f'<li><a href="{prefixo}{slug_unidade(nome, cd)}/">{nome}</a></li>' for cd, nome in lst)
-                partes.append(f'<details><summary>{info["nome"]} ({info["sigla"]}) &middot; {len(lst)}</summary><ul>{itens}</ul></details>')
+                itens = "".join(f'<li><a href="{u(prefixo + slug_unidade(nome, cd) + "/")}">{esc(nome)}</a></li>' for cd, nome in lst)
+                partes.append(f'<details><summary>{esc(info["nome"])} ({info["sigla"]}) &middot; {len(lst)}</summary><ul>{itens}</ul></details>')
             return "".join(partes)
 
-        corpo = ('<p>510 regiões imediatas e 133 regiões intermediárias (divisão territorial do '
-                 'IBGE), com indicadores agregados de migração interna.</p>'
-                 + bloco_regiao(rgi_por_uf, "/regiao-imediata/", "Regiões imediatas")
-                 + bloco_regiao(rgint_por_uf, "/regiao-intermediaria/", "Regiões intermediárias"))
-        self._pagina_indice("/regioes/", "Regiões imediatas e intermediárias",
-                             "As 510 regiões imediatas e 133 regiões intermediárias do IBGE, com indicadores agregados de migração interna, Censo 2022.", corpo)
+        idx = t.indice_regioes(x)
+        corpo = juntar(idx["intro"], bloco_regiao(rgi_por_uf, "/regiao-imediata/", idx["h_rgi"]),
+                       bloco_regiao(rgint_por_uf, "/regiao-intermediaria/", idx["h_rgint"]))
+        self._pagina("/regioes/", idx["titulo"], idx["descricao"], corpo)
 
-    def _pagina_indice(self, caminho: str, titulo: str, descricao: str, corpo_html: str) -> None:
-        breadcrumbs = [(NOME_SITE, "/"), (titulo, None)]
-        jsonld_objs = self.jsonld_pagina(titulo, descricao, caminho, None, breadcrumbs)
-        tpl = self.env.from_string(_tpl_indice(titulo, corpo_html))
-        html = tpl.render(**self.base_ctx(canonical=self.url(caminho), title=titulo, description=descricao,
-                                           breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link="/"))
-        self.escrever(caminho, html)
-
-    # ---------------------------- páginas de conteúdo fixo ----------------------------
     def gerar_achados(self) -> None:
-        d = self.d
+        d, t, x = self.d, self.t, self.x
+        u = self.u
         municipios = list(d["mun_by_cd"].values())
         top_saldo_pos = sorted(municipios, key=lambda r: -(r["saldo"] or 0))[:10]
         top_saldo_neg = sorted(municipios, key=lambda r: (r["saldo"] or 0))[:10]
         top_fluxos = d["fluxos"].sort_values("total", ascending=False).head(10).to_dict("records")
 
         def linha_mun(m):
-            return (f'<tr><td><a href="/municipio/{slug_municipio(m["nm_mun"], m["uf_sigla"], m["cd_mun"])}/">'
-                    f'{m["nm_mun"]}/{m["uf_sigla"]}</a></td><td class="num tabular">{fmt_sinal(m["saldo"])}</td></tr>')
+            return (f'<tr><td><a href="{u("/municipio/" + slug_municipio(m["nm_mun"], m["uf_sigla"], m["cd_mun"]) + "/")}">'
+                    f'{esc(m["nm_mun"])}/{m["uf_sigla"]}</a></td><td class="num tabular">{x.s(m["saldo"])}</td></tr>')
 
         def linha_fluxo(f):
             mo, md = d["mun_by_cd"].get(f["origem"]), d["mun_by_cd"].get(f["destino"])
             if not mo or not md:
                 return ""
             so, sd = slug_municipio(mo["nm_mun"], mo["uf_sigla"], f["origem"]), slug_municipio(md["nm_mun"], md["uf_sigla"], f["destino"])
-            return (f'<tr><td><a href="/municipio/{so}/">{mo["nm_mun"]}/{mo["uf_sigla"]}</a> &rarr; '
-                    f'<a href="/municipio/{sd}/">{md["nm_mun"]}/{md["uf_sigla"]}</a> &middot; '
-                    f'<a href="/?o={f["origem"]}&amp;d={f["destino"]}">ver no atlas</a></td>'
-                    f'<td class="num tabular">{fmt_int(f["total"])}</td></tr>')
+            return (f'<tr><td><a href="{u("/municipio/" + so + "/")}">{esc(mo["nm_mun"])}/{mo["uf_sigla"]}</a> &rarr; '
+                    f'<a href="{u("/municipio/" + sd + "/")}">{esc(md["nm_mun"])}/{md["uf_sigla"]}</a> &middot; '
+                    f'<a href="{x.app("o=" + f["origem"] + "&d=" + f["destino"], html=True)}">{t.VER_NO_ATLAS}</a></td>'
+                    f'<td class="num tabular">{x.i(f["total"])}</td></tr>')
 
-        corpo = f"""
-<p>Três achados-chave da pesquisa, já validados na metodologia (ver <a href="/metodologia/">metodologia</a>
-e <code>docs/qa/F2b_relatorio.md</code>), e os maiores saldos e fluxos publicados.</p>
+        def tabela_mun(linhas):
+            return (f'<table><thead><tr><th scope="col">{t.TH_MUNICIPIO}</th><th scope="col" class="num">{t.TH_SALDO}</th></tr></thead>'
+                    f'<tbody>{"".join(linha_mun(m) for m in linhas)}</tbody></table>')
 
-<section class="secao achado">
-<h2>Desconcentração residencial sem desconcentração produtiva</h2>
-<p>Entre os ocupados que saíram do núcleo metropolitano para a periferia entre 2017 e 2022,
-<strong>46,5%</strong> continuam trabalhando no núcleo -- a moradia se deslocou, o emprego não.
-Na RIDE do Distrito Federal, essa taxa chega a <strong>59,3%</strong>.
-<a href="/regiao-metropolitana/{slug_unidade("Região Integrada de Desenvolvimento do Distrito Federal e Entorno", "7801")}/">Ver a RIDE-DF &rarr;</a></p>
-</section>
+        v = dict(
+            link_ride=u("/regiao-metropolitana/" + slug_unidade("Região Integrada de Desenvolvimento do Distrito Federal e Entorno", "7801") + "/"),
+            tbl_pos=Markup(tabela_mun(top_saldo_pos)), tbl_neg=Markup(tabela_mun(top_saldo_neg)),
+            tbl_fluxos=Markup(f'<table><thead><tr><th scope="col">{t.TH_FLUXO}</th><th scope="col" class="num">{t.TH_PESSOAS}</th></tr></thead>'
+                        f'<tbody>{"".join(linha_fluxo(f) for f in top_fluxos)}</tbody></table>'),
+        )
+        self._pagina("/achados/", t.ACHADOS_TITULO, t.ACHADOS_DESCRICAO, t.corpo_achados(x, v))
 
-<section class="secao achado">
-<h2>Seletividade educacional no fluxo Rio de Janeiro &rarr; São Paulo</h2>
-<p>Entre os migrantes de 25 anos ou mais que saíram do Rio de Janeiro para São Paulo,
-<strong>75,1%</strong> têm superior completo -- uma seletividade educacional acentuada.
-<a href="/?o=3304557&amp;d=3550308">Ver o fluxo no atlas &rarr;</a></p>
-</section>
-
-<section class="secao achado">
-<h2>O maior par pendular do país</h2>
-<p>Guarulhos &rarr; São Paulo é o maior par pendular de trabalho do Brasil:
-<strong>77.500 pessoas</strong> moram em Guarulhos e trabalham em São Paulo.
-<a href="/?rm=4901&amp;aba=trab&amp;o=3518800&amp;d=3550308">Ver o par pendular &rarr;</a></p>
-</section>
-
-<section class="secao">
-<h2>12,9 milhões de pessoas mudaram de município</h2>
-<p>No quinquênio 2017-2022, 12,9 milhões de pessoas migraram entre os 5.570 municípios
-brasileiros, resultando em 53.097 pares origem-destino publicados após o controle de revelação.</p>
-</section>
-
-<section class="secao">
-<h2>10 maiores saldos migratórios positivos</h2>
-<table><thead><tr><th scope="col">Município</th><th scope="col" class="num">Saldo</th></tr></thead>
-<tbody>{"".join(linha_mun(m) for m in top_saldo_pos)}</tbody></table>
-</section>
-
-<section class="secao">
-<h2>10 maiores saldos migratórios negativos</h2>
-<table><thead><tr><th scope="col">Município</th><th scope="col" class="num">Saldo</th></tr></thead>
-<tbody>{"".join(linha_mun(m) for m in top_saldo_neg)}</tbody></table>
-</section>
-
-<section class="secao">
-<h2>10 maiores fluxos migratórios do país</h2>
-<table><thead><tr><th scope="col">Fluxo</th><th scope="col" class="num">Pessoas</th></tr></thead>
-<tbody>{"".join(linha_fluxo(f) for f in top_fluxos)}</tbody></table>
-</section>
-"""
-        self._pagina_indice("/achados/", "Principais achados do atlas",
-                             "Os principais achados de migração interna do Censo 2022: desconcentração metropolitana, seletividade educacional, maior par pendular e maiores saldos e fluxos.",
-                             corpo)
+    def _aviso_traducao_topo(self) -> Markup:
+        if not self.t.AVISO_TRADUCAO:
+            return Markup("")
+        return Markup('<p class="traducao">{}</p>').format(self.t.AVISO_TRADUCAO)
 
     def gerar_metodologia(self) -> None:
-        r = META["revelacao"]
-        corpo = f"""
-<p>Versão estática da página de metodologia do atlas interativo. Ver também
-<a href="/glossario/">glossário</a> e o documento completo <code>docs/METODOLOGIA.md</code>
-do repositório do projeto.</p>
-
-<section class="secao"><h2>Fonte e universo</h2>
-<p>Os dados vêm do Censo Demográfico 2022 do IBGE, microdados da amostra (acesso controlado),
-quesito de migração (Migração Interna e Internacional). O universo é a população de 5 anos ou
-mais residente em 2022.</p></section>
-
-<section class="secao"><h2>Migrante de data fixa</h2>
-<p>Compara-se o município de residência em 31/07/2017 com o de 31/07/2022. É migrante interno
-quem morava em outro município do Brasil em 2017; migrante internacional, quem morava em outro
-país; não migrante, quem já morava no mesmo município (ou mora ali há 6 anos ou mais).</p></section>
-
-<section class="secao"><h2>Indicadores</h2>
-<dl>
-<dt>Saldo migratório</dt><dd>Imigrantes menos emigrantes.</dd>
-<dt>Taxa líquida de migração (TLM)</dt><dd>(Saldo / população de referência) &times; 1000, por mil habitantes.</dd>
-<dt>Índice de eficácia migratória (IEM)</dt><dd>Saldo / (imigrantes + emigrantes), entre -1 e 1.</dd>
-</dl></section>
-
-<section class="secao"><h2>Precisão das estimativas</h2>
-<p>Toda contagem vem de uma amostra e tem erro amostral. Cada estimativa publicada recebe uma
-faixa de precisão pelo coeficiente de variação (CV): <strong>boa</strong> (CV até {r['cv_boa']}%),
-<strong>usar com cautela</strong> (CV entre {r['cv_boa']}% e {r['cv_cautela']}%), <strong>baixa
-precisão</strong> (CV acima de {r['cv_cautela']}%).</p></section>
-
-<section class="secao"><h2>Controle de revelação</h2>
-<p>Antes da publicação, um gate automático (regras R1-R9) impede que qualquer célula
-individualize alguém: nenhum fluxo ou categoria com menos de {r['min_pessoas']} pessoas
-(estimativa ponderada) ou {r['min_domicilios']} domicílios amostrais; detalhamento por
-característica só para fluxos com pelo menos {r['min_pessoas_detalhe']} observações amostrais;
-toda contagem ponderada arredondada a múltiplos de {r['arredondamento']}; nenhuma contagem
-amostral exata publicada, apenas faixas.</p></section>
-
-<section class="secao"><h2>Níveis de agregação</h2>
-<p>Além do município, o atlas agrega em região imediata, região intermediária e UF. Nesses
-níveis, migração entre municípios da mesma unidade não é contada, pares suprimidos ficam de
-fora da soma, e não há erro-padrão publicado.</p></section>
-
-<section class="secao"><h2>Limitações</h2>
-<ul>
-<li>Migração de data fixa não captura movimentos múltiplos dentro do quinquênio.</li>
-<li>Resultados podem divergir de tabulações oficiais do IBGE (SIDRA).</li>
-<li>Erro amostral estimado por um estimador conservador de conglomerados (domicílio como
-unidade primária, área de ponderação como estrato).</li>
-</ul></section>
-
-<section class="secao"><h2>Como citar</h2>
-<p>{AUTOR_NOME}. <em>Atlas da migração interna no Brasil</em>. Dados do Censo Demográfico 2022
-(IBGE). DOI: <a href="https://doi.org/{DOI_CONCEITO}">{DOI_CONCEITO}</a> (todas as versões) /
-<a href="https://doi.org/{DOI_VERSAO}">{DOI_VERSAO}</a> (v2.1.0).</p>
-<p>Dados e conteúdo sob <a href="{LICENCA_DADOS_URL}">CC BY 4.0</a>, com atribuição ao IBGE
-como fonte primária. Metadados estruturados em
-<a href="https://github.com/atlas-da-migracao/atlas-da-migracao.github.io/blob/main/CITATION.cff">CITATION.cff</a>.</p>
-</section>
-
-<section class="secao"><h2>Aviso padrão</h2><p class="aviso">{AVISO}</p></section>
-"""
-        self._pagina_indice("/metodologia/", "Metodologia do atlas",
-                             "Fonte, definições, fórmulas dos indicadores e regras de controle de revelação do Atlas da migração interna, Censo 2022.",
-                             corpo)
+        t, x = self.t, self.x
+        v = dict(r=META["revelacao"], autor=AUTOR_NOME, doi_conceito=DOI_CONCEITO, doi_versao=DOI_VERSAO,
+                 licenca_url=LICENCA_DADOS_URL, repo=REPO_URL, aviso=self.aviso)
+        self._pagina("/metodologia/", t.METODOLOGIA_TITULO, t.METODOLOGIA_DESCRICAO,
+                     juntar(self._aviso_traducao_topo(), t.corpo_metodologia(x, v)))
 
     def gerar_glossario(self) -> None:
-        itens = [
-            ("Data fixa", "Método de medir migração comparando o município de residência em duas datas "
-             "fixas (31/07/2017 e 31/07/2022), em vez do histórico completo de mudanças no período."),
-            ("Saldo migratório", "Diferença entre imigrantes e emigrantes de uma unidade territorial "
-             "num período. Positivo indica ganho populacional líquido por migração; negativo, perda."),
-            ("Taxa líquida de migração (TLM)", "Saldo migratório dividido pela população de referência, "
-             "multiplicado por 1.000 -- expressa o saldo por mil habitantes, para comparar unidades de tamanhos diferentes."),
-            ("Índice de eficácia migratória (IEM)", "Saldo dividido pela soma de imigrantes e emigrantes, "
-             "entre -1 e 1. Perto de zero indica trocas equilibradas (alto volume nos dois sentidos); "
-             "perto de ±1, um fluxo predominantemente unidirecional."),
-            ("Migração de retorno", "Migração em que o destino coincide com o município de nascimento "
-             "da pessoa -- ela está voltando a morar onde nasceu."),
-            ("Migração de etapas múltiplas", "Migração em que o destino não é nem o município de "
-             "nascimento nem o de retorno direto -- a pessoa já havia migrado antes."),
-            ("Deslocamento pendular", "Trabalhar ou estudar em um município diferente do de residência, "
-             "sem mudar de domicílio -- captado à parte da migração propriamente dita."),
-            ("Região metropolitana", "Agrupamento institucional de municípios em torno de um núcleo "
-             "(o homônimo da região; sem homônimo, o mais populoso), definido por lei estadual ou federal (RIDE); usado para estudar migração e pendularidade intrametropolitanas."),
-            ("Área de ponderação", "Unidade geográfica mínima de disseminação dos microdados do "
-             "Censo, usada aqui como estrato no cálculo do erro amostral."),
-            ("Coeficiente de variação (CV)", "Erro-padrão dividido pela estimativa, em percentual -- "
-             "mede a precisão relativa de uma estimativa amostral. Quanto menor, mais precisa."),
-            ("Controle de revelação", "Conjunto de regras estatísticas (supressão de células pequenas, "
-             "arredondamento, faixas de contagem) aplicado antes da publicação para impedir que os "
-             "dados agregados permitam identificar uma pessoa ou domicílio individual."),
-        ]
-        corpo = "<dl class='glossario'>" + "".join(f"<dt>{t}</dt><dd>{d}</dd>" for t, d in itens) + "</dl>"
-        self._pagina_indice("/glossario/", "Glossário do atlas",
-                             "Definições dos principais termos do Atlas da migração interna: saldo migratório, taxa líquida, IEM, migração de retorno, pendularidade e controle de revelação.",
-                             corpo)
+        """O glossário é o mesmo do SPA: web/src/i18n/glossario/<lang>.json (37 termos)."""
+        t, x = self.t, self.x
+        termos = json.loads((I18N_WEB / "glossario" / f"{LANG_SPA[self.lang]}.json").read_text(encoding="utf-8"))
+        ui = t.GLOS_UI
+        indice = "".join(f'<li><a href="#{k}">{esc(v["termo"])}</a></li>' for k, v in termos.items())
+        itens = []
+        for k, v in termos.items():
+            partes = [f'<p>{esc(v["definicao"])}</p>']
+            if v.get("interpretacao"):
+                partes.append(f'<p><strong>{ui["comoInterpretar"]}.</strong> {esc(v["interpretacao"])}</p>')
+            if v.get("limitacoes"):
+                partes.append(f'<p><strong>{ui["limitacoes"]}.</strong> {esc(v["limitacoes"])}</p>')
+            itens.append(f'<dt id="{k}">{esc(v["termo"])}</dt><dd>{"".join(partes)}</dd>')
+        corpo = juntar(self._aviso_traducao_topo(), t.glossario_intro(x, len(termos)),
+                       f'<ul class="lista-termos">{indice}</ul>',
+                       "<dl class='glossario'>", *itens, "</dl>")
+        self._pagina("/glossario/", t.GLOSSARIO_TITULO, t.GLOSSARIO_DESCRICAO, corpo)
 
     def gerar_dados(self) -> None:
-        tabelas = [
-            ("municipios.parquet", "Indicadores municipais: população, imigrantes, emigrantes, saldo, taxas, IEM, precisão."),
-            ("municipios_dim.parquet", "Perfil dos migrantes e residentes por município: status, escolaridade, renda, idade e sexo."),
-            ("municipios_pendular.parquet", "Indicadores de deslocamento pendular por município."),
-            ("fluxos.parquet", "Matriz de fluxos migratórios município a município, com detalhamento por perfil."),
-            ("fluxos_uf.parquet", "Fluxos migratórios entre UFs."),
-            ("fluxos_rgi.parquet", "Fluxos migratórios entre regiões imediatas."),
-            ("fluxos_rgint.parquet", "Fluxos migratórios entre regiões intermediárias."),
-            ("pendular_trab.parquet", "Fluxos de deslocamento pendular para trabalho, município a município."),
-            ("pendular_estudo.parquet", "Fluxos de deslocamento pendular para estudo, município a município."),
-            ("rm.parquet", "Composição municipal das regiões metropolitanas e RIDEs."),
-            ("rm_resumo.parquet", "Indicadores agregados por região metropolitana/RIDE."),
-            ("rm_fluxos_intra.parquet", "Fluxos migratórios internos a cada região metropolitana."),
-            ("rm_mig_pendular_resumo.parquet", "Cruzamento migração intrametropolitana x trabalho, por município."),
-            ("municipios_ref.parquet", "Referência territorial pública (meso/microrregião, RGI, RGInt, RM, concentração urbana)."),
-        ]
+        t, x = self.t, self.x
+        tabelas = t.DADOS_TABELAS
         linhas = "".join(
-            f'<tr><td><a href="/data/{nome}">{nome}</a></td><td>{desc}</td></tr>' for nome, desc in tabelas
+            f'<tr><td><a href="/data/{nome}">{nome}</a></td><td>{esc(desc)}</td></tr>' for nome, desc in tabelas
         )
-        corpo = f"""
-<p>Todas as tabelas abaixo já passaram pelo controle estatístico de revelação (R1-R9): células
-pequenas suprimidas, valores arredondados a múltiplos de {META['revelacao']['arredondamento']},
-contagens amostrais apenas em faixas. Formato: Apache Parquet.</p>
-
-<section class="secao"><h2>Dicionário resumido</h2>
-<table><thead><tr><th scope="col">Arquivo</th><th scope="col">Conteúdo</th></tr></thead>
-<tbody>{linhas}</tbody></table></section>
-
-<section class="secao"><h2>Licença</h2>
-<p>Os dados agregados publicados aqui (tabelas Parquet, páginas estáticas e conteúdo
-textual do atlas) estão sob a licença
-<a href="{LICENCA_DADOS_URL}">{LICENCA_DADOS_NOME}</a>, com atribuição obrigatória ao IBGE
-como fonte primária. O código-fonte do projeto está sob licença {LICENCA_CODIGO_NOME}
-(repositório no GitHub). Os microdados originais do Censo 2022 são de acesso controlado do
-IBGE e NÃO estão incluídos neste site nem no repositório: permanecem sujeitos aos termos de
-uso do IBGE. As tabelas agregadas e arredondadas aqui publicadas passaram pelo controle
-estatístico de revelação e não permitem reidentificação individual.</p></section>
-
-<section class="secao"><h2>Como citar</h2>
-<p class="citacao">{AUTOR_NOME}. <em>{NOME_SITE}</em>. Dados do Censo Demográfico 2022
-(IBGE). Versão dos dados: {VERSAO_DADOS}. DOI: {DOI_PLACEHOLDER}. Disponível em: {self.url('/')}.</p>
-<p class="nota">{ATRIBUICAO_PADRAO}</p></section>
-
-<section class="secao"><h2>Fonte e aviso</h2>
-<p>Fonte: {FONTE}.</p>
-<p class="aviso">{AVISO}</p></section>
-"""
-        breadcrumbs = [(NOME_SITE, "/"), ("Dados publicados", None)]
-        titulo = "Dados publicados do atlas"
-        descricao = "Dicionário das tabelas Parquet publicadas pelo Atlas da migração interna, com licença e como citar os dados do Censo 2022."
+        corpo = t.corpo_dados(x, dict(
+            arred=META["revelacao"]["arredondamento"], linhas=Markup(linhas), licenca_url=LICENCA_DADOS_URL,
+            licenca_nome=LICENCA_DADOS_NOME, licenca_codigo=LICENCA_CODIGO_NOME,
+            autor=AUTOR_NOME, versao=VERSAO_DADOS, doi=DOI_PLACEHOLDER,
+            url_home=self.url(self.u("/")), fonte=self.fonte, aviso=self.aviso))
+        caminho = self.u("/dados/")
+        breadcrumbs = [self.home_bc(), (t.DADOS_BC, None)]
+        ds = t.DATASET
         dataset = {
             "@context": "https://schema.org", "@type": "Dataset",
-            "name": f"{NOME_SITE} -- dados publicados", "description": descricao,
+            "name": f"{t.NOME_SITE} -- {ds['name_suffix']}", "description": t.DADOS_DESCRICAO,
+            "inLanguage": self.lang,
             "creator": {"@type": "Person", "name": AUTOR_NOME, "url": AUTOR_GITHUB_URL, "sameAs": AUTOR_ORCID},
             "identifier": f"https://doi.org/{DOI_CONCEITO}",
             "license": LICENCA_DADOS_URL,
             "temporalCoverage": "2017-07-31/2022-07-31",
-            "spatialCoverage": {"@type": "Place", "name": "Brasil"},
-            "isBasedOn": {"@type": "Dataset", "name": "Censo Demográfico 2022 -- IBGE",
-                          "creator": {"@type": "Organization", "name": "Instituto Brasileiro de Geografia e Estatística (IBGE)"}},
+            "spatialCoverage": {"@type": "Place", "name": t.PAIS},
+            "isBasedOn": {"@type": "Dataset", "name": ds["isBasedOn"],
+                          "creator": {"@type": "Organization", "name": ds["orgIBGE"]}},
             "distribution": [
                 {"@type": "DataDownload", "contentUrl": self.url(f"/data/{nome}"), "encodingFormat": "application/vnd.apache.parquet"}
                 for nome, _ in tabelas
             ],
-            "keywords": ["migração interna", "Censo 2022", "IBGE", "demografia", "municípios do Brasil"],
-            "variableMeasured": ["imigrantes", "emigrantes", "saldo migratório", "taxa líquida de migração",
-                                  "índice de eficácia migratória", "deslocamento pendular"],
+            "keywords": ds["keywords"], "variableMeasured": ds["variableMeasured"],
         }
-        jsonld_objs = self.jsonld_pagina(titulo, descricao, "/dados/", None, breadcrumbs, extra=[dataset])
-        tpl = self.env.from_string(_tpl_indice(titulo, corpo))
-        html = tpl.render(**self.base_ctx(canonical=self.url("/dados/"), title=titulo, description=descricao,
-                                           breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link="/"))
-        self.escrever("/dados/", html)
+        self._pagina("/dados/", t.DADOS_TITULO, t.DADOS_DESCRICAO, juntar(self._aviso_traducao_topo(), corpo),
+                     extra_jsonld=[dataset], breadcrumbs=breadcrumbs)
 
     def gerar_sobre(self) -> None:
-        vinculo = AUTOR_VINCULO_INSTITUCIONAL or "não informado"
-        corpo = f"""
-<p>O Atlas da migração interna no Brasil reúne, num único painel navegável, os fluxos de
-migração interna, o deslocamento pendular e o módulo metropolitano do Censo Demográfico 2022
-do IBGE, no nível de município, região imediata, região intermediária e UF.</p>
+        t, x = self.t, self.x
+        corpo = t.corpo_sobre(x, dict(
+            autor=AUTOR_NOME, github_user=AUTOR_GITHUB_USER, github_url=AUTOR_GITHUB_URL,
+            vinculo=AUTOR_VINCULO_INSTITUCIONAL or t.NAO_INFORMADO, licenca_url=LICENCA_DADOS_URL,
+            licenca_nome=LICENCA_DADOS_NOME, licenca_codigo=LICENCA_CODIGO_NOME, repo=REPO_URL,
+            email=AUTOR_EMAIL_PUBLICO))
+        self._pagina("/sobre/", t.SOBRE_TITULO, t.SOBRE_DESCRICAO, juntar(self._aviso_traducao_topo(), corpo))
 
-<section class="secao"><h2>Quem fez</h2>
-<p>{AUTOR_NOME} (GitHub: <a href="{AUTOR_GITHUB_URL}">@{AUTOR_GITHUB_USER}</a>).
-Vínculo institucional: {vinculo}.</p></section>
+    def gerar_home(self) -> None:
+        """Home estática de en/fr/es (`/en/`...). A home em português é o próprio SPA (`/`)."""
+        if self.lang == LANG_PADRAO:
+            return
+        t, x = self.t, self.x
+        self._pagina("/", t.HOME_TITULO, t.HOME_DESCRICAO, t.corpo_home(x, {}), breadcrumbs=[])
 
-<section class="secao"><h2>Política de uso dos microdados</h2>
-<p>Os microdados da amostra do Censo Demográfico 2022 usados neste projeto são de acesso
-controlado do IBGE. Nenhum registro individual é publicado: todas as tabelas disponíveis em
-<a href="/dados/">/dados/</a> passaram por um gate automático de controle estatístico de
-revelação (supressão de células pequenas, arredondamento, faixas de contagem amostral) antes
-de sair do ambiente controlado.</p></section>
+    def gerar_404(self) -> None:
+        t, x = self.t, self.x
+        chave = "/404.html"
+        caminho = self.u(chave)
+        tpl = self.env.get_template("indice.html")
+        ctx = self.base_ctx(chave, canonical=self.url(caminho), title=t.E404_TITULO, description=t.E404_DESCRICAO,
+                            breadcrumbs=[self.home_bc(), (t.E404_TITULO, None)], jsonld_objs=[],
+                            h1=t.E404_TITULO, corpo=t.corpo_404(x), hreflang=[])
+        html = tpl.render(**ctx)
+        # robots: noindex para a 404 (não faz sentido indexá-la)
+        html = html.replace('content="index,follow"', 'content="noindex,follow"')
+        destino = DIST / caminho.lstrip("/")
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_text(html, encoding="utf-8")
 
-<section class="secao"><h2>Licenças</h2>
-<p>Dados agregados e conteúdo textual sob <a href="{LICENCA_DADOS_URL}">{LICENCA_DADOS_NOME}</a>,
-com atribuição obrigatória ao IBGE como fonte primária; código-fonte sob licença
-{LICENCA_CODIGO_NOME}. Ver <a href="/dados/">/dados/</a> para os detalhes.</p></section>
+    def gerar_tudo(self) -> None:
+        self.gerar_municipios()
+        for nivel in ("uf", "rgi", "rgint"):
+            self.gerar_unidades(nivel)
+        self.gerar_rms()
+        self.gerar_indices()
+        self.gerar_achados()
+        self.gerar_metodologia()
+        self.gerar_glossario()
+        self.gerar_dados()
+        self.gerar_sobre()
+        self.gerar_home()
+        self.gerar_404()
 
-<section class="secao"><h2>Contato</h2>
-<p>Para dúvidas, correções ou relatos de erro, abra uma <em>issue</em> no
-<a href="{REPO_URL}">repositório do projeto no GitHub</a> ou escreva para o e-mail público
-de contato do autor, {AUTOR_EMAIL_PUBLICO}.</p></section>
-"""
-        self._pagina_indice("/sobre/", "Sobre o projeto",
-                             "O que é o Atlas da migração interna no Brasil, quem fez, e a política de uso dos microdados do Censo 2022.",
-                             corpo)
 
-    def gerar_en(self) -> None:
-        corpo = """
-<p>The Atlas of Internal Migration in Brazil maps where people moved between July 31, 2017
-and July 31, 2022, using the internal-migration question from the sample microdata of
-Brazil's 2022 Demographic Census (restricted-access data from IBGE, the Brazilian Institute
-of Geography and Statistics).</p>
+def gerar_site(site_url: str, dados: dict[str, Any], langs=LANGS) -> list[Gerador]:
+    """Gera as páginas de todos os idiomas, o CSS, as imagens OG, o sitemap e o robots."""
+    geradores = []
+    for lang in langs:
+        g = Gerador(site_url, dados, lang)
+        g.gerar_tudo()
+        geradores.append(g)
+    gerar_css()
+    for lang in langs:
+        gerar_og_image(lang)
+    gerar_sitemap_robots(site_url, geradores)
+    return geradores
 
-<h2>Source</h2>
-<p>IBGE, 2022 Demographic Census, sample microdata (controlled access), fixed-date migration
-question (residence on 2017-07-31 compared with residence on 2022-07-31).</p>
 
-<h2>Key findings</h2>
-<ul>
-<li>12.9 million people changed municipality of residence in the five-year period, across
-5,570 Brazilian municipalities, yielding 53,097 published origin-destination pairs.</li>
-<li>Among people who left a metropolitan core for its periphery, 46.5% still work in the
-core -- residential deconcentration without a matching shift in jobs; in the Federal District
-integrated region (RIDE-DF) that share reaches 59.3%.</li>
-<li>Among migrants aged 25+ from Rio de Janeiro to São Paulo, 75.1% have a completed
-university degree -- a marked educational selectivity.</li>
-<li>Guarulhos&#8594;São Paulo is the country's largest commuting pair: 77,500 people live in
-Guarulhos and work in São Paulo.</li>
-</ul>
+# ---------------------------- técnicas: sitemap, robots ----------------------------
+LIMITE_SITEMAP = 45000  # abaixo do limite de 50.000 URLs por arquivo
 
-<p>Every published figure was rounded and passed through a statistical disclosure-control
-gate (small-cell suppression, rounding, sample-size ranges) before leaving the restricted
-data environment -- no individual record is ever published.</p>
 
-<p><a href="/">Open the interactive atlas (in Portuguese) &rarr;</a></p>
-"""
-        breadcrumbs = [(NOME_SITE, "/"), ("English summary", None)]
-        titulo = "Atlas of Internal Migration in Brazil"
-        descricao = ("One-page English summary: internal migration flows between Brazilian "
-                     "municipalities, 2017-2022, from the 2022 Demographic Census (IBGE).")
-        jsonld_objs = self.jsonld_pagina(titulo, descricao, "/en/", None, breadcrumbs)
-        tpl = self.env.from_string(_tpl_indice(titulo, corpo))
-        html = tpl.render(**self.base_ctx(
-            canonical=self.url("/en/"), title=titulo, description=descricao, lang="en",
-            hreflang=[("pt-BR", self.url("/")), ("en", self.url("/en/")), ("x-default", self.url("/"))],
-            breadcrumbs=breadcrumbs, jsonld_objs=jsonld_objs, app_link="/"))
-        self.escrever("/en/", html)
-        # também grava o alternate recíproco na home, ver ajustar_home_dist()
-
-    # ---------------------------- técnicas: sitemap, robots, 404, css, og ----------------------------
-    def gerar_sitemap_robots(self) -> None:
-        urls = sorted(set(self.paginas))
-        # abaixo do limite de 50.000 URLs por sitemap; ainda assim, particiona defensivamente
-        LIMITE = 45000
-        partes = [urls[i:i + LIMITE] for i in range(0, len(urls), LIMITE)] or [[]]
-        nomes_sitemap = []
+def gerar_sitemap_robots(site_url: str, geradores: list[Gerador]) -> None:
+    """Um sitemap por idioma (`sitemap-pt.xml`, `sitemap-en.xml`...) e `sitemap.xml` como índice.
+    O robots.txt aponta o índice. Idioma com mais de LIMITE_SITEMAP URLs é particionado
+    (`sitemap-pt-2.xml`...)."""
+    site_url = site_url.rstrip("/")
+    nomes: list[str] = []
+    for g in geradores:
+        urls = sorted(set(g.paginas))
+        if g.lang == LANG_PADRAO:
+            urls = ["/"] + urls  # a home em português é o SPA, que não passa pelo gerador
+        sigla = LANG_SPA[g.lang]
+        partes = [urls[i:i + LIMITE_SITEMAP] for i in range(0, len(urls), LIMITE_SITEMAP)] or [[]]
         for i, bloco in enumerate(partes):
-            nome = "sitemap.xml" if len(partes) == 1 else f"sitemap-{i + 1}.xml"
-            nomes_sitemap.append(nome)
+            nome = f"sitemap-{sigla}.xml" if i == 0 else f"sitemap-{sigla}-{i + 1}.xml"
+            nomes.append(nome)
             corpo = ['<?xml version="1.0" encoding="UTF-8"?>',
                      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
             for u in bloco:
-                corpo.append(f"<url><loc>{self.url(u)}</loc></url>")
+                corpo.append(f"<url><loc>{site_url}{u}</loc></url>")
             corpo.append("</urlset>")
             (DIST / nome).write_text("\n".join(corpo), encoding="utf-8")
-        if len(partes) > 1:
-            idx = ['<?xml version="1.0" encoding="UTF-8"?>',
-                   '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
-            for nome in nomes_sitemap:
-                idx.append(f"<sitemap><loc>{self.url('/' + nome)}</loc></sitemap>")
-            idx.append("</sitemapindex>")
-            (DIST / "sitemap.xml").write_text("\n".join(idx), encoding="utf-8")
+    idx = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    for nome in nomes:
+        idx.append(f"<sitemap><loc>{site_url}/{nome}</loc></sitemap>")
+    idx.append("</sitemapindex>")
+    (DIST / "sitemap.xml").write_text("\n".join(idx), encoding="utf-8")
 
-        robots = f"User-agent: *\nAllow: /\nSitemap: {self.url('/sitemap.xml')}\n"
-        (DIST / "robots.txt").write_text(robots, encoding="utf-8")
-        (DIST / "humans.txt").write_text(
-            f"/* TEAM */\nProject: {NOME_SITE}\nSource: {FONTE}\nData version: {VERSAO_DADOS}\n",
-            encoding="utf-8")
-
-    def gerar_404(self) -> None:
-        corpo = ('<p>Página não encontrada. Use a busca do atlas interativo ou um dos índices abaixo:</p>'
-                  '<ul><li><a href="/municipios/">Municípios</a></li>'
-                  '<li><a href="/regioes-metropolitanas/">Regiões metropolitanas</a></li>'
-                  '<li><a href="/ufs/">UFs</a></li><li><a href="/regioes/">Regiões</a></li>'
-                  '<li><a href="/">Voltar à página inicial</a></li></ul>')
-        breadcrumbs = [(NOME_SITE, "/"), ("Página não encontrada", None)]
-        titulo = "Página não encontrada"
-        descricao = "A página buscada não existe no Atlas da migração interna. Veja os índices de municípios, UFs e regiões."
-        tpl = self.env.from_string(_tpl_indice(titulo, corpo))
-        html = tpl.render(**self.base_ctx(canonical=self.url("/404.html"), title=titulo, description=descricao,
-                                           breadcrumbs=breadcrumbs, jsonld_objs=[], app_link="/"))
-        # robots: noindex para a 404 (não faz sentido indexá-la)
-        html = html.replace('content="index,follow"', 'content="noindex,follow"')
-        (DIST / "404.html").write_text(html, encoding="utf-8")
+    (DIST / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: {site_url}/sitemap.xml\n", encoding="utf-8")
+    (DIST / "humans.txt").write_text(
+        f"/* TEAM */\nProject: {NOME_SITE}\nSource: {FONTE}\nData version: {VERSAO_DADOS}\n",
+        encoding="utf-8")
 
 
 # ============================== CSS estático (derivado de tokens.css) ==============================
@@ -1436,6 +1381,10 @@ th[scope="col"] { border-bottom:2px solid var(--hairline); }
 .glossario dt { font-weight:700; margin-top:14px; }
 .glossario dd { margin-left:0; color: var(--ink-secondary); }
 details summary { cursor:pointer; font-weight:600; margin:8px 0; }
+.idiomas { display:inline-flex; flex-wrap:wrap; gap:0 4px; align-items:center; }
+.idiomas [aria-current] { font-weight:700; color:var(--ink); }
+.lista-termos { columns: 2; column-gap: 24px; font-size:0.92em; }
+.traducao { font-style:italic; }
 """
 
 
@@ -1465,7 +1414,7 @@ def fonte_og(caminho: pathlib.Path, tamanho: int):
             return ImageFont.load_default()
 
 
-def gerar_og_image() -> bool:
+def gerar_og_image(lang: str = LANG_PADRAO) -> bool:
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError:
@@ -1477,15 +1426,18 @@ def gerar_og_image() -> bool:
     fonte_sub = fonte_og(FONTE_OG_SUBTITULO, 32)
 
     draw.rectangle([0, altura - 12, largura, altura], fill=(28, 92, 171))
-    linhas = ["Atlas da migração", "interna no Brasil"]
+    t = catalogo(lang)
+    linhas = list(t.OG_LINHAS)
     y = 160
     for linha in linhas:
         draw.text((80, y), linha, font=fonte_titulo, fill=(255, 255, 255))
         y += 72
-    draw.text((80, y + 24), "Censo Demográfico 2022 · IBGE · quinquênio 2017-2022",
+    draw.text((80, y + 24), t.OG_SUB,
                font=fonte_sub, fill=(200, 200, 195))
-    img.save(DIST / "og.png", "PNG")
+    img.save(DIST / ("og.png" if lang == LANG_PADRAO else f"og-{LANG_SPA[lang]}.png"), "PNG")
     return True
+
+
 
 
 # ============================== main ==============================
@@ -1494,9 +1446,16 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--producao", action="store_true", help="Exige SITE_URL no ambiente; falha sem ele.")
     ap.add_argument("--out", default=str(DIST), help="Diretório de saída (padrão: web/dist).")
+    ap.add_argument("--langs", default=",".join(LANGS),
+                    help="Idiomas a gerar, separados por vírgula (padrão: todos; ex.: pt-BR,en).")
     args = ap.parse_args()
 
     DIST = pathlib.Path(args.out)
+    langs = tuple(l.strip() for l in args.langs.split(",") if l.strip())
+    invalidos = [l for l in langs if l not in LANGS]
+    if invalidos:
+        print(f"ERRO: idioma(s) inválido(s): {invalidos}; use {list(LANGS)}.", file=sys.stderr)
+        sys.exit(1)
 
     if args.producao:
         site_url = os.environ.get("SITE_URL", "").strip()
@@ -1521,31 +1480,16 @@ def main() -> None:
 
     t0 = time.time()
     dados = carregar_dados()
-    gerador = Gerador(site_url, dados)
-
-    gerador.gerar_municipios()
-    for nivel in ("uf", "rgi", "rgint"):
-        gerador.gerar_unidades(nivel)
-    gerador.gerar_rms()
-    gerador.gerar_indices()
-    gerador.gerar_achados()
-    gerador.gerar_metodologia()
-    gerador.gerar_glossario()
-    gerador.gerar_dados()
-    gerador.gerar_sobre()
-    gerador.gerar_en()
-
-    gerar_css()
-    tem_og = gerar_og_image()
-    gerador.gerar_404()
-    gerador.gerar_sitemap_robots()
+    geradores = gerar_site(site_url, dados, langs)
 
     dt = time.time() - t0
-    total_bytes = sum(gerador.tamanhos)
-    n = len(gerador.paginas)
+    total_bytes = sum(sum(g.tamanhos) for g in geradores)
+    n = sum(len(g.paginas) for g in geradores)
+    for g in geradores:
+        print(f"  {g.lang}: {len(g.paginas)} páginas")
     print(f"Páginas geradas: {n}")
     print(f"Tamanho médio por página: {total_bytes / n / 1024:.1f} KB" if n else "Nenhuma página gerada")
-    print(f"Imagem OG gerada: {'sim' if tem_og else 'não (Pillow indisponível -- OG sem imagem)'}")
+    print("Imagens OG geradas: " + ("sim" if (DIST / "og.png").exists() else "não (Pillow indisponível -- OG sem imagem)"))
     print(f"Tempo de geração: {dt:.1f} s")
     print(f"SITE_URL usado: {site_url}")
 

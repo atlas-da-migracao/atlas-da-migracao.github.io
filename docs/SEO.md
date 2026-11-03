@@ -21,11 +21,13 @@ Gerador Python + DuckDB + Jinja2 (autoescape ligado) que lê exclusivamente as t
 aprovadas pelo gate de revelação em `data/processed` e escreve `web/dist/**/index.html` depois
 de `vite build`. Nunca escreve em `web/public` (não infla o repositório com HTML gerado).
 
-- **6.331 páginas** com URLs limpas e uma pasta por página (`/municipio/<slug>/`,
-  `/uf/<sigla>/`, `/regiao-imediata/<slug>/`, `/regiao-intermediaria/<slug>/`,
-  `/regiao-metropolitana/<slug>/`), mais os índices (`/municipios/`, `/ufs/`, `/regioes/`,
-  `/regioes-metropolitanas/`) e as páginas de conteúdo fixo (`/achados/`, `/metodologia/`,
-  `/glossario/`, `/dados/`, `/sobre/`, `/en/`).
+- **6.330 páginas em português + 6.331 em cada um de en/fr/es (25.323 no total)**, com URLs
+  limpas e uma pasta por página (`/municipio/<slug>/`, `/uf/<sigla>/`,
+  `/regiao-imediata/<slug>/`, `/regiao-intermediaria/<slug>/`, `/regiao-metropolitana/<slug>/`),
+  mais os índices (`/municipios/`, `/ufs/`, `/regioes/`, `/regioes-metropolitanas/`) e as páginas
+  de conteúdo fixo (`/achados/`, `/metodologia/`, `/glossario/`, `/dados/`, `/sobre/`). Cada
+  idioma tem o mesmo conjunto (ver "Idiomas", abaixo); a home em português é o próprio SPA (`/`),
+  e `/en/`, `/fr/` e `/es/` são as homes estáticas dos outros idiomas.
 - Cada página de município tem **conteúdo substantivo único**: abertura em prosa (população,
   saldo, taxa líquida, IEM, classificação), tabela de indicadores com IC 95% e faixa de
   precisão, 10 principais origens/destinos com link cruzado para a página do outro município
@@ -46,9 +48,11 @@ de `vite build`. Nunca escreve em `web/public` (não infla o repositório com HT
   tokens de `tokens.css`, claro/escuro via `prefers-color-scheme`), tabelas com `<caption>`,
   `<th scope>` e `tabular-nums`. Cabeçalho comum com link para o app e para os índices,
   breadcrumbs, rodapé com fonte/aviso/metodologia/dados/sobre.
-- `sitemap.xml` (particiona automaticamente se ultrapassar 45.000 URLs — não é o caso: 6.331),
-  `robots.txt` (`Allow: /` + `Sitemap:` absoluto), `404.html` com busca por link para os
-  índices (marcado `noindex`), `humans.txt`.
+- Sitemap: **um arquivo por idioma** (`sitemap-pt.xml`, `sitemap-en.xml`, `sitemap-fr.xml`,
+  `sitemap-es.xml`) e `sitemap.xml` como **índice** deles; cada arquivo particiona sozinho se
+  passar de 45.000 URLs (`sitemap-pt-2.xml`...; hoje cada idioma tem ~6,3 mil). `robots.txt`
+  (`Allow: /` + `Sitemap:` absoluto, apontando o índice), `404.html` (e `/en/404.html`...) com
+  links para os índices (marcado `noindex`), `humans.txt`.
 - **Nenhum truque de SEO**: sem keyword stuffing, sem páginas vazias/doorway, sem texto
   oculto, sem cloaking. Toda página traz a atribuição ao IBGE e o aviso padrão de
   `meta.json` (regra R9), e nenhuma sugere caráter oficial.
@@ -56,6 +60,63 @@ de `vite build`. Nunca escreve em `web/public` (não infla o repositório com HT
   supressão, arredondamento a múltiplos de 5, contagens amostrais só em faixas). Nenhuma
   página imprime uma contagem amostral exata — testado por regex em
   `pipeline/tests/test_paginas.py`.
+
+### 1b. Idiomas (pt-BR, en, fr, es)
+
+O gerador produz as páginas em quatro idiomas, a partir dos mesmos dados (`data/processed`):
+
+| Idioma | `<html lang>` | `og:locale` | Prefixo | Exemplo |
+|---|---|---|---|---|
+| português (referência) | `pt-BR` | `pt_BR` | (raiz) | `/municipio/guarulhos-sp-3518800/` |
+| inglês | `en` | `en_US` | `/en/` | `/en/municipio/guarulhos-sp-3518800/` |
+| francês | `fr` | `fr_FR` | `/fr/` | `/fr/municipio/guarulhos-sp-3518800/` |
+| espanhol | `es` | `es_ES` | `/es/` | `/es/municipio/guarulhos-sp-3518800/` |
+
+- **Slugs ficam em português** em todos os idiomas (`/fr/municipio/<slug>/`,
+  `/en/regiao-metropolitana/<slug>/`...): os slugs são nomes próprios e identificadores, e assim
+  a chave de uma página é sempre o caminho em português, de onde se derivam as URLs dos outros
+  idiomas. O helper é `url_lang(caminho, lang)` (`pipeline/i18n_paginas/__init__.py`); no
+  gerador, `Gerador.url_lang` / `Ctx.u`. **Todo href interno** das páginas (templates Jinja,
+  índices, breadcrumbs, achados) passa por ele.
+- **Links para o SPA** fora do português levam `lang=xx` (`/?mun=3518800&lang=fr`; `/?lang=en`
+  para o atlas interativo em geral), que o SPA já lê.
+- **`/en/`, `/fr/`, `/es/`** são as homes estáticas de cada idioma: apresentação, links para os
+  índices do idioma, achados principais e o CTA "abrir o atlas interativo" (`/?lang=xx`). A home
+  em português continua sendo o SPA (`/`, `web/index.html`).
+- **Seletor de idioma** no cabeçalho (`PT · EN · FR · ES`): cada link aponta para a **mesma
+  página** no outro idioma (`hreflang` e `lang` no `<a>`); o idioma atual é um `<span
+  aria-current>`. No 404, aponta para o 404 de cada idioma.
+- **hreflang recíproco completo** em todas as páginas geradas: `pt-BR`, `en`, `fr`, `es` e
+  `x-default` (aponta para o português), a própria página inclusive. Calculado a partir da
+  chave da página (`Gerador.hreflang`), por isso cada alternate existe e devolve o mesmo
+  conjunto (testado). `web/index.html` (o SPA) lista os mesmos cinco alternates, com `/en/`,
+  `/fr/` e `/es/`. `og:locale` + `og:locale:alternate` e o `inLanguage` do JSON-LD seguem o
+  idioma; a imagem OG também (`/og.png`, `/og-en.png`, `/og-fr.png`, `/og-es.png`).
+- **Catálogo de textos**: `pipeline/i18n_paginas/{pt,en,fr,es}.py`, um módulo por idioma com os
+  mesmos nomes públicos (um teste confere nomes e assinaturas). Cromo (nav, skip link, rodapé,
+  aria-labels), prosa das páginas de município/unidade/RM (funções que recebem o contexto de
+  idioma `x` e devolvem `Markup` com os argumentos escapados), títulos e descrições (≤ 300
+  caracteres; o gerador corta em 160 no limite de uma palavra), rótulos de nível/precisão/
+  tipologia, categorias de `meta.rotulos`, e as páginas fixas (achados, metodologia, dados,
+  sobre, home, 404) como funções por idioma. O português reproduz o texto histórico. A
+  terminologia é a de `web/src/i18n/TERMINOLOGIA.md` (obrigatória): *in-migrants / entrants /
+  inmigrantes*, *depletion / répulsion / expulsión* para "evasão", siglas do atlas iguais e
+  expandidas na primeira menção, nomes próprios (municípios, RMs, RGIs) intactos.
+- **Aviso de tradução** (frase-modelo de TERMINOLOGIA.md, seção 4) no rodapé de toda página
+  en/fr/es e no topo de metodologia, glossário, dados e sobre.
+- **Fontes de texto compartilhadas com o SPA** (nenhuma tradução duplicada): o **glossário** das
+  quatro línguas vem de `web/src/i18n/glossario/<lang>.json` (37 termos: definição, como
+  interpretar, limitações; a página `/glossario/` em português passou de 11 para os mesmos 37
+  termos do SPA), e a prosa de `meta.json` (`aviso`, `fonte`) de `web/src/i18n/dados.json`
+  — usada só quando o campo `origem` for idêntico ao texto atual de `meta.json`; se o pipeline
+  mudou o texto e a tradução não acompanhou, publica-se o português.
+- **Formatação numérica por idioma** (`fmt_int/fmt_sinal/fmt_dec/fmt_pct100/ic95` recebem
+  `lang`): pt `1.234,5` · en `1,234.5` · fr `1 234,5` (U+202F; percentual `12,5 %` com U+202F) ·
+  es `1.234,5` (agrupamento também com 4 dígitos, como `useGrouping: "always"` do SPA;
+  percentual com U+00A0). Sinal tipográfico "−" nos saldos e no IC, piso zero nas contagens.
+- **Sitemap**: ver acima. O CI continua checando `web/dist/sitemap.xml` e `404.html`.
+- **CLI**: `python pipeline/build_paginas.py [--producao] [--out DIR] [--langs pt-BR,en,...]`
+  (por padrão, os quatro idiomas; `--langs` serve para iterar num só).
 
 ### 2. `web/index.html` com conteúdo indexável antes do React montar
 
@@ -113,17 +174,21 @@ quebrado, sitemap cobrindo todas as páginas, tamanho médio de página.
 
 ### 6. Testes
 
-`pipeline/tests/test_paginas.py` (17 testes, roda o gerador uma vez por sessão em diretório
-temporário): contagens por tipo de página (5.570/27/510/133/81 + páginas fixas), title/
-description/canonical presentes e corretos numa amostra, aviso padrão e atribuição ao IBGE em
-toda página, JSON-LD válido (`json.loads`) com `BreadcrumbList` apontando corretamente para a
-própria página, ausência de padrões de `n` exato, ausência de links internos quebrados,
-sitemap cobrindo 100% das páginas, `robots.txt` correto, tamanho médio de página ≤ 40 KB
-(medido: 21,4 KB), tempo de geração reportado (medido: ~11 s para as 6.331 páginas), e o
-conteúdo estático + JSON-LD de `web/index.html`.
+`pipeline/tests/test_paginas.py` (~100 casos, roda o gerador uma vez por sessão, nos quatro
+idiomas, em diretório temporário): contagens por tipo de página em cada idioma
+(5.570/27/510/133/81 + páginas fixas), title/description/canonical presentes e corretos numa
+amostra estratificada, aviso padrão e atribuição ao IBGE em toda página, JSON-LD válido
+(`json.loads`) com `BreadcrumbList` apontando corretamente para a própria página e
+`inLanguage` igual ao idioma, ausência de padrões de `n` exato, ausência de links internos
+quebrados e de links que escapem do prefixo do idioma, hreflang completo e recíproco, `<html
+lang>`/`og:locale` por prefixo, sitemaps por idioma + índice, catálogos com os mesmos nomes e
+assinaturas, formatos numéricos por idioma, heurística de "nenhum texto em português" nas
+páginas en/fr/es, os 37 termos do glossário, tamanho médio de página ≤ 40 KB (medido:
+23,7 KB) e tempo de geração (medido: ~30 s para as 25.323 páginas), e o conteúdo estático +
+JSON-LD + hreflang de `web/index.html`.
 
-`pytest -q` na raiz: 63 testes aprovados (46 herdados + 17 novos). `npm run build:site` com
-`SITE_URL=https://exemplo.invalid`: build completo em ~11 s de geração, sem erros.
+`npm run build:site` com `SITE_URL=http://localhost:5174`: `vite build` + geração dos quatro
+idiomas em ~31 s, sem erros.
 
 ## O que ficou para o usuário
 

@@ -7,12 +7,10 @@
 import { prepararPiramide } from "../lib/piramide";
 import { CATEGORICO_8, cor as corDeCategoria } from "../lib/paletas";
 import { num1 } from "../lib/format";
+import { useT } from "../i18n";
 
 const COR_HOMENS = CATEGORICO_8[0];
 const COR_MULHERES = CATEGORICO_8[4];
-
-/** "12,3%"; "menos de 0,1%" para o residual que existe mas arredondaria para 0,0. */
-const fmtPct = (p: number) => (p > 0 && p < 0.05 ? "menos de 0,1%" : `${num1(p)}%`);
 
 interface Props {
   titulo: React.ReactNode;
@@ -31,8 +29,11 @@ interface Props {
 
 export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloReferencia,
                                     valoresReferencia, escuro, maiorPct: maiorPctFixo }: Props) {
-  const grupo = prepararPiramide(valoresGrupo);
-  const ref = valoresReferencia ? prepararPiramide(valoresReferencia) : null;
+  const d = useT();
+  /** "12,3%"; "menos de 0,1%" para o residual que existe mas arredondaria para 0,0. */
+  const fmtPct = (p: number) => (p > 0 && p < 0.05 ? d.paineis.piramide.menosDe(num1(0.1)) : d.paineis.pct(num1(p)));
+  const grupo = prepararPiramide(valoresGrupo, d);
+  const ref = valoresReferencia ? prepararPiramide(valoresReferencia, d) : null;
   if (grupo.totalGeral <= 0) return null;
   const temResiduo = grupo.outros > 0 || (ref?.outros ?? 0) > 0;
 
@@ -55,14 +56,14 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
   // aria-label, entra só quando é texto puro; caso contrário, o rótulo do grupo já basta.
   const tituloTexto = typeof titulo === "string" ? titulo : "";
   const rotuloAria = [
-    `${tituloTexto}. ${rotuloGrupo}:`,
+    d.paineis.piramide.ariaGrupo(tituloTexto, rotuloGrupo),
     ...pontosExibidos.map((p) =>
-      `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`),
-    grupo.outros > 0 ? `Outros ou suprimido: ${fmtPct(grupo.pctOutros)}.` : "",
-    ref && rotuloReferencia ? `Referência (${rotuloReferencia}):` : "",
+      d.paineis.piramide.ariaFaixa(p.rotulo, num1(p.pctHomens), num1(p.pctMulheres))),
+    grupo.outros > 0 ? d.paineis.piramide.ariaOutros(fmtPct(grupo.pctOutros)) : "",
+    ref && rotuloReferencia ? d.paineis.piramide.ariaReferencia(rotuloReferencia) : "",
     ...(refExibidos?.map((p) =>
-      `${p.rotulo} anos, homens ${num1(p.pctHomens)}%, mulheres ${num1(p.pctMulheres)}%`) ?? []),
-    ref && ref.outros > 0 ? `Referência, outros ou suprimido: ${fmtPct(ref.pctOutros)}.` : "",
+      d.paineis.piramide.ariaFaixa(p.rotulo, num1(p.pctHomens), num1(p.pctMulheres))) ?? []),
+    ref && ref.outros > 0 ? d.paineis.piramide.ariaReferenciaOutros(fmtPct(ref.pctOutros)) : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -87,18 +88,18 @@ export function PiramideIdadeSexo({ titulo, rotuloGrupo, valoresGrupo, rotuloRef
         })}
       </div>
       <ul className="piramide-legenda">
-        <li><span className="amostra pequena" style={{ background: corH }} /> Homens ({rotuloGrupo})</li>
-        <li><span className="amostra pequena" style={{ background: corM }} /> Mulheres ({rotuloGrupo})</li>
+        <li><span className="amostra pequena" style={{ background: corH }} /> {d.paineis.piramide.homens(rotuloGrupo)}</li>
+        <li><span className="amostra pequena" style={{ background: corM }} /> {d.paineis.piramide.mulheres(rotuloGrupo)}</li>
         {ref && rotuloReferencia && (
           <li><span className="amostra pequena" style={{ border: "1.5px dashed var(--ink)", background: "transparent" }} /> {rotuloReferencia}</li>
         )}
       </ul>
       {temResiduo && (
         <p className="muted-pequeno explicacao">
-          Outros ou suprimido (fora das barras): {fmtPct(grupo.pctOutros)} de {rotuloGrupo}
-          {ref && rotuloReferencia && <>; {fmtPct(ref.pctOutros)} de {rotuloReferencia}</>}.
-          São as células de idade e sexo com poucas observações, que o atlas não divulga (limiar
-          de revelação), mais o sexo ignorado; por isso as barras não somam 100%.
+          {d.paineis.piramide.residuo(
+            fmtPct(grupo.pctOutros), rotuloGrupo,
+            ref && rotuloReferencia ? fmtPct(ref.pctOutros) : null, ref && rotuloReferencia ? rotuloReferencia : null,
+          )}
         </p>
       )}
     </section>

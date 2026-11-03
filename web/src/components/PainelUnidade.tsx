@@ -10,26 +10,24 @@ import { DiagramaAcordes } from "./DiagramaAcordes";
 import { AvisoProxy } from "./AvisoProxy";
 import { AvisoUnidadeUf } from "./AvisoUnidade";
 import type { FluxoUF, UnidadeUF } from "../lib/acordes";
-import { edicao } from "../lib/edicoes";
+import { edicao, rotuloCenso } from "../lib/edicoes";
+import { useT } from "../i18n";
 import { useStore } from "../state/store";
 import { ResumoSerie } from "./ResumoSerie";
-import { classificarIem, NOME_TIPO_IEM } from "../lib/serie";
+import { classificarIem, nomeTipoIem } from "../lib/serie";
 import { Termo } from "./Termo";
-
-const ROTULO_NIVEL: Record<NivelAgregado, string> = {
-  rgi: "Região imediata", rgint: "Região intermediária", uf: "UF",
-};
 
 function TabelaFluxos({ titulo, cor, fluxos, campo, campoUf, aoClicar }: {
   titulo: string; cor: string; fluxos: Fluxo[];
   campo: "nm_origem" | "nm_destino"; campoUf: "uf_origem" | "uf_destino";
   aoClicar: (o: string, d: string) => void;
 }) {
+  const d = useT();
   if (fluxos.length === 0) {
     return (
       <section className="secao">
         <h3><span className="ponto" style={{ background: cor }} /> {titulo}</h3>
-        <p className="muted">Nenhum fluxo acima do limiar de divulgação.</p>
+        <p className="muted">{d.paineis.nenhumFluxo}</p>
       </section>
     );
   }
@@ -92,43 +90,38 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
                      realceExterno={ufSobMapa} aoSelecionarUF={aoSelecionarUF} aoRealcar={aoRealcarUFs} />
   );
   const pronto = usarDuckDBPronto();
-  const rotuloNivel = ROTULO_NIVEL[nivel];
+  const d = useT();
+  const rotuloNivel = d.comum.niveis[nivel].titulo;
+  const naoExiste = d.paineis.naoExisteNaEdicao(d.comum.niveis[nivel].demonstrativo);
   const ed = edicao(useStore((s) => s.censo));
 
   if (!unidade) {
     return (
-      <aside className="painel" aria-label="Painel de detalhes">
+      <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
         <div className="vazio">
-          <h2>Atlas da migração interna</h2>
+          <h2>{d.paineis.tituloAtlas}</h2>
           {naoEncontrado ? (
             <div className="aviso" role="note">
               <p>
-                Esta {rotuloNivel.toLowerCase()} não existe na edição <strong>{ed.rotulo}</strong>{" "}
-                selecionada — edições antigas podem cobrir um território menor ou ter divisão
-                administrativa diferente.
+                {naoExiste.antes}<strong>{rotuloCenso(ed.nome, d)}</strong>{naoExiste.depois}
               </p>
               <button type="button" className="link-metodologia" onClick={aoFechar}>
-                Limpar seleção
+                {d.paineis.limparSelecao}
               </button>
             </div>
           ) : (
             <>
               <p>
-                Nível: <strong>{rotuloNivel.toLowerCase()}</strong>. Clique numa unidade no mapa, ou
-                busque pelo nome, para ver seus indicadores e principais fluxos.
+                {d.paineis.unidade.nivel.antes}<strong>{d.comum.niveis[nivel].singular}</strong>{d.paineis.unidade.nivel.depois}
               </p>
-              <p className="muted">
-                Migração entre municípios da mesma unidade não é contabilizada; pares abaixo do limiar
-                de revelação ficam de fora da soma. Não há erro-padrão publicado neste nível
-                (ver a página de Metodologia).
-              </p>
+              <p className="muted">{d.paineis.unidade.notaVazio}</p>
               <AvisoProxy meta={meta} />
             </>
           )}
         </div>
         {!naoEncontrado && nivel === "uf" && acordes && (
           <section className="secao">
-            <h3>Fluxos migratórios entre UFs</h3>
+            <h3>{d.paineis.unidade.acordesTitulo}</h3>
             {acordes}
           </section>
         )}
@@ -140,13 +133,13 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
   const saidas = fluxos.filter((f) => f.direcao === "saida");
 
   return (
-    <aside className="painel" aria-label="Painel de detalhes">
+    <aside className="painel" aria-label={d.comum.ui.painelDetalhes}>
       <header className="painel-topo">
         <div>
           <div className="muted-pequeno">{rotuloNivel}</div>
           <h2>{unidade.nome}{unidade.uf_sigla && unidade.uf_sigla !== unidade.nome ? <span className="uf">/{unidade.uf_sigla}</span> : null}</h2>
         </div>
-        <button className="fechar" onClick={aoFechar} aria-label="Fechar painel">×</button>
+        <button className="fechar" onClick={aoFechar} aria-label={d.comum.ui.fecharPainel}>×</button>
       </header>
 
       {nivel === "uf" && <AvisoUnidadeUf meta={meta} codigoUf={unidade.codigo} />}
@@ -154,26 +147,23 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
 
       <div className="kpis">
         <div className="kpi">
-          <div className="kpi-rotulo"><Termo chave="imigrantes">Imigrantes</Termo></div>
+          <div className="kpi-rotulo"><Termo chave="imigrantes">{d.paineis.termos.imigrantes}</Termo></div>
           <div className="kpi-valor">{num(unidade.imig)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo"><Termo chave="emigrantes">Emigrantes</Termo></div>
+          <div className="kpi-rotulo"><Termo chave="emigrantes">{d.paineis.termos.emigrantes}</Termo></div>
           <div className="kpi-valor">{num(unidade.emig)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo"><Termo chave="saldo">Saldo migratório</Termo></div>
+          <div className="kpi-rotulo"><Termo chave="saldo">{d.paineis.termos.saldoMigratorio}</Termo></div>
           <div className="kpi-valor">{sinal(unidade.saldo)}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-rotulo"><Termo chave="taxa_liquida">Taxa líquida</Termo> (por mil)</div>
+          <div className="kpi-rotulo"><Termo chave="taxa_liquida">{d.paineis.termos.taxaLiquida}</Termo>{d.paineis.unidade.taxaPorMil}</div>
           <div className="kpi-valor">{sinal1(unidade.tlm)}</div>
         </div>
       </div>
-      <p className="muted-pequeno explicacao">
-        Indicadores agregados: soma dos pares publicados neste nível (após o limiar de revelação);
-        podem diferir da soma dos municípios; sem erro-padrão próprio.
-      </p>
+      <p className="muted-pequeno explicacao">{d.paineis.unidade.explicacao}</p>
 
       {aoAbrirSerie && (
         <ResumoSerie nivel={nivel} codigo={unidade.codigo} nome={unidade.nome}
@@ -187,26 +177,26 @@ export function PainelUnidade({ nivel, unidade, naoEncontrado, fluxos, carregand
         const tipo = classificarIem(unidade.iem, null);
         return (
           <div className="nota-precisao">
-            <Termo chave="eficacia_iem">Índice de eficácia migratória</Termo>: <strong>{num2(unidade.iem)}</strong>{" "}
-            <span className="muted">({tipo ? NOME_TIPO_IEM[tipo] : "—"})</span>
+            <Termo chave="eficacia_iem">{d.paineis.termos.indiceEficacia}</Termo>{d.paineis.dp} <strong>{num2(unidade.iem)}</strong>{" "}
+            <span className="muted">({tipo ? nomeTipoIem(tipo, d) : "—"})</span>
           </div>
         );
       })()}
 
       {nivel === "uf" && acordes && (
         <section className="secao">
-          <h3>Fluxos migratórios entre UFs</h3>
+          <h3>{d.paineis.unidade.acordesTitulo}</h3>
           {acordes}
         </section>
       )}
 
       {carregando ? (
-        <p className="muted">{pronto ? "Carregando fluxos…" : "preparando os dados…"}</p>
+        <p className="muted">{pronto ? d.comum.ui.carregandoFluxos : d.paineis.preparandoDados}</p>
       ) : (
         <>
-          <TabelaFluxos titulo="Principais origens" cor="var(--arc-in)" fluxos={entradas}
+          <TabelaFluxos titulo={d.paineis.principaisOrigens} cor="var(--arc-in)" fluxos={entradas}
                         campo="nm_origem" campoUf="uf_origem" aoClicar={aoSelecionarFluxo} />
-          <TabelaFluxos titulo="Principais destinos" cor="var(--arc-out)" fluxos={saidas}
+          <TabelaFluxos titulo={d.paineis.principaisDestinos} cor="var(--arc-out)" fluxos={saidas}
                         campo="nm_destino" campoUf="uf_destino" aoClicar={aoSelecionarFluxo} />
         </>
       )}

@@ -1,81 +1,23 @@
-/** Conteúdo da página de metodologia (F6): texto para um leitor técnico não especialista,
- *  baseado em docs/METODOLOGIA.md e no plano aprovado. Nenhum dado individual aparece aqui --
- *  só definições, fórmulas e os limiares de revelação (lidos de meta.json, não fixados no
- *  código, para nunca divergir do que o gate realmente aplicou).
+/** Metodologia em português -- a versão de REFERÊNCIA (F6): texto para um leitor técnico não
+ *  especialista, baseado em docs/METODOLOGIA.md e no plano aprovado. Nenhum dado individual
+ *  aparece aqui -- só definições, fórmulas e os limiares de revelação (lidos de meta.json, não
+ *  fixados no código, para nunca divergir do que o gate realmente aplicou).
  *
- *  A página é *por edição* (F9.7-b): até a edição 1980 ela estava fixada no texto de 2022 e
- *  contradizia o rodapé em 2010/2000/1991/1980 ("acesso controlado" e "31/07/2017" ao lado de
- *  "Censo Demográfico 1980 (IBGE, dados públicos)"). Três fontes alimentam o texto, nesta ordem
- *  de preferência:
- *    1. `meta` (pipeline/build_meta.py), para tudo que o gate/pipeline já carimba -- fonte,
- *       limiares efetivos, salário mínimo, avisos;
- *    2. `edicao(censo)` (lib/edicoes.ts), para os fatos estruturais já declarados -- período,
- *       proxy de data fixa, recursos ausentes, vocabulário de status;
- *    3. o mapa TEXTO abaixo, só para a prosa que depende do questionário de cada censo e que
- *       não existe em nenhum dos dois.
- *  TEXTO é um `Record<Censo, ...>` de propósito: uma edição nova quebra o build até que alguém
- *  escreva a metodologia dela -- foi exatamente a falta desse travamento que deixou quatro
- *  edições publicadas com o texto de 2022. */
-import { edicao } from "../lib/edicoes";
-import type { Censo } from "../lib/edicoes";
-import { DIMENSOES } from "../lib/paletas";
-import type { Meta } from "../lib/types";
-import { useStore } from "../state/store";
-
-/** Versão do atlas a que o DOI de versão de "Como citar" se refere. Mesma versão que
- *  pipeline/build_paginas.py usa ao lado de `DOI_VERSAO` ("v2.1.0"). Fica aqui, e não em
- *  `meta.citacao`, porque pipeline/build_meta.py ainda não publica `citacao.versao` -- só
- *  `doi_versao`; quando publicar, troque esta constante pelo campo do meta e o rótulo nunca mais
- *  diverge do DOI (era "(v1.0.0)" fixo ao lado do DOI da v2.0.0). */
-const VERSAO_ATLAS = "v2.1.0";
-
-/** Moeda em que o salário mínimo de referência de cada edição está expresso. `meta.json` traz só o
- *  número (`salario_minimo_referencia`), sem a moeda: 1991 e 1980 são em cruzeiros (Cr$), as
- *  demais em reais -- o valor de 1991, por exemplo, aparecia como "(36.161,6)", sem unidade. */
-const MOEDA_SALARIO: Record<Censo, string> = {
-  "2022": "R$", "2010": "R$", "2000": "R$", "1991": "Cr$", "1980": "Cr$",
-};
-
-/** "Cr$ 36.161,60" / "R$ 1.212,00": sempre duas casas, separadores do pt-BR. */
-function salarioMinimoBR(valor: number, censo: Censo): string {
-  const n = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${MOEDA_SALARIO[censo]}\u00a0${n}`;
-}
-
-/** Rótulo de "migrante não natural" exatamente como os gráficos o mostram (lib/paletas.ts,
- *  DIMENSOES.status), para que o texto cite o que o leitor vê na legenda. */
-const ROTULO_NAO_NATURAL =
-  DIMENSOES.status.categorias.find((c) => c.chave === "nao_natural")?.rotulo ?? "Não natural do destino";
-
-/** Base do erro-padrão publicado pela edição. "area_ponderacao" é o caso das edições com o
- *  desenho amostral completo (domicílio como UPA, área de ponderação como estrato);
- *  "estrato_aproximado", o das que não têm área de ponderação e usam um substituto mais
- *  heterogêneo (Censo 1991, ver docs/METODOLOGIA.md, item 9 daquela seção); "ausente", o das
- *  que não publicam `se`/`cv` nenhum porque a fonte não tem chave de domicílio (Censo 1980,
- *  item 8.1). O pipeline declara o mesmo fato em `pipeline/edicoes.py` (`chave_domicilio`), e
- *  ele chega ao front também em `meta.revelacao.min_domicilios` (null <=> sem chave). */
-type BasePrecisao = "area_ponderacao" | "estrato_aproximado" | "ausente";
-
-interface TextoEdicao {
-  /** espelha `Edicao.acesso` de pipeline/edicoes.py; a mesma informação aparece em prosa
-   *  dentro de `meta.fonte` ("acesso controlado" / "dados públicos"). */
-  acesso: "controlado" | "publico";
-  /** quem respondeu o quesito que sustenta a migração desta edição (seção "Fonte e universo"). */
-  universo: string;
-  /** procedência, quando ela não é a cópia distribuída pelo IBGE (só 1980). */
-  fonteNota: string | null;
-  /** primeira frase sobre origem não informada: com o número quando ele está documentado em
-   *  docs/METODOLOGIA.md, genérica quando não (o painel de cada município mostra o valor). */
-  origemNaoInformada: string;
-  precisao: BasePrecisao;
-  /** limitações próprias da edição, somadas às gerais; vazio quando não há nenhuma além das
-   *  que as outras seções já explicam. Resumos de docs/METODOLOGIA.md, "Limitações conhecidas". */
-  limitacoes: string[];
-}
+ *  en.tsx, fr.tsx e es.tsx são traduções fiéis deste arquivo, seção por seção e com a mesma
+ *  estrutura condicional por edição: qualquer mudança aqui deve ser repetida nelas (o teste
+ *  `metodologia-idiomas.test.tsx` confere que as quatro têm as mesmas seções em cada edição).
+ *  Lógica compartilhada (edição ativa, guarda de troca de edição, leitura do meta, formatos de
+ *  data e moeda) em comum.ts. */
+import type { Censo } from "../../lib/edicoes";
+import { rotuloCategoria } from "../../lib/paletas";
+import { useT } from "../../i18n";
+import {
+  VERSAO_ATLAS, dataEdicao, salarioMinimo, useContextoMetodologia,
+  type PropsMetodologia, type TextoEdicao,
+} from "./comum";
 
 const TEXTO: Record<Censo, TextoEdicao> = {
   "2022": {
-    acesso: "controlado",
     universo:
       "o bloco de migração do questionário da amostra (Migração Interna e Internacional) traz o "
       + "município de residência há 5 anos, respondido só por quem mora há menos de 6 anos no "
@@ -83,17 +25,14 @@ const TEXTO: Record<Censo, TextoEdicao> = {
     fonteNota: null,
     origemNaoInformada:
       "Cerca de 1,2% (150,4 mil de 13,0 milhões) dos migrantes internos têm origem não informada.",
-    precisao: "area_ponderacao",
     limitacoes: [],
   },
   "2010": {
-    acesso: "publico",
     universo:
       "o quesito de município de residência há 5 anos tem o mesmo filtro de 2022: só foi "
       + "aplicado a quem morava há menos de 6 anos no município atual.",
     fonteNota: null,
     origemNaoInformada: "Uma parcela dos migrantes internos tem origem não informada.",
-    precisao: "area_ponderacao",
     limitacoes: [
       "A frequência do deslocamento pendular pergunta, nesta edição, se a pessoa retorna do "
       + "trabalho para casa diariamente; em 2022 a pergunta é se retorna três ou mais dias por "
@@ -101,14 +40,12 @@ const TEXTO: Record<Censo, TextoEdicao> = {
     ],
   },
   "2000": {
-    acesso: "publico",
     universo:
       "o quesito de município de residência há 5 anos foi aplicado a todos que declararam não "
       + "morar no município desde que nasceram — um universo mais largo que o de 2010 e 2022, "
       + "sem o filtro de tempo de residência.",
     fonteNota: null,
     origemNaoInformada: "Uma parcela dos migrantes internos tem origem não informada.",
-    precisao: "area_ponderacao",
     limitacoes: [
       "A dimensão ocupacional desta edição não é comparável em nível com as de 2010 e 2022: a "
       + "classificação de 2000 não tem o grande grupo de “ocupações elementares”, e a massa "
@@ -116,14 +53,12 @@ const TEXTO: Record<Censo, TextoEdicao> = {
     ],
   },
   "1991": {
-    acesso: "publico",
     universo:
       "o quesito de município de residência há 5 anos só foi feito a quem não declarou ter "
       + "sempre morado no município — o branco do quesito é o salto do questionário, e não uma "
       + "não-resposta.",
     fonteNota: null,
     origemNaoInformada: "Uma parcela dos migrantes internos tem origem não informada.",
-    precisao: "estrato_aproximado",
     limitacoes: [
       "O anacronismo territorial é bem mais acentuado que nas edições recentes: 1.082 códigos "
       + "municipais de 2022 não existem na malha de 1991, 66 das 81 regiões metropolitanas "
@@ -133,7 +68,6 @@ const TEXTO: Record<Censo, TextoEdicao> = {
     ],
   },
   "1980": {
-    acesso: "publico",
     universo:
       "no lugar do quesito de residência há 5 anos, que esta edição não tem, ficam dois outros: "
       + "há quantos anos a pessoa mora no município atual e qual foi o município onde morava "
@@ -153,7 +87,6 @@ const TEXTO: Record<Censo, TextoEdicao> = {
       + "São as próprias sentinelas do questionário de 1980: quem declarou a unidade da federação "
       + "de origem mas não o município, e as respostas \u201cBrasil sem especificação\u201d e "
       + "\u201cignorado\u201d.",
-    precisao: "ausente",
     limitacoes: [
       "A migração desta edição é estimada por um proxy, e não medida por um quesito de data "
       + "fixa: volumes, saldos e distâncias carregam o desvio descrito no selo proxy, no fim "
@@ -174,19 +107,15 @@ const TEXTO: Record<Censo, TextoEdicao> = {
 };
 
 /** "2017-07-31" -> "31/07/2017". */
-function dataBR(iso: string): string {
-  const [a, m, d] = iso.split("-");
-  return `${d}/${m}/${a}`;
-}
+const dataBR = (iso: string) => dataEdicao(iso, "pt-BR");
 
-export function Metodologia({ meta }: { meta: Meta | null }) {
-  const censo = useStore((s) => s.censo);
-  const ed = edicao(censo);
+export function MetodologiaPt({ meta }: PropsMetodologia) {
+  // `d`: o texto cita o rótulo de "migrante não natural" como os gráficos o mostram (comum.categorias.status)
+  const d = useT();
+  const { censo, ed, est, metaDeOutraEdicao, r, sm, anoDe, anoAte, textos } =
+    useContextoMetodologia(meta, "pt-BR");
   const t = TEXTO[censo];
-  // Durante a troca de edição o meta da anterior pode continuar em uso até o novo chegar: sem
-  // esta guarda o texto da edição nova saía com fonte, limiares e citação da velha.
-  const edicaoDoMeta = meta?.edicao;
-  if (meta && edicaoDoMeta && edicaoDoMeta !== censo) {
+  if (metaDeOutraEdicao) {
     return (
       <div className="metodologia-conteudo">
         <p className="muted" role="status">Carregando a metodologia do Censo {ed.nome}…</p>
@@ -194,12 +123,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
     );
   }
 
-  const r = meta?.revelacao;
-  const sm = meta?.salario_minimo_referencia;
-
-  const anoDe = ed.periodo.de.slice(0, 4);
-  const anoAte = ed.periodo.ate.slice(0, 4);
-  const fonte = meta?.fonte ?? `IBGE, Censo Demográfico ${ed.nome}, microdados da amostra`;
+  const fonte = textos.fonte ?? `IBGE, Censo Demográfico ${ed.nome}, microdados da amostra`;
   // R2 só pode prometer detalhe nas dimensões que a edição publica (1980 não tem renda, 1991
   // não tem módulo pendular) -- mesmo padrão de recursos.* usado em Filtro/PainelPendular.
   const dimensoesDetalhe = [
@@ -305,7 +229,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
               <em>município</em> de nascimento — apenas se a pessoa nasceu no município onde mora e,
               em caso negativo, a unidade da federação ou o país. Sem o município natal é impossível
               separar a primeira saída do município natal da migração de etapas múltiplas, e as duas
-              ficam juntas na categoria que os gráficos chamam de “{ROTULO_NAO_NATURAL}”.
+              ficam juntas na categoria que os gráficos chamam de “{rotuloCategoria("status", "nao_natural", d)}”.
             </p>
           </>
         )}
@@ -320,7 +244,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
           já concluiu (ou não) sua trajetória escolar.
           {ed.recursos.renda
             ? <> A renda domiciliar per capita é expressa em múltiplos do salário mínimo de
-                referência de cada Censo{sm ? ` (${salarioMinimoBR(sm, censo)})` : ""}, para não
+                referência de cada Censo{sm ? ` (${salarioMinimo(sm, censo)})` : ""}, para não
                 perder o sentido com a inflação.</>
             : null}
         </p>
@@ -340,7 +264,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
 
       <section>
         <h3>Precisão das estimativas</h3>
-        {t.precisao === "ausente" ? (
+        {est.precisao === "ausente" ? (
           <>
             {/* Sem chave de domicílio não há unidade primária de amostragem, e o estimador de
                 conglomerados subestimaria a variância -- ver docs/METODOLOGIA.md, item 8.1 da
@@ -367,13 +291,13 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
               Os microdados vêm de uma amostra, não do universo — toda contagem é uma estimativa sujeita
               a erro amostral. O erro-padrão é calculado por um estimador conservador de conglomerados
               (o domicílio como unidade primária de amostragem
-              {t.precisao === "area_ponderacao"
+              {est.precisao === "area_ponderacao"
                 ? ", a área de ponderação como estrato), na ausência de estratos/UPAs formais nos "
                   + "microdados da amostra; o estimador foi comparado à Função Generalizada de "
                   + "Variância do IBGE e ficou na mesma ordem de grandeza."
                 : "), na ausência de estratos/UPAs formais nos microdados da amostra."}
             </p>
-            {t.precisao === "estrato_aproximado" && (
+            {est.precisao === "estrato_aproximado" && (
               <p>
                 Esta edição, porém, não tem área de ponderação: o estrato usado é um substituto —
                 município × situação urbano/rural —, mais heterogêneo que a área real. A precisão
@@ -413,7 +337,7 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
             só aparece para fluxos com pelo menos {r?.min_pessoas_detalhe ?? 20} observações amostrais;</li>
           <li>toda contagem ponderada é arredondada a múltiplos de {r?.arredondamento ?? 5};</li>
           <li>nenhuma contagem amostral exata é publicada — apenas faixas;</li>
-          <li>{t.acesso === "controlado"
+          <li>{est.acesso === "controlado"
             ? "colunas de domicílio e de área de ponderação nunca saem dos microdados de acesso controlado."
             : "colunas de identificação de domicílio e de área de ponderação nunca são publicadas, ainda que os microdados de origem sejam públicos."}</li>
         </ul>
@@ -494,10 +418,10 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
               (residência em {anoDe}, residência em {anoAte}).</li>
           )}
           <li>Resultados podem divergir de tabulações oficiais do IBGE (SIDRA)
-            {t.acesso === "controlado"
+            {est.acesso === "controlado"
               ? " por subamostragem, supressão e recalibração aplicadas aos microdados de acesso controlado."
               : " por diferenças de expansão da amostra e pela supressão aplicada aqui por sigilo."}</li>
-          {t.precisao !== "ausente" && (
+          {est.precisao !== "ausente" && (
             <li>Nos níveis agregados (RGI, RGInt, UF), a ausência de erro-padrão publicado significa que
               comparações entre unidades pequenas devem ser lidas com cautela adicional.</li>
           )}
@@ -524,17 +448,17 @@ export function Metodologia({ meta }: { meta: Meta | null }) {
         </section>
       )}
 
-      {meta?.aviso && (
+      {textos.aviso && (
         <section>
           <h3>Aviso padrão</h3>
-          <p className="aviso">{meta.aviso}</p>
+          <p className="aviso">{textos.aviso}</p>
         </section>
       )}
 
-      {meta?.aviso_proxy && (
+      {textos.avisoProxy && (
         <section>
           <h3>Selo proxy (edição em vigor)</h3>
-          <p className="aviso aviso-proxy">{meta.aviso_proxy}</p>
+          <p className="aviso aviso-proxy">{textos.avisoProxy}</p>
         </section>
       )}
     </div>

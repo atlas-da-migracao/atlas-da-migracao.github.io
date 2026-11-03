@@ -9,6 +9,7 @@ import type { SankeyGraph, SankeyLink, SankeyNode } from "d3-sankey";
 import type { DadosSankey } from "../lib/rm";
 import { CLASSE_TRAB, cor } from "../lib/paletas";
 import { rotulosVisiveisEmColunas } from "../lib/rotulos";
+import { useT } from "../i18n";
 
 interface NoDatum { id: string; rotulo: string }
 interface LinkDatum { classe: string }
@@ -38,6 +39,7 @@ function corDoLink(classe: string, escuro: boolean): string {
 }
 
 export function Sankey({ dados, escuro, anoOrigem, anoDestino, largura = 340, altura = 340 }: Props) {
+  const d = useT();
   const layout = useMemo(() => {
     if (dados.nodes.length === 0 || dados.links.length === 0) return null;
     const grafo: SankeyGraph<NoDatum, LinkDatum> = {
@@ -45,14 +47,14 @@ export function Sankey({ dados, escuro, anoOrigem, anoDestino, largura = 340, al
       links: dados.links.map((l) => ({ ...l, value: l.value })),
     };
     const gerador = sankey<NoDatum, LinkDatum>()
-      .nodeId((d) => d.id)
+      .nodeId((no) => no.id)
       .nodeWidth(12)
       .nodePadding(9)
       .extent([[1, 6], [largura - 1, altura - 6]]);
     return gerador(grafo);
   }, [dados, largura, altura]);
 
-  if (!layout) return <p className="muted">Caminhos insuficientes para o diagrama.</p>;
+  if (!layout) return <p className="muted">{d.rm.sankey.caminhosInsuficientes}</p>;
 
   const path = sankeyLinkHorizontal<NoDatum, LinkDatum>();
   const profundidadeMax = Math.max(...layout.nodes.map((n) => n.depth ?? 0));
@@ -70,7 +72,7 @@ export function Sankey({ dados, escuro, anoOrigem, anoDestino, largura = 340, al
 
   return (
     <svg viewBox={`0 0 ${largura} ${altura}`} width="100%" height={altura} role="img"
-         aria-label={`Diagrama de fluxo: onde os migrantes moravam em ${anoOrigem}, passaram a morar e trabalham em ${anoDestino}`}>
+         aria-label={d.rm.sankey.ariaDiagrama(anoOrigem, anoDestino)}>
       <g>
         {(layout.links as Link[]).map((l, i) => (
           <path key={i} d={path(l) ?? undefined} fill="none"

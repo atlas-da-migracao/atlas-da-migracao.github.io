@@ -1,0 +1,275 @@
+import type { Dicionario } from "../pt";
+
+/** unité précédée d'une espace fine insécable ("12,3 ‰"); vide quand il n'y a pas d'unité */
+const u_ = (u: string) => (u ? ` ${u}` : "");
+
+export const comum: Dicionario["comum"] = {
+  separadorIntervalo: "à",
+
+  precisao: {
+    boa: "bonne",
+    cautela: "à utiliser avec prudence",
+    baixa: "faible précision",
+    sem_estimativa: "sans estimation",
+  },
+
+  niveis: {
+    mun: {
+      curto: "Municipalité", titulo: "Municipalité", singular: "municipalité", plural: "municipalités",
+      artigoDef: "la municipalité", demonstrativo: "cette municipalité", par: "les deux municipalités",
+      ver: "Voir la municipalité",
+    },
+    rgi: {
+      curto: "Rég. immédiate", titulo: "Région immédiate", singular: "région immédiate",
+      plural: "régions immédiates", artigoDef: "la région immédiate", demonstrativo: "cette région immédiate",
+      par: "les deux régions immédiates", ver: "Voir la région",
+    },
+    rgint: {
+      curto: "Rég. intermédiaire", titulo: "Région intermédiaire", singular: "région intermédiaire",
+      plural: "régions intermédiaires", artigoDef: "la région intermédiaire",
+      demonstrativo: "cette région intermédiaire", par: "les deux régions intermédiaires", ver: "Voir la région",
+    },
+    uf: {
+      curto: "État (UF)", titulo: "État (UF)", singular: "État", plural: "États", artigoDef: "l'État",
+      demonstrativo: "cet État", par: "les deux États", ver: "Voir l'État",
+    },
+    rm: {
+      curto: "RM", titulo: "Région métropolitaine", singular: "région métropolitaine",
+      plural: "régions métropolitaines", artigoDef: "la région métropolitaine",
+      demonstrativo: "cette région métropolitaine", par: "les deux régions métropolitaines", ver: "Voir la RM",
+    },
+  },
+
+  dimensoes: {
+    status: { titulo: "Type de migrant", nota: null },
+    edu: { titulo: "Niveau d'instruction", nota: "personnes de 25 ans ou plus" },
+    renda: { titulo: "Revenu du ménage par personne", nota: "en salaires minimums" },
+    tipologia: { titulo: "Typologie du flux", nota: null },
+    frequencia: { titulo: "Fréquence de retour", nota: null },
+    frequencia2010: { titulo: "Fréquence de retour", nota: null },
+    modo: { titulo: "Mode de transport", nota: null },
+    tempo: { titulo: "Durée du trajet", nota: null },
+    tempo2010: { titulo: "Durée du trajet", nota: "uniquement les personnes qui rentrent chez elles chaque jour" },
+    posicao: { titulo: "Statut dans l'emploi", nota: null },
+    setor: { titulo: "Secteur d'activité", nota: null },
+    ocupacao: { titulo: "Groupe professionnel", nota: null },
+    renda_trab: { titulo: "Revenu du travail", nota: "en salaires minimums" },
+    nivel: { titulo: "Niveau d'études", nota: null },
+  },
+
+  categoriaOutros: "Autres ou masqué",
+
+  categorias: {
+    status: {
+      retorno_natal: "Retour dans la municipalité de naissance",
+      primeira_saida: "Premier départ du lieu de naissance",
+      etapas_multiplas: "Étapes multiples",
+      nascido_exterior: "Né à l'étranger",
+      nao_natural: "Non natif de la destination",
+      outros: "Autres ou masqué",
+    },
+    edu: {
+      sem_instr_fund_incompleto: "Sans instruction ou fondamental incomplet",
+      fund_completo_medio_incompleto: "Fondamental achevé",
+      medio_completo_superior_incompleto: "Secondaire achevé",
+      superior_completo: "Supérieur achevé",
+      nao_determinado: "Indéterminé",
+      outros: "Autres ou masqué",
+    },
+    renda: {
+      ate_1_4_sm: "Jusqu'à ¼",
+      de_1_4_a_1_2_sm: "De ¼ à ½",
+      de_1_2_a_1_sm: "De ½ à 1",
+      de_1_a_2_sm: "De 1 à 2",
+      mais_de_2_sm: "Plus de 2",
+      nao_aplicavel: "Résidence collective",
+      outros: "Autres ou masqué",
+    },
+    tipologia: {
+      nucleo_periferia: "Centre → périphérie",
+      periferia_nucleo: "Périphérie → centre",
+      periferia_periferia: "Périphérie → périphérie",
+    },
+    classeTrab: {
+      origem: "Retourne travailler dans la municipalité d'origine",
+      nucleo: "Travaille désormais dans le centre",
+      outro: "Travaille dans une autre municipalité de la RM",
+      proprio: "Travaille dans sa municipalité",
+      varios: "Plusieurs municipalités",
+      nao_informado: "Non déclaré",
+      exterior: "Étranger",
+      outros: "Autres",
+    },
+    classeEstudo: {
+      origem: "Retourne étudier dans la municipalité d'origine",
+      nucleo: "Étudie désormais dans le centre",
+      outro: "Étudie dans une autre municipalité de la RM",
+      proprio: "Étudie dans sa municipalité",
+      varios: "Plusieurs municipalités",
+      nao_informado: "Non déclaré",
+    },
+    faixasIdade: {
+      "05_14": "5–14",
+      "15_24": "15–24",
+      "25_39": "25–39",
+      "40_59": "40–59",
+      "60_mais": "60 et plus",
+    },
+    frequencia: {
+      retorno_diario: "Retour 3+ jours/semaine",
+      semanal_longa: "Retour hebdomadaire ou plus espacé",
+      ignorado: "Inconnu",
+      outros: "Autres ou masqué",
+    },
+    frequencia2010: {
+      retorno_diario: "Retour quotidien",
+      semanal_longa: "Pas de retour quotidien",
+      ignorado: "Inconnu",
+      outros: "Autres ou masqué",
+    },
+    modo: {
+      a_pe_bicicleta: "À pied ou à vélo",
+      motocicleta: "Moto ou moto-taxi",
+      automovel_taxi: "Voiture ou taxi",
+      onibus_van_brt: "Bus, minibus ou BRT",
+      trem_metro: "Train ou métro",
+      outros: "Autres modes ou masqué",
+      ignorado: "Inconnu",
+    },
+    tempo: {
+      ate_15min: "Jusqu'à 15 min",
+      de_16_a_30min: "16 à 30 min",
+      de_31min_a_1h: "31 min à 1 h",
+      de_1_a_2h: "1 à 2 h",
+      mais_de_2h: "Plus de 2 h",
+      outros: "Pas de trajet, inconnu ou masqué",
+    },
+    tempo2010: {
+      ate_5min: "Jusqu'à 5 min",
+      de_6_a_30min: "6 à 30 min",
+      de_31min_a_1h: "31 min à 1 h",
+      de_1_a_2h: "1 à 2 h",
+      mais_de_2h: "Plus de 2 h",
+      nao_se_aplica: "Pas de retour quotidien",
+      outros: "Autres ou masqué",
+    },
+    posicao: {
+      empregado_com_carteira: "Salarié avec contrat formel",
+      empregado_sem_carteira: "Salarié sans contrat formel",
+      militar_estatutario: "Militaire ou fonctionnaire statutaire",
+      empregador: "Employeur",
+      conta_propria_familiar: "À son compte ou aide familial",
+      ignorado: "Inconnu",
+      outros: "Autres ou masqué",
+    },
+    setor: {
+      agropecuaria: "Agriculture et élevage",
+      industria: "Industrie",
+      construcao: "Construction",
+      comercio: "Commerce",
+      transporte_logistica: "Transport et logistique",
+      servicos_empresariais: "Services aux entreprises",
+      admin_educacao_saude: "Administration publique, enseignement et santé",
+      outros_servicos: "Autres services",
+      ignorado: "Inconnu",
+      outros: "Autres ou masqué",
+    },
+    ocupacao: {
+      dirigentes_profissionais: "Dirigeants et professions intellectuelles",
+      tecnicos_administrativo: "Professions intermédiaires et employés administratifs",
+      servicos_vendedores: "Personnel des services et vendeurs",
+      agropecuaria: "Agriculteurs et ouvriers agricoles",
+      industria_operadores: "Métiers de l'industrie, du bâtiment et conducteurs de machines",
+      elementares: "Professions élémentaires",
+      forcas_seguranca: "Forces armées, police et pompiers",
+      mal_definidas: "Mal définies, inconnu ou masqué",
+    },
+    renda_trab: {
+      ate_1_sm: "Jusqu'à 1 salaire minimum",
+      de_1_a_2_sm: "De 1 à 2 salaires minimums",
+      de_2_a_3_sm: "De 2 à 3 salaires minimums",
+      de_3_a_5_sm: "De 3 à 5 salaires minimums",
+      mais_de_5_sm: "Plus de 5 salaires minimums",
+      sem_declaracao: "Non déclaré",
+      outros: "Autres ou masqué",
+    },
+    nivel: {
+      infantil_fundamental: "Préscolaire ou fondamental",
+      medio: "Secondaire",
+      pre_vestibular: "Préparation à l'entrée à l'université",
+      graduacao: "Premier cycle universitaire (licence)",
+      pos_graduacao: "Master ou doctorat",
+      ignorado: "Inconnu",
+      outros: "Autres ou masqué",
+    },
+  },
+
+  edicoes: {
+    "2022": { rotulo: "Recensement 2022", subtitulo: "Recensement 2022, date fixe 2017–2022", rotuloRetorno: "Retour 3+ jours/semaine" },
+    "2010": { rotulo: "Recensement 2010", subtitulo: "Recensement 2010, date fixe 2005–2010", rotuloRetorno: "Retour quotidien" },
+    "2000": { rotulo: "Recensement 2000", subtitulo: "Recensement 2000, date fixe 1995–2000", rotuloRetorno: null },
+    "1991": { rotulo: "Recensement 1991", subtitulo: "Recensement 1991, date fixe 1986–1991", rotuloRetorno: null },
+    "1980": { rotulo: "Recensement 1980", subtitulo: "Recensement 1980, proxy de date fixe 1975–1980", rotuloRetorno: null },
+  },
+
+  faixasLegenda: {
+    ganhoAcima: (v: string, u: string) => `gain supérieur à ${v}${u_(u)}`,
+    faixa: (a: string, b: string, u: string) => `${a} à ${b}${u_(u)}`,
+    baixaVariacao: (v: string, u: string) => `faible variation (±${v}${u_(u)})`,
+    perdaAcima: (v: string, u: string) => `perte supérieure à ${v}${u_(u)}`,
+  },
+
+  legendaMedidaSerie: {
+    iem: [
+      "très forte absorption (au-dessus de +0,60)",
+      "forte absorption (+0,33 à +0,60)",
+      "absorption (+0,15 à +0,33)",
+      "rotation (−0,15 à +0,15)",
+      "répulsion (−0,33 à −0,15)",
+      "forte répulsion (−0,60 à −0,33)",
+      "très forte répulsion (au-dessous de −0,60)",
+    ],
+    tlm: [
+      "gain supérieur à 80 ‰",
+      "gain de 30 à 80 ‰",
+      "gain de 10 à 30 ‰",
+      "quasi-équilibre (±10 ‰)",
+      "perte de 10 à 30 ‰",
+      "perte de 30 à 80 ‰",
+      "perte supérieure à 80 ‰",
+    ],
+    tbi: ["jusqu'à 25 ‰", "25 à 50 ‰", "50 à 80 ‰", "80 à 130 ‰", "130 ‰ ou plus"],
+    tbe: ["jusqu'à 25 ‰", "25 à 50 ‰", "50 à 80 ‰", "80 à 130 ‰", "130 ‰ ou plus"],
+  },
+
+  regioes: {
+    Norte: "Nord",
+    Nordeste: "Nordeste",
+    Sudeste: "Sud-Est",
+    Sul: "Sud",
+    "Centro-Oeste": "Centre-Ouest",
+  },
+
+  sankeyResidual: {
+    origens: "Autres origines",
+    residencias: "Autres résidences",
+    municipios: "Autres municipalités",
+  },
+
+  glossarioUi: {
+    oQueE: "Définition",
+    comoInterpretar: "Comment interpréter",
+    limitacoes: "Limites",
+    ariaOQueE: (termo: string) => `Définition : ${termo}`,
+  },
+
+  ui: {
+    painelDetalhes: "Panneau de détails",
+    fecharPainel: "Fermer le panneau",
+    carregando: "Chargement…",
+    carregandoFluxos: "Chargement des flux…",
+    carregandoFluxo: "Chargement du flux…",
+    carregandoMapa: "Chargement de la carte…",
+    carregandoSerie: "Chargement de la série…",
+  },
+};

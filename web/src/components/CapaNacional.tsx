@@ -7,11 +7,13 @@ import { alcanceNacional, capaBrasil, maioresFluxos, type CapaBrasil } from "../
 import type { Fluxo, Meta } from "../lib/types";
 import { num, num1 } from "../lib/format";
 import { rotuloRecorte } from "../lib/paletas";
+import { useT } from "../i18n";
 import { useStore } from "../state/store";
 import { edicao } from "../lib/edicoes";
 import { AvisoProxy } from "./AvisoProxy";
 import { tipoFluxoPredominante } from "../lib/serie";
 import { Termo } from "./Termo";
+import { TextoRico } from "./TextoRico";
 
 interface Props {
   aoSelecionarFluxo: (o: string, d: string) => void;
@@ -21,6 +23,7 @@ interface Props {
 }
 
 export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props) {
+  const d = useT();
   const [capa, setCapa] = useState<CapaBrasil | null>(null);
   const [top5, setTop5] = useState<Fluxo[]>([]);
   const [alcance, setAlcance] = useState<{ distancia_media: number | null; pct_interestadual: number | null } | null>(null);
@@ -58,15 +61,12 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
   const milhoes = capa ? capa.total_migrantes / 1_000_000 : null;
 
   return (
-    <aside className="painel" aria-label="Panorama nacional">
+    <aside className="painel" aria-label={d.capa.aria}>
       <div className="vazio">
-        <h2>Atlas da migração interna</h2>
+        <h2>{d.capa.titulo}</h2>
         <p>
-          Fluxos migratórios entre {capa ? `os ${num(capa.n_municipios)}` : "os"} municípios
-          brasileiros no quinquênio {ed.periodo.de.slice(0, 4)}–{ed.periodo.ate.slice(0, 4)},
-          {ed.proxyDataFixa
-            ? ` a partir de um proxy de data fixa do Censo Demográfico ${ed.nome} (ver aviso abaixo).`
-            : ` a partir do quesito de data fixa do Censo Demográfico ${ed.nome}.`}
+          {d.capa.intro(capa ? num(capa.n_municipios) : null, ed.periodo.de.slice(0, 4),
+                        ed.periodo.ate.slice(0, 4), ed.nome, Boolean(ed.proxyDataFixa))}
         </p>
       </div>
 
@@ -75,22 +75,19 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
       {capa && milhoes != null && (
         <>
           <div className="capa-nacional-numero">
-            {num1(milhoes)} milhões de pessoas mudaram de município entre {ed.periodo.de.slice(0, 4)}
-            {" "}e {ed.periodo.ate.slice(0, 4)}
+            {d.capa.numeroDestaque(num1(milhoes), ed.periodo.de.slice(0, 4), ed.periodo.ate.slice(0, 4))}
           </div>
           <p className="muted-pequeno">
-            {num(capa.n_pares)} pares origem–destino publicados · {num(capa.imig_ni)} chegadas
-            com origem não informada · {num(capa.imig_int)} vindas do exterior · população de
-            referência (5 anos ou mais): {num(capa.pop5)}.
+            {d.capa.apoio(num(capa.n_pares), num(capa.imig_ni), num(capa.imig_int), num(capa.pop5))}
           </p>
         </>
       )}
 
       {(() => {
-        const tipo = alcance ? tipoFluxoPredominante(alcance.distancia_media, alcance.pct_interestadual) : null;
+        const tipo = alcance ? tipoFluxoPredominante(alcance.distancia_media, alcance.pct_interestadual, d) : null;
         return tipo && (
           <p className="muted-pequeno">
-            <Termo chave="tipo_fluxo_predominante">Padrão migratório predominante no país</Termo>:
+            <Termo chave="tipo_fluxo_predominante">{d.capa.padraoPredominante}</Termo>{d.capa.padraoSufixo}
             {" "}<strong>{tipo.rotulo.toLowerCase()}</strong>.
           </p>
         );
@@ -98,10 +95,10 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
 
       {top5.length > 0 && (
         <section className="secao">
-          <h3>Maiores fluxos do país</h3>
+          <h3>{d.capa.maioresFluxos}</h3>
           {recorte && (
             <p className="muted-pequeno explicacao">
-              Recorte: <strong>{rotuloRecorte(recorte)}</strong> -- volume só desse subgrupo de migrantes.
+              {d.capa.recorteRotulo} <strong>{rotuloRecorte(recorte, d)}</strong> {d.capa.recorteExplicacao}
             </p>
           )}
           <ul className="capa-nacional-lista">
@@ -128,46 +125,34 @@ export function CapaNacional({ aoSelecionarFluxo, recorte = null, meta }: Props)
           aqui é `censo === "2022"`, não `ed.recursos.rm`. */}
       {censo === "2022" && (
         <section className="secao">
-          <h3>Três achados da pesquisa</h3>
+          <h3>{d.capa.achados.titulo}</h3>
 
           <div className="achado">
-            <p>
-              Entre quem saiu do núcleo metropolitano para a periferia, <strong>46,5%</strong>{" "}
-              seguem trabalhando no núcleo -- na RIDE-DF, essa taxa chega a <strong>59,3%</strong>.
-            </p>
+            <p><TextoRico texto={d.capa.achados.nucleo(num1(46.5), num1(59.3))} /></p>
             <button onClick={() => irPara({ rm: "7801", aba: "mig", municipio: null, selecao: null,
                                             origem: null, destino: null })}>
-              Ver a RIDE-DF
+              {d.capa.achados.verRideDF}
             </button>
           </div>
 
           <div className="achado">
-            <p>
-              Entre os migrantes de 25 anos ou mais do Rio de Janeiro para São Paulo,{" "}
-              <strong>75,1%</strong> têm superior completo -- uma seletividade educacional acentuada.
-            </p>
+            <p><TextoRico texto={d.capa.achados.superior(num1(75.1))} /></p>
             <button onClick={() => aoSelecionarFluxo("3304557", "3550308")}>
-              Ver o fluxo Rio → São Paulo
+              {d.capa.achados.verFluxoRioSP}
             </button>
           </div>
 
           <div className="achado">
-            <p>
-              Guarulhos → São Paulo é o maior par pendular de trabalho do país:{" "}
-              <strong>77.500 pessoas</strong> moram em Guarulhos e trabalham em São Paulo.
-            </p>
+            <p><TextoRico texto={d.capa.achados.pendular(num(77500))} /></p>
             <button onClick={() => irPara({ rm: "4901", aba: "trab", municipio: null, selecao: null,
                                             origem: "3518800", destino: "3550308" })}>
-              Ver o par pendular
+              {d.capa.achados.verParPendular}
             </button>
           </div>
         </section>
       )}
 
-      <p className="muted-pequeno">
-        Clique em um município no mapa para ver seu saldo, os principais fluxos de entrada e
-        de saída, e o perfil dos migrantes. Clique em um arco para detalhar um fluxo.
-      </p>
+      <p className="muted-pequeno">{d.capa.instrucao}</p>
     </aside>
   );
 }

@@ -40,11 +40,12 @@ import { feature } from "topojson-client";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Topology } from "topojson-specification";
 import { basePath, type Censo } from "../lib/edicoes";
+import { t, useT } from "../i18n";
 import {
   estadoNoMapa, formatarQuebra, ordenarEdicoes, QUEBRAS_FIXAS, rotuloEdicao, tramaDoEstadoMapa,
   type EdicaoSerie, type NivelSerie, type TramaMapa,
 } from "../lib/serie";
-import { corMedidaSerie, corDoSlotLegenda, LEGENDA_MEDIDA_SERIE, type MedidaMapaSerie } from "../lib/escalas";
+import { corMedidaSerie, corDoSlotLegenda, legendaMedidaSerie, type MedidaMapaSerie } from "../lib/escalas";
 import { serieMapa, type LinhaMapaSerie } from "../db/queries";
 import { validarEExpandirBbox, type Bbox } from "../lib/rm";
 
@@ -57,12 +58,8 @@ const CAMPO_ID: Record<NivelSerie, string> = {
 
 const LIMITES_BRASIL: Bbox = [-2_178_086, -2_385_699, 2_561_841, 1_902_805];
 
-const MEDIDAS: { chave: MedidaMapaSerie; rotulo: string }[] = [
-  { chave: "iem", rotulo: "Índice de eficácia migratória" },
-  { chave: "tlm", rotulo: "Taxa líquida de migração" },
-  { chave: "tbi", rotulo: "Taxa bruta de imigração" },
-  { chave: "tbe", rotulo: "Taxa bruta de emigração" },
-];
+/** Medidas do seletor, na ordem de exibição; o nome de cada uma vem de `d.serie.medidas`. */
+const MEDIDAS: MedidaMapaSerie[] = ["iem", "tlm", "tbi", "tbe"];
 
 /** `se_iem` é o erro-padrão do IEM: com ele o mapa reconhece o estado `indefinido`
  *  (`classificarIem`). Opcional no tipo porque `serieMapa` (db/queries.ts) precisa trazê-lo na
@@ -235,6 +232,7 @@ function PainelMapaEdicao({
   /** Dados da série (`serieMapa`) ainda chegando: não pinta "não medido" antes da hora. */
   carregando: boolean;
 }) {
+  const d = useT();
   const idBase = `serie-mapa-${edicao}`;
   const caminhos = useMemo(() => (malha ? caminhosDaMalha(malha, proj, campoId) : SEM_CAMINHOS),
     [malha, proj, campoId]);
@@ -264,11 +262,11 @@ function PainelMapaEdicao({
     const saida: SobreposicaoMapa[] = [];
     for (const [cd, linha] of valores) {
       if (caminhos.has(cd)) continue;
-      const d = caminhos2022.get(cd);
-      if (!d) continue;
+      const caminho = caminhos2022.get(cd);
+      if (!caminho) continue;
       const valor = (linha[medida] as number | null | undefined) ?? null;
       const trama = tramaDoEstadoMapa(estadoNoMapa(linha, medida, valor));
-      if (trama) saida.push({ cd, d, trama });
+      if (trama) saida.push({ cd, d: caminho, trama });
     }
     return saida;
   }, [malha, carregando, valores, medida, caminhos, caminhos2022]);
@@ -276,7 +274,7 @@ function PainelMapaEdicao({
   if (!malha || carregando) {
     return (
       <div className="serie-mapa-painel serie-mapa-painel-vazio" style={{ width: LARGURA_PAINEL, height: ALTURA_PAINEL }}>
-        <p className="muted-pequeno">carregando…</p>
+        <p className="muted-pequeno">{d.serie.mapa.carregandoPainel}</p>
       </div>
     );
   }
@@ -293,9 +291,9 @@ function PainelMapaEdicao({
 
   return (
     <figure className="serie-mapa-painel">
-      <figcaption>{rotuloEdicao(edicao)}</figcaption>
+      <figcaption>{rotuloEdicao(edicao, d)}</figcaption>
       <svg width={LARGURA_PAINEL} height={ALTURA_PAINEL} viewBox={`0 0 ${LARGURA_PAINEL} ${ALTURA_PAINEL}`}
-           role="img" aria-label={`Mapa de ${medida.toUpperCase()} em ${rotuloEdicao(edicao)}`}
+           role="img" aria-label={d.serie.mapa.ariaPainel(medida.toUpperCase(), rotuloEdicao(edicao, d))}
            onMouseOver={aoEntrar} onFocus={aoEntrar} onMouseLeave={() => aoPassarMouse(null)}>
         <defs>
           <pattern id={`${idBase}-diagonal`} width={4} height={4} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -323,9 +321,10 @@ function PainelMapaEdicao({
 }
 
 function Legenda({ medida, escuro }: { medida: MedidaMapaSerie; escuro: boolean }) {
-  const classes = LEGENDA_MEDIDA_SERIE[medida];
+  const d = useT();
+  const classes = legendaMedidaSerie(medida, d);
   return (
-    <div className="serie-mapa-legenda" aria-label="Legenda do mapa comparativo">
+    <div className="serie-mapa-legenda" aria-label={d.serie.mapa.legendaAria}>
       <ul className="serie-mapa-legenda-classes">
         {classes.map((c) => (
           <li key={c.rotulo}>
@@ -336,15 +335,15 @@ function Legenda({ medida, escuro }: { medida: MedidaMapaSerie; escuro: boolean 
       </ul>
       <hr className="serie-mapa-legenda-separador" />
       <ul className="serie-mapa-legenda-tramas"
-          aria-label="Diagonal: território não comparável. Cruzada: suprimido por sigilo. Pontilhada: não medido. Horizontal: indefinido, amostra pequena demais para classificar.">
-        <li><span className="serie-mapa-amostra serie-mapa-amostra-diagonal" /> não comparável (não existia / cobertura insuficiente)</li>
-        <li><span className="serie-mapa-amostra serie-mapa-amostra-cruzada" /> suprimido (sigilo)</li>
-        <li><span className="serie-mapa-amostra serie-mapa-amostra-pontilhada" /> não medido (o censo não perguntou)</li>
+          aria-label={d.serie.mapa.tramasAria}>
+        <li><span className="serie-mapa-amostra serie-mapa-amostra-diagonal" /> {d.serie.mapa.tramaDiagonal}</li>
+        <li><span className="serie-mapa-amostra serie-mapa-amostra-cruzada" /> {d.serie.mapa.tramaCruzada}</li>
+        <li><span className="serie-mapa-amostra serie-mapa-amostra-pontilhada" /> {d.serie.mapa.tramaPontilhada}</li>
         {medida === "iem" && (
           <li>
             <span className="serie-mapa-amostra"
                   style={{ backgroundImage: "repeating-linear-gradient(0deg, var(--ink-muted) 0 1px, transparent 1px 4px)" }} />
-            {" "}indefinido (amostra pequena demais para classificar)
+            {" "}{d.serie.mapa.tramaIndefinida}
           </li>
         )}
       </ul>
@@ -369,6 +368,7 @@ interface DadosMapa { chave: string; linhas: LinhaMapa[] | null; erro: string | 
  *  fase (a malha de RM/RIDE não integra o conjunto de níveis do mapa principal -- ver CAMPO_ID
  *  em App.tsx, que também não inclui "rm"; documentado como fora de escopo, não omissão). */
 export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
+  const d = useT();
   const [medida, setMedida] = useState<MedidaMapaSerie>("iem");
   const [hover, setHover] = useState<string | null>(null);
   const [pedidoMun, setPedidoMun] = useState(false);
@@ -386,7 +386,7 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
     serieMapa(nivel)
       .then((linhas) => { if (vivo) setDadosMapa({ chave: nivel, linhas: linhas as LinhaMapa[], erro: null }); })
       .catch((e: unknown) => {
-        if (vivo) setDadosMapa({ chave: nivel, linhas: null, erro: (e as Error).message ?? "erro desconhecido" });
+        if (vivo) setDadosMapa({ chave: nivel, linhas: null, erro: (e as Error).message ?? t().serie.mapa.erroDesconhecido });
       });
     return () => { vivo = false; };
   }, [nivel, carregar]);
@@ -441,8 +441,8 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
 
   if (nivel === "rm") {
     return (
-      <section className="secao serie-mapa" aria-label="Mapa comparativo">
-        <p className="muted-pequeno">Mapa comparativo não publicado para região metropolitana nesta fase.</p>
+      <section className="secao serie-mapa" aria-label={d.serie.mapa.aria}>
+        <p className="muted-pequeno">{d.serie.mapa.naoPublicadoRM}</p>
       </section>
     );
   }
@@ -451,21 +451,21 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
 
   return (
     <section className="secao serie-mapa" aria-labelledby="serie-mapa-titulo">
-      <h4 id="serie-mapa-titulo">Mapa comparativo, censo a censo</h4>
+      <h4 id="serie-mapa-titulo">{d.serie.mapa.titulo}</h4>
       <div className="serie-mapa-controles">
         <label>
-          Medida:{" "}
+          {d.serie.mapa.medida}{" "}
           <select value={medida} onChange={(e) => setMedida(e.target.value as MedidaMapaSerie)}>
-            {MEDIDAS.map((m) => <option key={m.chave} value={m.chave}>{m.rotulo}</option>)}
+            {MEDIDAS.map((m) => <option key={m} value={m}>{d.serie.medidas[m]}</option>)}
           </select>
         </label>
       </div>
       {!carregar ? (
         <button className="link-serie" onClick={() => setPedidoMun(true)}>
-          Carregar os mapas municipais das {edicoes.length} edições marcadas
+          {d.serie.mapa.carregarMunicipais(edicoes.length)}
         </button>
       ) : erro ? (
-        <p className="erro" role="alert">Não foi possível carregar o mapa comparativo: {erro}</p>
+        <p className="erro" role="alert">{d.serie.mapa.erro(erro)}</p>
       ) : (
         <>
           <div className="serie-mapa-paineis">
@@ -480,8 +480,9 @@ export function MapaSerieCensos({ nivel, codigo, escuro, edicoes }: Props) {
           </div>
           <Legenda medida={medida} escuro={escuro} />
           <p className="muted-pequeno">
-            Quebras fixas (mesmas em todas as edições): {QUEBRAS_FIXAS[medida].map((q) => formatarQuebra(medida, q)).join(" · ")}
-            {medida === "iem" ? " (índice, não %)" : " ‰"}.
+            {d.serie.mapa.quebrasFixas(
+              QUEBRAS_FIXAS[medida].map((q) => formatarQuebra(medida, q)).join(" · "), medida === "iem",
+            )}
           </p>
         </>
       )}

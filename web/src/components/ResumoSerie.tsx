@@ -11,10 +11,11 @@
  *  estado de QUALQUER medida do Bloco 1-4 (isso `SerieCensos.tsx` faz via `estadoDaCelula`).
  */
 import { useEffect, useState } from "react";
+import { useT } from "../i18n";
 import { serieDaUnidade, serieFilhosDoMunicipio } from "../db/queries";
 import {
-  EDICOES_SERIE, NOME_TIPO_IEM, filhosNoIntervalo, formatarIem, fraseSintese, geometriaSpark,
-  maeDaSerie, pontosDaSerie, rotuloEdicao,
+  EDICOES_SERIE, filhosNoIntervalo, formatarIem, fraseSintese, geometriaSpark,
+  maeDaSerie, nomeTipoIem, pontosDaSerie, rotuloEdicao,
   type EdicaoSerie, type EntradaFrase, type FilhoMunicipio, type LinhaSerieFrase, type NivelSerie,
 } from "../lib/serie";
 import { num, sinal } from "../lib/format";
@@ -69,6 +70,7 @@ interface Props {
 export function ResumoSerie({
   nivel, codigo, nome, aoAbrirSerieCompleta, aoAbrirMae, edicoes = EDICOES_SERIE,
 }: Props) {
+  const d = useT();
   // Cada resultado carrega a chave da unidade que o pediu, e só vale se ainda for a unidade
   // atual: ao trocar de município a frase NUNCA sai com as linhas ou os filhos do anterior (nem
   // por um quadro, que é o que um `setFilhos([])` dentro do efeito deixaria passar). `null` =
@@ -94,7 +96,7 @@ export function ResumoSerie({
   const linhas = linhasSt?.chave === chave ? linhasSt.linhas : null;
   const filhos = nivel !== "mun" ? [] : filhosSt?.chave === chave ? filhosSt.filhos : null;
 
-  if (linhas === null || filhos === null) return <p className="muted serie-carregando">Carregando a série…</p>;
+  if (linhas === null || filhos === null) return <p className="muted serie-carregando">{d.comum.ui.carregandoSerie}</p>;
   if (linhas.length === 0) return null;
 
   const pontos = pontosDaSerie(linhas, edicoes);
@@ -106,55 +108,57 @@ export function ResumoSerie({
     filhos: filhosNoIntervalo(filhos, edicoes),
   };
 
-  const frase = fraseSintese(entrada);
+  const frase = fraseSintese(entrada, d);
   const comNumero = pontos.filter((p) => p.estado === "numero");
   const ultima = comNumero[comNumero.length - 1] ?? null;
+  const nomeTipo = ultima?.tipo ? nomeTipoIem(ultima.tipo, d) : d.serie.resumo.semClassificacao;
+  const tx = d.serie.resumo;
 
   return (
-    <section className="secao serie-resumo" aria-label="Ao longo dos censos">
+    <section className="secao serie-resumo" aria-label={tx.titulo}>
       <div className="secao-titulo-linha">
-        <h3 className="secao-titulo">Ao longo dos censos</h3>
-        <button className="link-serie" onClick={aoAbrirSerieCompleta}>Ver a série completa ↗</button>
+        <h3 className="secao-titulo">{tx.titulo}</h3>
+        <button className="link-serie" onClick={aoAbrirSerieCompleta}>{tx.verSerieCompleta}</button>
       </div>
 
       <p className="serie-frase">{frase}</p>
 
       {entrada.mae && aoAbrirMae && (
         <button className="link-serie" onClick={() => aoAbrirMae(entrada.mae!.codigo ?? entrada.mae!.nome)}>
-          Abrir a série de {entrada.mae.nome} ↗
+          {tx.abrirSerieDe(entrada.mae.nome)}
         </button>
       )}
 
       {ultima && (
         <div className="serie-numeros">
-          <div className="serie-numero" role="group" aria-label={`Saldo, ${sinal(ultima.saldo)}`}>
-            <div className="serie-numero-rotulo"><Termo chave="saldo">Saldo</Termo> ({ultima.edicao})</div>
+          <div className="serie-numero" role="group" aria-label={tx.ariaSaldo(sinal(ultima.saldo))}>
+            <div className="serie-numero-rotulo"><Termo chave="saldo">{tx.saldo}</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">{sinal(ultima.saldo)}</div>
             <Sparkline valores={pontos.map((p) => p.saldo)} edicoes={edicoes} />
           </div>
           <div className="serie-numero" role="group"
-               aria-label={`Eficácia, ${ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}`}>
-            <div className="serie-numero-rotulo"><Termo chave="eficacia_iem">Eficácia</Termo> ({ultima.edicao})</div>
+               aria-label={tx.ariaEficacia(nomeTipo)}>
+            <div className="serie-numero-rotulo"><Termo chave="eficacia_iem">{tx.eficacia}</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">
               {formatarIem(ultima.iem)}
             </div>
-            <div className="muted-pequeno">{ultima.tipo ? NOME_TIPO_IEM[ultima.tipo] : "sem classificação"}</div>
+            <div className="muted-pequeno">{nomeTipo}</div>
             <Sparkline valores={pontos.map((p) => p.iem)} edicoes={edicoes} />
           </div>
-          <div className="serie-numero" role="group" aria-label="Movimento total (entradas + saídas)">
-            <div className="serie-numero-rotulo"><Termo chave="rotatividade">Movimento total</Termo> ({ultima.edicao})</div>
+          <div className="serie-numero" role="group" aria-label={tx.ariaMovimento}>
+            <div className="serie-numero-rotulo"><Termo chave="rotatividade">{tx.movimento}</Termo> ({ultima.edicao})</div>
             <div className="serie-numero-valor">
               {ultima.imig != null && ultima.emig != null ? num(ultima.imig + ultima.emig) : "—"}
             </div>
             <div className="muted-pequeno">
-              entraram {num(ultima.imig)}, saíram {num(ultima.emig)}
+              {tx.entraramSairam(num(ultima.imig), num(ultima.emig))}
             </div>
             <Sparkline valores={pontos.map((p) => (p.imig != null && p.emig != null ? p.imig + p.emig : null))} edicoes={edicoes} />
           </div>
         </div>
       )}
       <p className="muted-pequeno serie-legenda-spark">
-        {edicoes.map(rotuloEdicao).join(" · ")}
+        {edicoes.map((e) => rotuloEdicao(e, d)).join(" · ")}
       </p>
     </section>
   );

@@ -1,0 +1,222 @@
+{
+  "saldo": {
+    "termo": "Solde migratoire",
+    "definicao": "Différence entre ceux qui sont arrivés dans l'unité et ceux qui en sont partis au cours de la période du recensement : solde = entrants − sortants.",
+    "interpretacao": "Un solde positif signifie que l'unité a gagné plus d'habitants qu'elle n'en a perdu au cours de la période ; négatif, qu'elle en a perdu plus qu'elle n'en a gagné. Un solde proche de zéro ne veut pas dire peu de migration — il peut s'agir de nombreuses entrées compensées par de nombreuses sorties (voir rotation).",
+    "limitacoes": "Aux niveaux agrégés (région immédiate, région intermédiaire, unité fédérative et région métropolitaine), le solde publié est calculé sur les flux qui franchissent la limite de l'unité, et ce n'est pas la somme des soldes des municipalités qui la composent : la migration entre municipalités d'une même unité n'entre pas dans le calcul."
+  },
+  "taxa_liquida": {
+    "termo": "Taux net de migration (TLM)",
+    "definicao": "Le solde migratoire exprimé pour 1 000 habitants : TLM = (solde ÷ population de 5 ans ou plus) × 1 000. C'est la version du solde qui ne dépend pas de la taille de l'unité.",
+    "interpretacao": "Zéro correspond à l'équilibre. Les valeurs positives indiquent un gain de population par migration, les négatives une perte, et l'ampleur se lit comme « tant de personnes en plus (ou en moins) pour 1 000 habitants ». Comme il est rapporté à la population, il permet de comparer une petite municipalité avec une capitale.",
+    "limitacoes": "Il hérite de la réserve sur le solde aux niveaux agrégés : il ne mesure que les échanges qui franchissent la limite de l'unité. Le dénominateur est la population de 5 ans ou plus, qui est le champ de la question sur la migration, et non la population totale."
+  },
+  "imigrantes": {
+    "termo": "Entrants (arrivées)",
+    "definicao": "Personnes qui résidaient dans une autre municipalité du Brésil au début de la période de référence du recensement et qui résidaient dans cette unité à la fin de celle-ci. La période est la période quinquennale de chaque édition (par exemple, du 31/07/2017 au 31/07/2022 pour le Recensement 2022).",
+    "interpretacao": "Il s'agit d'un nombre de personnes (estimation pondérée à partir de l'échantillon du recensement) : plus il est élevé, plus nombreuses sont les personnes arrivées dans l'unité au cours de la période. Comparez-le toujours avec les sorties et avec la taille de la population avant de conclure que l'unité « attire ».",
+    "limitacoes": "Une partie des migrants arrivés n'a pas déclaré la municipalité d'origine. Ces cas sont publiés à part : ils comptent dans le total des entrées de la destination, mais restent hors de la matrice origine–destination et, par conséquent, hors des sorties calculées pour les municipalités d'origine."
+  },
+  "emigrantes": {
+    "termo": "Sortants (départs)",
+    "definicao": "Personnes qui résidaient dans cette unité au début de la période de référence du recensement et qui résidaient dans une autre municipalité du Brésil à la fin de celle-ci.",
+    "interpretacao": "Il s'agit d'un nombre de personnes (estimation pondérée à partir de l'échantillon) : plus il est élevé, plus nombreuses sont les personnes parties de l'unité au cours de la période.",
+    "limitacoes": "Les sorties sont reconstituées à partir de l'origine déclarée par ceux qui sont arrivés dans une autre municipalité. Les migrants qui n'ont pas su déclarer leur municipalité d'origine ne sont attribués à aucune origine, de sorte que les sorties sont légèrement sous-estimées."
+  },
+  "eficacia_iem": {
+    "termo": "IEM — indice d'efficacité migratoire (aussi MEI)",
+    "definicao": "Rapporte le solde au mouvement total de l'unité : IEM = (entrants − sortants) ÷ (entrants + sortants). Le résultat est toujours compris entre −1 et +1.",
+    "interpretacao": "Près de zéro, les échanges sont équilibrés — beaucoup de personnes entrent et sortent, avec peu d'effet net (rotation). Près de +1, le flux est presque entièrement entrant (absorption) ; près de −1, presque entièrement sortant (répulsion). La typologie de Baeninger utilisée dans l'atlas classe un |IEM| inférieur à 0,15 comme rotation, de 0,15 à 0,33 comme absorption ou répulsion, et 0,33 ou plus comme forte absorption ou forte répulsion (0,15 correspond au cas où le flux le plus important dépasse le plus faible d'un tiers ; 1/3 correspond au cas où le flux le plus important est le double du plus faible). La carte comparative de la série distingue en outre, pour la seule lecture visuelle, une tranche de 0,60 ou plus (« très forte ») ; ce n'est pas une classe de la typologie. Lorsque la différence entre entrées et sorties reste dans la marge d'erreur de l'échantillon, l'unité est classée « indéterminé » au lieu de recevoir une classe — l'incertitude n'est pas une preuve d'équilibre.",
+    "limitacoes": "Contrairement à l'intensité migratoire brute (CMI) et au taux net de migration agrégé (ANMR), l'IEM est indépendant de l'échelle : c'est un rapport entre solde et volume, qui peut donc être comparé entre niveaux territoriaux différents (municipalité, région, unité fédérative) et entre recensements. C'est pourquoi l'atlas traite cette mesure différemment des mesures d'intensité. Dans l'édition 1980, la classification est publiée sans garde-fou statistique, car cette édition n'estime pas l'erreur d'échantillonnage."
+  },
+  "rotatividade": {
+    "termo": "Rotation (turnover)",
+    "definicao": "Mouvement total de l'unité, dans les deux sens : rotation = entrants + sortants. Elle mesure combien de personnes se sont déplacées, quelle que soit la direction.",
+    "interpretacao": "Elle augmente même lorsque le solde est nul. Lue avec le solde, elle donne le tableau complet : une rotation élevée avec un solde proche de zéro indique un échange de population intense et équilibré ; une rotation faible avec un solde proche de zéro indique peu de migration dans un sens comme dans l'autre."
+  },
+  "distancia_media": {
+    "termo": "Distance moyenne de migration",
+    "definicao": "Distance moyenne des flux d'entrée et de sortie de l'unité, pondérée par le volume de chaque flux, mesurée en ligne droite entre les centres géographiques des municipalités dans la projection conique équivalente d'Albers.",
+    "interpretacao": "Plus elle est grande, plus les lieux d'où viennent et où vont les migrants de l'unité sont éloignés : des distances élevées indiquent une migration à longue portée, des distances faibles un échange avec le voisinage immédiat.",
+    "limitacoes": "La projection d'Albers conserve les surfaces, non les formes, et la distance qui y est mesurée présente une petite distorsion géométrique par rapport à la distance réelle (jusqu'à environ 6,6 % à l'extrême sud du pays) — acceptable pour une mesure de synthèse comparative, non pour un usage métrique de précision. Seuls comptent les couples origine–destination effectivement publiés (les couples très petits sont masqués au titre du secret statistique). Elle n'est pas calculée au niveau de la région métropolitaine, car il n'existe pas de matrice publiée de la région métropolitaine face au reste du pays."
+  },
+  "pct_interestadual": {
+    "termo": "% de la migration qui franchit les limites de l'État",
+    "definicao": "Part du volume de migration de l'unité pour laquelle l'État d'origine est différent de l'État de destination.",
+    "interpretacao": "C'est une mesure de portée géographique : plus le pourcentage est élevé, plus le poids de la migration à longue distance entre États est grand ; plus il est faible, plus la migration de l'unité se déroule à l'intérieur de son propre État.",
+    "limitacoes": "Calculé sur les couples origine–destination publiés ; la queue des petits couples masqués au titre du secret statistique n'entre pas dans le calcul. Dans l'édition 1980, la migration est mesurée par approximation (dernière étape de la trajectoire), ce qui fait passer des flux longs dans les flux courts et sous-estime le pourcentage interétatique d'environ 2 points de pourcentage."
+  },
+  "gini": {
+    "termo": "Concentration des flux (indice de Gini)",
+    "definicao": "Mesure à quel point le volume de migration de l'unité se concentre sur un petit nombre de partenaires. L'atlas en publie deux versions : l'une sur les municipalités d'où viennent les entrants, l'autre sur les municipalités où vont les sortants. Il varie de 0 (tous les partenaires avec le même volume) à 1 (tout le volume sur un seul partenaire).",
+    "interpretacao": "Des valeurs élevées indiquent une dépendance à l'égard de quelques partenaires — une municipalité qui échange de la population presque uniquement avec la capitale voisine. Des valeurs faibles indiquent un éventail dispersé d'origines ou de destinations.",
+    "limitacoes": "C'est une application simplifiée de Plane et Mulligan (1997) : l'indice est calculé avec la formule de Gini sur le vecteur des volumes par partenaire de l'unité, et non sous la forme matricielle complète de l'article original, qui mesure la focalisation spatiale de l'ensemble du système. En outre, seul ce qui est publié entre dans le calcul : la queue des petits couples masqués au titre du secret statistique (environ 30 % du volume, dans toutes les éditions) reste en dehors."
+  },
+  "tipo_fluxo_predominante": {
+    "termo": "Type de flux migratoire prédominant",
+    "definicao": "Lecture simplifiée qui combine les deux mesures de portée géographique ci-dessus -- distance moyenne et % qui franchit les limites de l'État -- en un seul libellé : courte ou longue distance, croisé avec intra-étatique ou interétatique (ex. : « longue distance, intra-étatique », typique d'un État au territoire étendu).",
+    "interpretacao": "Ce n'est pas une nouvelle mesure : c'est une façon de lire les deux à la fois, sans ouvrir séparément les deux nombres. « Longue distance » correspond à une distance moyenne égale ou supérieure à 200 km ; « interétatique », au cas où au moins la moitié du volume de migration franchit la limite de l'État (majorité simple). Les quatre combinaisons se rencontrent en pratique : « courte distance, interétatique » est fréquent près des limites entre États ; « longue distance, intra-étatique » est fréquent dans les États de grande étendue.",
+    "limitacoes": "Les deux seuils (200 km et 50 %) sont éditoriaux, choisis pour la lisibilité du libellé, et non calibrés statistiquement sur la distribution des municipalités -- une unité avec une distance moyenne de 199 km et une autre avec 201 km tombent dans des classes différentes pour une faible marge. Elle hérite de toutes les réserves de la distance moyenne et du % qui franchit les limites de l'État, y compris le masquage de la queue des petits couples et l'approximation de 1980."
+  },
+  "cmi": {
+    "termo": "CMI — intensité migratoire brute",
+    "definicao": "Mesure du SYSTÈME, et non d'une unité : CMI = 100 × migrants ÷ population, c'est-à-dire le pourcentage de la population de l'ensemble du niveau qui a changé d'unité au cours de la période.",
+    "interpretacao": "Plus elle est élevée, plus la migration a été intense dans l'ensemble du territoire lors de ce recensement. Elle répond à « combien de personnes se sont déplacées », jamais à « vers où » — c'est le rôle de l'efficacité migratoire du système (MEI agrégé).",
+    "limitacoes": "Attention, c'est la réserve la plus importante de cette mesure : l'intensité migratoire augmente avec le nombre d'unités du maillage territorial (effet Courgeau, un cas du problème des unités spatiales modifiables). Changer de municipalité est plus probable que changer d'État simplement parce qu'il y a davantage de municipalités. C'est pourquoi le CMI NE PEUT PAS être comparé entre niveaux différents — la valeur municipale et la valeur par unité fédérative ne sont pas la même grandeur —, et même entre recensements d'un même niveau, il doit être lu à côté du nombre d'unités de l'édition. C'est cette distinction qui sépare, dans l'interface, les mesures de l'unité (Partie 1) des mesures du système (Partie 2)."
+  },
+  "smi": {
+    "termo": "SMI — intensité migratoire standardisée par âge",
+    "definicao": "L'intensité migratoire (CMI) recalculée comme si toutes les éditions avaient la même composition par âge, à l'aide d'une population de référence commune. Migrer est beaucoup plus fréquent entre 20 et 35 ans, de sorte qu'une partie de la variation brute entre recensements n'est que le vieillissement de la population.",
+    "interpretacao": "Elle se lit comme l'intensité migratoire, mais sans l'effet de la structure par âge : si le CMI baisse entre deux recensements et que la SMI ne baisse pas, la baisse tenait à la composition par âge et non à un changement de comportement migratoire.",
+    "limitacoes": "Elle n'est calculée qu'au niveau municipal, car elle dépend du profil des migrants par groupe d'âge, publié uniquement à ce niveau. Aux niveaux agrégés, elle apparaît vide plutôt que sous forme de somme approximative. Elle hérite du CMI la dépendance au nombre d'unités : ne pas comparer entre niveaux territoriaux différents."
+  },
+  "mei_agregado": {
+    "termo": "MEI agrégé — efficacité migratoire du système",
+    "definicao": "La même idée que l'indice d'efficacité migratoire d'une unité, mais pour l'ensemble du système : MEI agrégé = 100 × 0,5 × (somme des soldes en valeur absolue) ÷ total des migrants. Il mesure quelle part du mouvement aboutit à une redistribution de la population, et non à un échange équilibré.",
+    "interpretacao": "Près de zéro, la migration du système est un échange croisé — beaucoup de personnes se déplacent et la carte de la population ne change presque pas. Des valeurs élevées indiquent que le mouvement est déséquilibré et redistribue effectivement la population entre les unités.",
+    "limitacoes": "Comme c'est un rapport entre solde et volume, il est indépendant de l'échelle et stable dans les découpages de 20 unités ou plus : il peut être lu entre niveaux territoriaux différents, contrairement à l'intensité migratoire brute (CMI) et au taux net de migration agrégé (ANMR)."
+  },
+  "anmr": {
+    "termo": "ANMR — taux net de migration agrégé",
+    "definicao": "Décompose la redistribution de la population en deux parties : ANMR = intensité migratoire (CMI) × efficacité du système (MEI agrégé) ÷ 100. C'est le nombre de personnes qui se déplacent multiplié par le degré de déséquilibre de ce mouvement.",
+    "interpretacao": "Il mesure l'effet net de la migration sur la répartition de la population au cours de la période. Il peut être faible pour deux raisons opposées : peu de personnes qui se déplacent, ou beaucoup de personnes qui se déplacent dans des échanges équilibrés — seul l'examen séparé des deux composantes permet de distinguer un cas de l'autre.",
+    "limitacoes": "Comme il contient l'intensité migratoire, il hérite de la dépendance au nombre d'unités du maillage (effet Courgeau) : ne pas comparer entre niveaux territoriaux différents, et lire la série d'un même niveau à côté du nombre d'unités de chaque édition."
+  },
+  "beta_fielding": {
+    "termo": "β de Fielding — concentration ou déconcentration",
+    "definicao": "Coefficient de la droite qui relie le taux net de migration de chaque unité au logarithme de sa densité de population, estimé par les moindres carrés ordinaires avec une pondération proportionnelle à la population.",
+    "interpretacao": "Un β positif indique un système en concentration : les unités les plus denses sont celles qui gagnent de la population par migration (métropolisation). Un β négatif indique une déconcentration : ce sont les unités les moins denses qui gagnent (contre-urbanisation). Les valeurs situées à moins de deux erreurs types de zéro doivent être lues comme une absence de tendance, et non comme une faible déconcentration.",
+    "limitacoes": "Il est calculé sur les unités qui EXISTAIENT dans chaque édition, et la base territoriale change entre recensements (les municipalités créées plus tard n'entrent pas dans l'édition ancienne). Une partie de la variation de la série est donc un changement de découpage territorial."
+  },
+  "duncan_d": {
+    "termo": "D de Duncan — changement de la structure des flux",
+    "definicao": "Indice de dissimilarité entre les matrices origine–destination de deux recensements consécutifs : la part du volume qui devrait changer de couple origine→destination pour que la structure d'un recensement devienne identique à celle de l'autre. Il varie de 0 à 1.",
+    "interpretacao": "Zéro signifie que la configuration des flux n'a pas changé entre les deux recensements (même si le volume total a changé, car les deux matrices sont normalisées avant la comparaison). Près de 1 signifie une réorganisation complète des routes migratoires.",
+    "limitacoes": "Calculé sur la matrice commune aux deux éditions comparées, renormalisée sur cet ensemble — sans cela, la création d'une nouvelle municipalité apparaîtrait comme un changement de configuration migratoire. Même ainsi, la mesure se lit mieux avec le nombre d'unités et le maillage territorial de chaque édition : entre 1980 et 1991, l'intersection est la plus petite de la série, et l'indice ne mesure le changement de structure qu'à l'intérieur de celle-ci."
+  },
+  "n_unidades": {
+    "termo": "Nombre d'unités de l'édition",
+    "definicao": "Combien d'unités du niveau choisi (municipalités, régions immédiates, régions intermédiaires ou unités fédératives) existaient lors de ce recensement, et sur lesquelles les mesures du système ont été calculées.",
+    "interpretacao": "Il sert de contexte obligatoire aux mesures du système. Des municipalités sont créées au fil du temps : en 2022, elles sont 5 570, contre 5 507 en 2000, de sorte qu'une même population peut produire davantage de « migration entre municipalités » simplement parce que les limites internes se sont multipliées.",
+    "limitacoes": "C'est à cause de cette variation que l'intensité migratoire brute (CMI), l'intensité standardisée (SMI) et le taux net de migration agrégé (ANMR) ne sont pas directement comparables entre éditions sans regarder ce nombre à côté — c'est l'effet Courgeau, montré explicitement dans la figure qui accompagne la partie du système."
+  },
+  "ic95": {
+    "termo": "IC à 95 % — intervalle de confiance à 95 %",
+    "definicao": "Plage de valeurs dans laquelle se trouve probablement le nombre réel. Les chiffres de l'atlas proviennent de l'échantillon du recensement, et non du dénombrement complet de la population : chaque estimation a une marge d'erreur, et l'intervalle est l'estimation plus ou moins 1,96 erreur type.",
+    "interpretacao": "Lisez l'intervalle, pas seulement le point central : plus la plage est étroite, plus l'estimation est précise. Si les intervalles de deux unités (ou de deux recensements) se chevauchent largement, la différence entre elles peut n'être qu'un effet de l'échantillon.",
+    "limitacoes": "Aucun intervalle n'est publié là où l'erreur d'échantillonnage n'est pas estimée : l'édition 1980 n'a pas d'identifiant de ménage dans la source et n'estime donc pas l'erreur d'échantillonnage, et aux niveaux agrégés de certaines éditions l'erreur type n'est pas publiée. Dans l'édition 1991, l'erreur type est approchée et prudente (la strate utilisée dans le calcul remplace la zone de pondération, dont ce recensement est dépourvu)."
+  },
+  "cv": {
+    "termo": "CV — coefficient de variation",
+    "definicao": "Erreur type de l'estimation divisée par l'estimation elle-même, en pourcentage. Il mesure la précision relative : la taille de la marge d'erreur comparée à la taille du nombre estimé.",
+    "interpretacao": "Plus il est faible, mieux c'est. Suivant le guide de l'IBGE, l'atlas considère la précision bonne jusqu'à 15 %, recommande la prudence entre 15 % et 30 %, et la classe comme faible au-delà de 30 %. Un coefficient de variation élevé signifie presque toujours que peu de cas de l'échantillon soutiennent ce couple ou cette unité — la valeur indique un ordre de grandeur, pas un chiffre exact.",
+    "limitacoes": "Il n'est pas comparable point par point entre toutes les éditions : en 1991, le coefficient de variation est calculé avec une strate de substitution et se situe de 5 % à 20 % au-dessus de celui de 2000 pour des couples de même taille d'échantillon (lisez-le comme prudent), et en 1980 il n'existe tout simplement pas."
+  },
+  "precisao": {
+    "termo": "Précision de l'estimation",
+    "definicao": "Libellé qui résume le coefficient de variation de chaque estimation publiée en quatre classes : bonne (coefficient de variation jusqu'à 15 %), à utiliser avec prudence (de 15 % à 30 %), faible précision (au-delà de 30 %) et sans estimation (lorsque l'édition ne publie pas d'erreur d'échantillonnage).",
+    "interpretacao": "« Bonne » autorise à lire le nombre comme une valeur ; « à utiliser avec prudence » autorise à lire le sens et l'ordre de grandeur ; « faible précision » signifie que l'estimation est fragile et pourrait changer sensiblement avec un autre échantillon ; « sans estimation » ne veut pas dire imprécise — cela veut dire qu'il n'y a aucun moyen de mesurer la précision dans cette édition.",
+    "limitacoes": "« Sans estimation » est la classe de toute l'édition 1980 (la source n'a pas d'identifiant de ménage, il n'y a donc pas d'unité d'échantillonnage pour le calcul de variance) et des niveaux agrégés qui ne publient pas d'erreur type."
+  },
+  "n_faixa": {
+    "termo": "Tranche d'effectif de l'échantillon",
+    "definicao": "Nombre d'enregistrements de l'échantillon du recensement sur lesquels repose cette estimation, diffusé par tranche (5-19, 20-49, 50-99, 100-499, 500 ou plus) et jamais en valeur exacte.",
+    "interpretacao": "C'est une mesure de robustesse, et non de population : « 20-49 » signifie qu'entre 20 et 49 personnes de l'échantillon ont été observées dans cette cellule, et que leur poids de sondage les extrapole à un nombre de personnes bien plus grand dans la population. Les tranches basses appellent la même prudence qu'un coefficient de variation élevé.",
+    "limitacoes": "La tranche au lieu de la valeur exacte est une exigence des règles de contrôle de la divulgation de l'atlas (secret statistique des microdonnées en accès contrôlé de l'IBGE), et non une perte d'information du calcul. Les cellules sous le seuil minimal de diffusion de l'édition ne sont publiées sous aucune forme — le seuil est de 5 enregistrements et 3 ménages distincts dans les éditions dotées d'un identifiant de ménage, et de 20 enregistrements dans l'édition 1980, qui n'a pas cet identifiant."
+  },
+  "posto": {
+    "termo": "Rang",
+    "definicao": "Position d'un partenaire (municipalité d'origine ou de destination) dans la liste des flux de l'unité classée du plus grand volume au plus petit : le rang 1 est le principal partenaire.",
+    "interpretacao": "Comparer les rangs entre recensements montre si un partenaire a progressé, reculé ou conservé son importance relative. Comme c'est une mesure d'ordre, et non de quantité, il est indépendant de l'échelle : il fonctionne même lorsque le volume total de migration change beaucoup d'une édition à l'autre.",
+    "limitacoes": "Le classement ne voit que les couples publiés. Un petit partenaire peut être absent du classement à cause du masquage au titre du secret statistique, et non parce qu'il n'existe pas — effet plus marqué dans l'édition 1980, dont le seuil de publication est plus élevé (20 enregistrements de l'échantillon au lieu de 5)."
+  },
+  "rm_migracao_intra": {
+    "termo": "Migration intramétropolitaine",
+    "definicao": "Migration entre municipalités d'une MÊME région métropolitaine : ceux qui ont changé d'adresse sans quitter la région.",
+    "interpretacao": "Elle mesure le réarrangement interne de la région — typiquement l'étalement de la population de la municipalité centrale vers les municipalités voisines. C'est un nombre élevé dans les régions métropolitaines consolidées, même lorsque le solde de la région avec le reste du pays est faible.",
+    "limitacoes": "Elle n'inclut ni ceux qui sont entrés dans la région en venant de l'extérieur ni ceux qui l'ont quittée pour l'extérieur — c'est le solde de la région avec le reste du pays, mesuré à part. Elle dépend de l'existence individuelle des municipalités de la région dans l'édition : lorsqu'une partie du territoire métropolitain n'était pas encore subdivisée comme aujourd'hui, l'indicateur n'est pas comparable et l'atlas le laisse vide plutôt que de publier une valeur incomplète."
+  },
+  "rm_saldo_externo": {
+    "termo": "Solde de la région métropolitaine avec le reste du pays",
+    "definicao": "Solde migratoire de la région métropolitaine considérée comme une seule unité : toutes les entrées venues de l'extérieur moins toutes les sorties vers l'extérieur. La migration entre municipalités de la région elle-même n'y entre pas.",
+    "interpretacao": "Positif, il indique que la région, dans son ensemble, a gagné de la population par migration ; négatif, qu'elle en a perdu. C'est la lecture correcte pour répondre à « cette métropole attire-t-elle ou perd-elle des habitants ? », tandis que la migration intramétropolitaine répond à « comment la population se redistribue-t-elle en son sein ? ».",
+    "limitacoes": "Le découpage métropolitain utilisé est celui de 2022, appliqué rétroactivement aux éditions antérieures. Les municipalités de la région créées après une édition ancienne n'existent pas dans celle-ci (elles apparaissent au sein de la municipalité dont elles ont été détachées), de sorte que la couverture territoriale varie et que le nombre n'est pas directement comparable entre recensements sans vérifier cette couverture — que l'interface indique dans chaque cellule."
+  },
+  "rm_nucleo_periferia": {
+    "termo": "Centre et périphérie",
+    "definicao": "Classement de chaque flux migratoire interne à la région métropolitaine selon la position des deux municipalités : centre→périphérie (en quittant le centre), périphérie→centre (en allant vers le centre) et périphérie→périphérie (entre municipalités périphériques). Le centre est la municipalité membre dont le nom figure dans le nom de la région ; si aucun membre ne porte ce nom, c'est la plus peuplée.",
+    "interpretacao": "La prédominance de centre→périphérie indique une déconcentration résidentielle — la population du centre s'installe dans les municipalités voisines, souvent sans changer d'emploi. La prédominance de périphérie→centre indique le mouvement classique de densification du centre. Un niveau élevé de périphérie→périphérie suggère une région à plusieurs pôles, et non un centre unique.",
+    "limitacoes": "Il dépend de l'existence, dans l'édition, de la partition municipale interne de la région : les régions réduites à une seule municipalité dans l'édition, ou dont la couverture municipale est incomplète, sont privées de cet indicateur par construction, et non par mesure."
+  },
+  "pendular_conceito": {
+    "termo": "Mobilité pendulaire",
+    "definicao": "Situation de qui HABITE dans une municipalité et TRAVAILLE ou ÉTUDIE dans une autre, en faisant l'aller-retour de façon quotidienne ou presque quotidienne. C'est différent de la migration : dans la migration, la personne change de résidence ; dans la mobilité pendulaire, non.",
+    "interpretacao": "Des volumes de navettes élevés indiquent une intégration fonctionnelle entre municipalités — des marchés du travail et des réseaux d'enseignement qui franchissent les limites municipales, typiques des régions métropolitaines. Migration et mobilité pendulaire sont des modules distincts de l'atlas et ne s'additionnent pas : ce sont des personnes comptées selon des critères différents.",
+    "limitacoes": "Le recensement de 1991 ne demande pas où la personne travaille ou étudie, et cette édition n'a donc pas de module de mobilité pendulaire — l'absence vient du questionnaire, et la cellule est « non mesuré », non zéro. En 2000, il existe une question unique travail ou études, le travail primant, de sorte que le flux d'études de cette édition est un plancher : comparable en composition et en direction, jamais en niveau."
+  },
+  "pendular_taxa_saida": {
+    "termo": "Taux de navettes sortantes",
+    "definicao": "Pourcentage des résidents en emploi de la municipalité qui travaillent dans une autre municipalité. Il existe un indicateur analogue pour les études, portant sur ceux qui fréquentent un établissement scolaire ou une crèche.",
+    "interpretacao": "Plus il est élevé, plus la municipalité fonctionne comme zone résidentielle d'un marché du travail situé hors de ses limites — profil de ville-dortoir. Des valeurs faibles indiquent un marché du travail contenu dans ses propres limites.",
+    "limitacoes": "Le champ de l'indicateur de travail est la population en emploi de 10 ans ou plus ; ceux qui travaillent dans plus d'une municipalité ou à l'étranger sont comptés dans une catégorie à part et n'entrent pas dans la matrice des flux pendulaires."
+  },
+  "pendular_indice_atracao": {
+    "termo": "Indice d'attraction pendulaire",
+    "definicao": "Rapport entre les personnes qui travaillent dans la municipalité (les résidents qui y travaillent plus ceux qui viennent de l'extérieur pour y travailler) et le total des résidents en emploi de la municipalité.",
+    "interpretacao": "Au-dessus de 1, la municipalité concentre plus d'emplois que de travailleurs résidents : c'est un pôle qui attire la main-d'œuvre des voisins. En dessous de 1, elle exporte des travailleurs — plus de personnes partent travailler à l'extérieur qu'il n'en vient travailler à l'intérieur."
+  },
+  "pendular_tempo_mediano": {
+    "termo": "Durée médiane du trajet",
+    "definicao": "Durée, en minutes, qui partage en deux moitiés ceux qui se déplacent : la moitié passe moins que cette valeur sur le trajet habituel entre le domicile et le travail ou les études, l'autre moitié passe davantage.",
+    "interpretacao": "Elle mesure le coût quotidien de la séparation entre logement et emploi. Comme c'est une médiane, elle n'est pas tirée par les trajets extrêmes, comme le serait une moyenne.",
+    "limitacoes": "Elle n'existe que dans l'édition 2022, la seule qui enregistre la durée en minutes. Le Recensement 2010 ne demande la durée qu'en cinq tranches catégorielles qui ne s'emboîtent pas dans celles de 2022 (la deuxième tranche de 2010 chevauche deux tranches de 2022) ; l'atlas y publie donc la distribution selon ses propres tranches et laisse la médiane vide ; 2000, 1991 et 1980 n'ont pas cette question."
+  },
+  "pendular_pct_coletivo": {
+    "termo": "% en transports en commun",
+    "definicao": "Part des navetteurs qui utilisent les transports en commun (bus, minibus, train ou métro), parmi les modes de transport déclarés.",
+    "interpretacao": "Il indique la dépendance aux transports publics dans la liaison entre les municipalités : des pourcentages élevés révèlent un axe de navettes desservi par un réseau de transports en commun ; faibles, des déplacements majoritairement individuels.",
+    "limitacoes": "Seule l'édition 2022 demande le mode de transport. Dans les autres éditions, la dimension n'existe pas et la cellule est publiée vide — « cette édition ne le mesure pas » n'est pas la même chose que « la valeur est zéro »."
+  },
+  "pendular_retorno_diario": {
+    "termo": "% de retour quotidien",
+    "definicao": "Part des navetteurs qui rentrent chez eux tous les jours, ou presque.",
+    "interpretacao": "Il distingue la navette quotidienne de l'organisation consistant à passer la semaine ailleurs et à rentrer le week-end. Des pourcentages élevés indiquent un couple de municipalités réellement intégré au quotidien.",
+    "limitacoes": "La définition de la question change entre éditions : 2022 demande si la personne rentre trois jours ou plus par semaine, et 2010 si elle rentre tous les jours. Les codes coïncident, les définitions non — les valeurs sont comparables en ordre de grandeur, jamais comme série. Les éditions 2000, 1991 et 1980 n'ont pas de question sur la fréquence de retour."
+  },
+  "ride": {
+    "termo": "RIDE — Région intégrée de développement économique",
+    "definicao": "Dispositif institutionnel semblable à une région métropolitaine, mais créé par une loi fédérale et non par une loi d'État, précisément parce qu'il réunit des municipalités de plus d'une unité fédérative — le cas le plus connu est la RIDE du District fédéral et de ses environs (Distrito Federal e Entorno).",
+    "interpretacao": "Dans l'atlas, les RIDE et les régions métropolitaines reçoivent exactement les mêmes mesures et figurent dans le même sélecteur : centre et périphérie, migration interne à la région, solde avec le reste du pays et mobilité pendulaire.",
+    "limitacoes": "Dans une RIDE, une bonne partie de la migration « interne à la région » est en même temps interétatique, car les municipalités se trouvent dans des États différents : les deux indicateurs ne sont pas indépendants et ne doivent pas être lus comme des dimensions distinctes d'un même phénomène."
+  },
+  "sidra": {
+    "termo": "SIDRA — système de consultation des tableaux officiels de l'IBGE",
+    "definicao": "Base des tableaux officiels de l'IBGE, où sont publiés les résultats des recensements. C'est la référence officielle ; l'atlas est une élaboration propre à partir des microdonnées de l'échantillon.",
+    "interpretacao": "Utilisez le SIDRA comme référence lorsque vous avez besoin du chiffre officiel. Les valeurs de l'atlas peuvent différer de celles qui y sont publiées, et l'écart est attendu : l'atlas travaille avec l'échantillon (et non avec le recensement exhaustif), arrondit les estimations, masque les petites cellules au titre du secret statistique et applique ses propres classifications de la migration et de la mobilité pendulaire.",
+    "limitacoes": "L'extrapolation de l'échantillon elle-même peut s'écarter du recensement exhaustif dans certaines municipalités, réserve que l'IBGE consigne dans la documentation de chaque recensement. Là où l'atlas et le SIDRA divergent, l'atlas ne corrige ni ne calibre : il publie sa propre estimation et signale l'écart."
+  },
+  "status_migratorio": {
+    "termo": "Type de migrant",
+    "definicao": "Classe chaque migrant selon sa relation avec la municipalité où il est né : « retour dans la municipalité de naissance » (il est revenu là où il est né), « non natif de la destination » (il a migré vers une municipalité qui n'est pas sa municipalité de naissance) et « né à l'étranger ». Dans l'édition 2022, la seule à recueillir la municipalité de naissance, la catégorie des non-natifs se subdivise en « premier départ de la municipalité de naissance » et « étapes multiples » (il avait déjà résidé dans une autre municipalité avant celle-ci).",
+    "interpretacao": "Beaucoup de personnes en « retour dans la municipalité de naissance » indique une migration de retour — typique de régions qui ont exporté de la population des décennies auparavant. La prédominance de « non natif » indique une migration de départ, vers de nouvelles destinations. « Étapes multiples », là où cette catégorie existe, révèle des trajectoires migratoires enchaînées, et non un déplacement unique.",
+    "limitacoes": "La nomenclature change d'une édition à l'autre : seule 2022 distingue « premier départ » et « étapes multiples », car les autres ne demandent pas la municipalité de naissance. Dans la comparaison entre recensements, les deux catégories de 2022 sont additionnées dans « non natif de la destination », afin que toutes les éditions utilisent la même base ; le détail fin reste disponible dans le panneau de l'édition 2022. Dans l'édition 1980, le retour dans la municipalité de naissance provient de la question « né dans cette municipalité » et vaut pour toutes les municipalités, y compris les 52 du nord de Goiás (aujourd'hui Tocantins) ; ce qui est sous-estimé au Tocantins, c'est le retour dans l'État de naissance, car ceux qui y sont nés et vivent ailleurs ont déclaré « Goiás » comme État de naissance."
+  },
+  "escolaridade": {
+    "termo": "Niveau d'instruction",
+    "definicao": "Niveau d'instruction atteint, mesuré uniquement chez les personnes de 25 ans ou plus — âge auquel la plupart ont achevé le parcours scolaire typique, ce qui évite de confondre « encore en études » et « n'a pas étudié ». Quatre classes : sans instruction ou fondamental incomplet ; fondamental achevé ; secondaire achevé ; supérieur achevé. (Au Brésil, l'enseignement fondamental — ensino fundamental — dure 9 ans, CITE 1–2 ; l'enseignement secondaire — ensino médio — dure 3 ans, CITE 3.)",
+    "interpretacao": "Comparer la composition des migrants avec celle des résidents non migrants montre la sélectivité migratoire : lorsque les migrants sont plus instruits que ceux qui sont restés, la migration sélectionne la population la plus instruite.",
+    "limitacoes": "La caractéristique est mesurée à la FIN de la période migratoire, de sorte qu'on ne sait pas si l'instruction est une cause ou une conséquence de la migration. Dans les éditions 2000 et 1991, le niveau d'instruction est dérivé des « années d'études », ce qui sous-estime légèrement « supérieur achevé » (un diplôme en trois ans totalise 14 années d'études et tombe dans la classe précédente). Dans l'édition 1980, l'instruction est reconstituée à partir de « dernière année réussie » croisée avec « cycle », une approximation déclarée qui sous-estime le niveau de ceux qui étaient encore en études. La catégorie « non déclaré » est exclue du calcul des parts, dans toutes les éditions."
+  },
+  "renda_domiciliar": {
+    "termo": "Revenu du ménage par personne",
+    "definicao": "Revenu total du ménage divisé par le nombre de résidents, présenté en tranches de salaire minimum (jusqu'à 1/4, de 1/4 à 1/2, de 1/2 à 1, de 1 à 2, et plus de 2 salaires minimums). Le salaire minimum est celui en vigueur à la date de référence de chaque recensement, ce qui rend les tranches comparables entre éditions malgré le changement de monnaie et l'inflation. Les personnes vivant en résidence collective figurent dans la catégorie « résidence collective », car pour elles le revenu du ménage par personne n'est pas défini.",
+    "interpretacao": "Comme pour l'instruction, l'intérêt réside dans la comparaison entre migrants et résidents non migrants : c'est elle qui révèle si la migration sélectionne selon le revenu, et dans quel sens.",
+    "limitacoes": "Il n'est pas publié dans l'édition 1980 : la source actuelle (censobr/IPEA v1.0.0) contient les variables de revenu, mais elles n'ont pas encore été mises en correspondance ni validées pour publication — la source précédente (Base dos Dados) ne les avait renseignées que dans une seule unité fédérative. En 1991, le diviseur est le salaire minimum implicite dans les tranches de revenu de l'IBGE lui-même, et non le minimum légal de l'époque, ce qui fait coïncider les seuils avec les tableaux officiels de ce recensement. Comme l'instruction, le revenu est mesuré à la fin de la période : on ne sait pas s'il est une cause ou une conséquence de la migration."
+  },
+  "idade_sexo": {
+    "termo": "Profil par âge et sexe",
+    "definicao": "Composition croisée par groupe d'âge (5 à 14, 15 à 24, 25 à 39, 40 à 59, et 60 ans ou plus) et par sexe, des migrants comme des résidents, qui permet de construire la pyramide de chaque groupe.",
+    "interpretacao": "La migration est fortement concentrée entre 15 et 39 ans ; un profil migrant plus âgé que la norme suggère une migration de retour ou de retraite, et la présence du groupe des 5 à 14 ans indique le déplacement de familles avec enfants, et non de personnes seules. Le rapport entre hommes et femmes révèle une sélectivité selon le sexe, fréquente dans les flux liés à des professions spécifiques.",
+    "limitacoes": "Les cinq groupes d'âge sont larges : ils ne permettent ni de situer l'âge du pic migratoire plus précisément que la largeur du groupe, ni d'ajuster un profil par âge détaillé. Le sexe « indéterminé » n'existe comme catégorie que dans l'édition 2022 et pèse moins de 0,03 % du total ; il entre dans le total du groupe d'âge, mais reste hors du dénominateur du rapport entre les sexes, dans toutes les éditions, afin que la comparaison utilise la même base."
+  }
+}

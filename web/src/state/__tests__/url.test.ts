@@ -27,6 +27,7 @@ const estadoPadrao = (overrides?: Partial<EstadoUrl>): EstadoUrl => ({
   modo: "mapa",
   unidadeSerie: null,
   edicoesSerie: Array.from(EDICOES_SERIE),
+  lang: "pt-BR",
   ...overrides,
 });
 
@@ -343,5 +344,21 @@ describe("lerUrl: ?f= (recorte) validado contra a edição", () => {
 
   it("lerFiltro aceita null", () => {
     expect(lerFiltro(null, CENSO_PADRAO)).toBeNull();
+  });
+});
+
+describe("lang na URL", () => {
+  it("pt-BR (padrão) não aparece; os outros fazem ida e volta", () => {
+    expect(montarQuery(estadoPadrao())).toBe("");
+    for (const lang of ["en", "fr", "es"] as const) {
+      const qs = montarQuery(estadoPadrao({ lang }));
+      expect(qs).toBe(`lang=${lang}`);
+      expect(lerUrl(new URLSearchParams(qs)).lang).toBe(lang);
+    }
+  });
+
+  it("valor inválido cai no português; 'pt' é sinônimo de pt-BR", () => {
+    expect(lerUrl(new URLSearchParams("lang=de")).lang).toBe("pt-BR");
+    expect(lerUrl(new URLSearchParams("lang=pt")).lang).toBe("pt-BR");
   });
 });

@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { Metrica } from "../lib/types";
 import { corDaFaixa, corSemDado, faixasLegenda } from "../lib/escalas";
-import { num } from "../lib/format";
+import { num, num2 } from "../lib/format";
+import { useT } from "../i18n";
+import { TextoRico } from "./TextoRico";
 import { alturaEspigaPx } from "../lib/espigas";
 
 // F5 (mapa-representação): métricas de CONTAGEM (saldo, imigrantes, emigrantes) trocam a
@@ -24,14 +26,6 @@ const larguraDaAmostra = (fracao: number) => LARGURA_MIN + (LARGURA_MAX - LARGUR
  *  mediano (30%) e o maior fluxo publicado (100%) -- não há percentil pronto no meta.json,
  *  então usamos frações fixas em vez de uma consulta SQL nova só para isto. */
 const FRACOES_AMOSTRA = [0.05, 0.3, 1];
-
-const TITULOS: Record<Metrica, string> = {
-  saldo: "Saldo migratório (pessoas)",
-  tlm: "Taxa líquida de migração (por mil)",
-  imig: "Imigrantes (pessoas)",
-  emig: "Emigrantes (pessoas)",
-  iem: "Índice de eficácia migratória (%)",
-};
 
 export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maiorAbsolutoMetrica,
                           categoriasFluxo, titulo, notaFluxo, menorFluxo, limiteFluxos, escopoFluxos,
@@ -84,27 +78,32 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
    *  coropléticas. `null`/ausente = nenhuma unidade sem dado na vista. */
   semDado?: string | null;
 }) {
+  const d = useT();
   // A legenda começa recolhida num chip em telas de até ~1100 px (celular, tablet e notebook
   // estreito: aberta, ela cobria o oeste do Brasil -- auditoria de 30/09/2026); acima disso
   // começa aberta. Em ambos os tamanhos, o botão no título permite minimizá-la de volta ao chip.
   const [aberta, setAberta] = useState(() =>
     typeof window === "undefined" || !window.matchMedia("(max-width: 1100px)").matches);
-  const unidade = metrica === "tlm" ? "‰" : metrica === "iem" ? "%" : "";
-  const faixas = faixasLegenda(quebras, unidade);
+  // o IEM colore por quebras ×100 (escala do mapa), mas é exibido na escala −1 a +1, a mesma do
+  // glossário, do painel e da série -- não como "%"
+  const unidade = metrica === "tlm" ? "‰" : "";
+  const faixas = metrica === "iem"
+    ? faixasLegenda(quebras.map((q) => q / 100), unidade, d, num2)
+    : faixasLegenda(quebras, unidade, d);
   if (!aberta) {
     return (
       <button type="button" className="legenda-chip" onClick={() => setAberta(true)}
               aria-expanded={false} aria-controls="legenda-painel">
-        Legenda
+        {d.legenda.chip}
       </button>
     );
   }
   return (
     <div className="legenda" id="legenda-painel">
       <div className="legenda-titulo">
-        {titulo ?? TITULOS[metrica]}
+        {titulo ?? d.legenda.titulos[metrica]}
         <button type="button" className="fechar legenda-fechar" onClick={() => setAberta(false)}
-                aria-label="Minimizar legenda">×</button>
+                aria-label={d.legenda.minimizar}>×</button>
       </div>
       {categoriasFluxo ? (
         <ul>
@@ -120,7 +119,7 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
         // em espigas bipolares (MapaAtlas.tsx), então a legenda mostra espigas de referência em
         // vez de faixas de cor. Saldo tem os dois polos (ganho para cima, perda para baixo);
         // imigrantes/emigrantes têm só um polo, sempre para cima, na cor de entrada/saída.
-        <div className="legenda-espigas" aria-label="Comprimento da espiga cresce com a raiz quadrada do valor; amostras de referência">
+        <div className="legenda-espigas" aria-label={d.legenda.espigas.aria}>
           <div className="legenda-espigas-polo">
             <div className="legenda-espigas-amostras">
               {FRACOES_AMOSTRA.map((f) => (
@@ -132,7 +131,7 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
               ))}
             </div>
             <span className="legenda-espigas-rotulo">
-              {metrica === "saldo" ? "ganho" : metrica === "imig" ? "imigrantes" : "emigrantes"}
+              {metrica === "saldo" ? d.legenda.espigas.ganho : metrica === "imig" ? d.legenda.espigas.imigrantes : d.legenda.espigas.emigrantes}
             </span>
           </div>
           {metrica === "saldo" && (
@@ -146,13 +145,13 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
                         }} />
                 ))}
               </div>
-              <span className="legenda-espigas-rotulo">perda</span>
+              <span className="legenda-espigas-rotulo">{d.legenda.espigas.perda}</span>
             </div>
           )}
           <em className="legenda-espigas-valores">
             {maiorAbsolutoMetrica
-              ? `${FRACOES_AMOSTRA.map((f) => num(Math.round(f * maiorAbsolutoMetrica))).join(" · ")} pessoas`
-              : "comprimento cresce com a raiz quadrada do valor"}
+              ? d.legenda.espigas.valores(FRACOES_AMOSTRA.map((f) => num(Math.round(f * maiorAbsolutoMetrica))).join(" · "))
+              : d.legenda.espigas.semAncora}
           </em>
         </div>
       ) : (
@@ -179,7 +178,7 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
             termina numa SETA, e um NÓ circular marca as duas pontas. A amostra em CSS abaixo
             (triângulo + seta + dois pontos) é só um ícone de referência dessa forma, não usa
             deck.gl. */}
-        Fluxos: fita afunila da origem ao destino, termina em seta; um círculo marca cada ponta
+        {d.legenda.fluxos.descricao}
         <div className="legenda-fluxo-amostra" aria-hidden="true">
           <span className="legenda-fluxo-no" />
           <span className="legenda-fluxo-fita" />
@@ -188,37 +187,32 @@ export function Legenda({ metrica, quebras, escuro, notaNivel, maiorFluxo, maior
         </div>
         {notaFluxo && <div className="legenda-nota-fluxo">{notaFluxo}</div>}
         {maiorFluxo ? (
-          <div className="legenda-espessura" aria-label="Espessura da fita cresce com a raiz quadrada do volume; amostras de referência">
+          <div className="legenda-espessura" aria-label={d.legenda.fluxos.espessuraAria}>
             {FRACOES_AMOSTRA.map((f) => (
               <span key={f} style={{ height: larguraDaAmostra(f) }} />
             ))}
             <em>
-              {FRACOES_AMOSTRA.map((f) => num(Math.round(f * maiorFluxo))).join(" · ")} pessoas
+              {d.legenda.fluxos.espessuraValores(FRACOES_AMOSTRA.map((f) => num(Math.round(f * maiorFluxo))).join(" · "))}
             </em>
           </div>
         ) : (
-          <div className="legenda-espessura" aria-label="Espessura da fita cresce com o volume, na raiz quadrada">
+          <div className="legenda-espessura" aria-label={d.legenda.fluxos.espessuraSemAncoraAria}>
             <span style={{ height: 2 }} /><span style={{ height: 5 }} /><span style={{ height: 9 }} />
-            <em>espessura cresce com o volume (raiz quadrada)</em>
+            <em>{d.legenda.fluxos.espessuraSemAncora}</em>
           </div>
         )}
         {menorFluxo != null && (
           <div className="legenda-nota-fluxo">
-            Corte: {escopoFluxos === "selecao"
-              ? `o mapa desenha só os maiores fluxos de entrada e de saída do lugar selecionado${
-                  limiteFluxos ? ` (até ${num(limiteFluxos)} de cada lado)` : ""}`
-              : `o mapa desenha só os ${limiteFluxos ? `${num(limiteFluxos)} ` : ""}maiores fluxos do país${
-                  limiteFluxos ? " (o mesmo número em todas as edições)" : ""}`}.
-            {" "}O menor fluxo desenhado tem <strong>{num(menorFluxo)}</strong> pessoas: pares abaixo desse
-            volume existem nos dados e no painel, mas não aparecem no mapa.
+            <TextoRico texto={d.legenda.fluxos.corte(
+              escopoFluxos === "selecao" ? "selecao" : "pais",
+              limiteFluxos ? num(limiteFluxos) : null, num(menorFluxo))} />
           </div>
         )}
       </div>
       )}
       {notaNivel && (
         <div className="legenda-nota">
-          Nível agregado ({notaNivel}): migração entre municípios da mesma unidade não é
-          contabilizada; pares suprimidos ficam fora da soma; sem erro-padrão publicado.
+          {d.legenda.notaNivel(notaNivel)}
         </div>
       )}
     </div>
